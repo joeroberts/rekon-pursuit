@@ -42,6 +42,23 @@ struct ContentView: View {
                 .accessibilityIdentifier("create-local-workspace")
             }
 
+            GroupBox("Needs Attention") {
+                if model.needsAttention.isEmpty {
+                    Text("No upcoming actions.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.needsAttention, id: \.id) { task in
+                        VStack(alignment: .leading) {
+                            Text(task.title)
+                            Text(task.dueAt, style: .date)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+
             Text("\(model.opportunityCount) opportunities · \(model.needsAttentionCount) needs attention · \(model.activityCount) activity events")
                 .foregroundStyle(.secondary)
             Text(model.statusMessage)

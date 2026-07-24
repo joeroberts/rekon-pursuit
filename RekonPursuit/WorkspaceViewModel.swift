@@ -11,6 +11,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var opportunityCount = 0
     @Published private(set) var activityCount = 0
     @Published private(set) var needsAttentionCount = 0
+    @Published private(set) var needsAttention: [TaskReminder] = []
     @Published private(set) var statusMessage = "Opening local workspace…"
     @Published private(set) var canCreateWorkspace = false
 
@@ -95,7 +96,8 @@ final class WorkspaceViewModel: ObservableObject {
         do {
             opportunityCount = try store?.opportunities().count ?? 0
             activityCount = try store?.activityEvents().count ?? 0
-            needsAttentionCount = try store?.needsAttention().count ?? 0
+            needsAttention = try store?.needsAttention() ?? []
+            needsAttentionCount = needsAttention.count
         } catch {
             statusMessage = "The local workspace could not be read."
         }
