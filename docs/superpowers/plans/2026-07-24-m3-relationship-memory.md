@@ -1,15 +1,27 @@
 # M3 — Relationship Memory MVP Brief
 
-**State:** Frozen and unreleased. This candidate M3 scope may be released only after M2 is accepted and the TPM/Delivery Manager records an explicit M3 release decision.
+**State:** M3-C1, Contacts foundation, is released for implementation. It is not M3 acceptance. M3-C2 owns contact interactions; M3-C3 owns cross-record timelines and the full Workstream-C gate. M4 remains frozen.
 
-**Candidate scope when released:** Local contact creation, local opportunity/contact links, and concise interaction notes associated with an opportunity. The UI must show linked contacts and interaction summaries on the selected opportunity record.
+## M3-C1 — Contacts foundation
 
-**Excluded:** CSV import, external people research, Gmail/Calendar, AI, documents, employer research, backup/restore, and export.
+**Outcome:** A user can keep a reusable local contact independently of a job, find it later, and explicitly associate or disassociate it with active opportunities.
 
-## Acceptance
+**In scope:**
 
-1. Create a contact with name and employer locally; persist one redacted `contact_created` activity event.
-2. Link a contact to one or more active opportunities; duplicate links are harmless and a new link persists one redacted `contact_linked` activity event.
-3. Record a concise interaction note against an active opportunity; it persists and writes one redacted activity event.
-4. Deleted opportunities cannot be linked or receive interactions, and existing linked content is not surfaced from the active record.
-5. Activity events contain IDs and event kinds only—never contact names, employers, or interaction text. Run focused store/view-model tests plus the existing macOS UI smoke; commit and push.
+- Forward migration from schema v10 to v11 without data loss, using the existing verified-snapshot recovery pattern.
+- A Contacts workspace with empty, validation, success, and workspace-unavailable states.
+- Contact CRUD and local search/filter. Name is required; current employer, title, email, profile URL, relationship context, and notes are optional.
+- Logical contact deletion, redacted tombstone/audit evidence, and suppression from normal search, discovery, and active links.
+- Explicit many-to-many link/unlink to active opportunities. Duplicate link and absent unlink are harmless no-ops.
+- A selected opportunity shows active linked contacts and read-only currently-unlinked contacts whose normalized current employer exactly matches its company. Linking is always explicit.
+- Redacted activity entries contain only IDs, kind, actor/correlation, and time. Link/unlink events identify both opportunity and contact IDs.
+
+**Excluded from C1:** Interaction capture, last/next-touch derivation, contact/opportunity timelines, external people research, Gmail/Calendar, AI, CSV, documents, employer-history entities, backup/restore, and export.
+
+## C1 acceptance
+
+1. Create an unlinked contact, search/filter it, edit it, and verify persistence across relaunch.
+2. Link one contact to two active opportunities, unlink one, relaunch, and verify the other link remains.
+3. Verify invalid/deleted contacts and deleted opportunities reject new mutations without a new event.
+4. Verify activity/tombstone evidence is redacted and no contact text appears in the timeline.
+5. Run focused migration/store/view-model tests and the macOS UI smoke, then commit and push.
