@@ -159,6 +159,11 @@ nonisolated final class EncryptedDatabase {
         self.handle = nil
     }
 
+    func checkpointAndClose() throws {
+        try execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        try close()
+    }
+
     var migrationSnapshotURL: URL {
         url.appendingPathExtension("migration-snapshot")
     }

@@ -42,14 +42,21 @@ final class WorkspaceSession {
         guard !workspaceArtifactsExist() else { throw WorkspaceSessionError.workspaceAlreadyExists }
         let key = try newKey()
         guard key.count == 32 else { throw EncryptedDatabaseError.invalidKeyLength }
-        let store = try openStore(with: key, createIfMissing: true)
+        let stagingRoot = root.appendingPathComponent(".creating-\(UUID().uuidString)", isDirectory: true)
+        let stagingDatabaseURL = stagingRoot.appendingPathComponent("workspace.sqlite")
+        try FileManager.default.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: stagingRoot) }
+        let stagingStore = try openStore(at: stagingDatabaseURL, with: key, createIfMissing: true)
+        try stagingStore.close()
         do {
             try keyStore.writeWorkspaceKey(key)
-            return store
+            try FileManager.default.moveItem(at: stagingDatabaseURL, to: databaseURL)
+            return try openStore(with: key, createIfMissing: false)
         } catch {
+            try? keyStore.deleteWorkspaceKey()
             try? FileManager.default.removeItem(at: databaseURL)
-            try? FileManager.default.removeItem(at: databaseURL.appendingPathExtension("sqlite-wal"))
-            try? FileManager.default.removeItem(at: databaseURL.appendingPathExtension("sqlite-shm"))
+            try? FileManager.default.removeItem(at: sidecarURL("-wal"))
+            try? FileManager.default.removeItem(at: sidecarURL("-shm"))
             throw error
         }
     }
@@ -77,13 +84,21 @@ final class WorkspaceSession {
     }
 
     private func workspaceArtifactsExist() -> Bool {
-        [databaseURL, databaseURL.appendingPathExtension("sqlite-wal"), databaseURL.appendingPathExtension("sqlite-shm")]
+        [databaseURL, sidecarURL("-wal"), sidecarURL("-shm")]
             .contains { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    private func sidecarURL(_ suffix: String) -> URL {
+        URL(fileURLWithPath: databaseURL.path + suffix)
     }
 
     private func openStore(with key: Data, createIfMissing: Bool) throws -> WorkspaceStore {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let database = try EncryptedDatabase.open(url: databaseURL, key: key, createIfMissing: createIfMissing)
+        return try openStore(at: databaseURL, with: key, createIfMissing: createIfMissing)
+    }
+
+    private func openStore(at url: URL, with key: Data, createIfMissing: Bool) throws -> WorkspaceStore {
+        let database = try EncryptedDatabase.open(url: url, key: key, createIfMissing: createIfMissing)
         return try WorkspaceStore(
             database: database,
             now: now,

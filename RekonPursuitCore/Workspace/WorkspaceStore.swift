@@ -36,6 +36,12 @@ final class WorkspaceStore {
         }
     }
 
+    func close() throws {
+        try synchronized {
+            try database.checkpointAndClose()
+        }
+    }
+
     func create(_ command: CreateOpportunity) throws -> Opportunity {
         let title = command.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let company = command.company.trimmingCharacters(in: .whitespacesAndNewlines)

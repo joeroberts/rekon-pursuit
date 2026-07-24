@@ -4,6 +4,7 @@ import Security
 protocol WorkspaceKeyStore: AnyObject {
     func readWorkspaceKey() throws -> Data?
     func writeWorkspaceKey(_ key: Data) throws
+    func deleteWorkspaceKey() throws
 }
 
 enum WorkspaceKeyStoreError: Error {
@@ -50,6 +51,16 @@ final class KeychainWorkspaceKeyStore: WorkspaceKeyStore {
         } else if updateStatus != errSecSuccess {
             throw map(updateStatus)
         }
+    }
+
+    func deleteWorkspaceKey() throws {
+        let query: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: service,
+            kSecAttrAccount: account
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw map(status) }
     }
 
     private func map(_ status: OSStatus) -> WorkspaceKeyStoreError {
