@@ -123,22 +123,20 @@ M0 bootstrap validation tests passed.
 
 ## Remote GitHub Actions evidence
 
-The workflow exists, but no remote result is claimed until GitHub executes the committed workflow.
+GitHub Actions run [`30074424747`](https://github.com/joeroberts/rekon-pursuit/actions/runs/30074424747) passed on commit `c73c744`. It is build-only: it does not run a hosted test suite.
 
-| Required remote evidence | State |
+| Required remote evidence | Result |
 | --- | --- |
-| Workflow run URL and run ID | **PENDING** |
-| `macos-15-intel` image identity | **PENDING** |
-| Exact CI `xcodebuild -version` output: Xcode `26.3` / `17C529` | **PENDING** |
-| Clean universal validator result and archive checksum | **PENDING** |
-| `macos-14` job-specific `ImageOS` / `ImageVersion` artifact and explicit `arm64` assertion | **PENDING** |
-| Downloaded archive checksum, universal slices, and launch smoke | **PENDING** |
+| Pinned universal build | Passed on `macos-15-intel`; Xcode `26.3`, build `17C529`; image `macos15` / `20260715.0340.1`; `x86_64` runner. |
+| Static project/security checks | Passed. |
+| Identity-free universal archive | Passed; retained archive SHA-256 `1149b038ec7404e7d2566d9f43876e12bacef748309b9c3b43267bae3dfd9309`. |
+| macOS 14 runtime smoke | Passed on image `macos14` / `20260629.0180.1`, `arm64` runner. The downloaded archive checksum, universal-slice verification, and launch smoke all passed. |
 
-The local Xcode `26.6` / CI Xcode `26.3` minor-version skew and the actual macOS 14 archived-app launch remain open until those remote rows have evidence. A missing or mismatched runner image/toolchain is a failed gate, not permission to float to `macos-latest` or change the macOS `14.0` deployment target.
+The local Xcode `26.6` / CI Xcode `26.3` minor-version skew is now evidenced by the pinned remote build, and the macOS 14 archived-app launch has passed. A missing or mismatched runner image/toolchain remains a failed gate, not permission to float to `macos-latest` or change the macOS `14.0` deployment target.
 
 ## Boundaries and next gate
 
 - Developer ID signing, notarization, stapling, DMG construction, and distribution remain M5-only.
 - No signing certificate, provisioning profile, private key, secret expression, recovery material, or personal content is referenced by the workflow.
 - Independent Code Review, QA/Test, Architect, Security/Privacy, TPM, and Delivery Manager decisions are still required.
-- M0-3 remains unaccepted; M0-4, M1, and `M0-GATE-01` remain blocked.
+- M0-3 is ready for its consolidated independent acceptance decision; M0-4, M1, and `M0-GATE-01` remain blocked until that decision is recorded.
