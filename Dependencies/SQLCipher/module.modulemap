@@ -1,0 +1,5 @@
+module SQLCipher [system] {
+  header "include/sqlite3.h"
+  export *
+  link "sqlcipher"
+}

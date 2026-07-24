@@ -1,0 +1,113 @@
+import Foundation
+import SQLCipher
+
+enum EncryptedDatabaseError: Error, LocalizedError {
+    case invalidKeyLength
+    case sqlite(code: Int32, message: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidKeyLength:
+            return "The workspace key is unavailable."
+        case let .sqlite(code, message):
+            return "The encrypted workspace could not be opened (SQLite error \(code)): \(message)."
+        }
+    }
+}
+
+nonisolated final class EncryptedDatabase {
+    private var handle: OpaquePointer?
+
+    private init(handle: OpaquePointer) {
+        self.handle = handle
+    }
+
+    deinit {
+        if let handle {
+            sqlite3_close_v2(handle)
+        }
+    }
+
+    static func open(url: URL, key: Data) throws -> EncryptedDatabase {
+        guard key.count == 32 else {
+            throw EncryptedDatabaseError.invalidKeyLength
+        }
+
+        var handle: OpaquePointer?
+        let openResult = sqlite3_open_v2(
+            url.path,
+            &handle,
+            SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX,
+            nil
+        )
+        guard openResult == SQLITE_OK, let handle else {
+            throw sqliteError(handle: handle, code: openResult)
+        }
+
+        let database = EncryptedDatabase(handle: handle)
+        do {
+            let keyResult = key.withUnsafeBytes { bytes in
+                sqlite3_key(handle, bytes.baseAddress, Int32(bytes.count))
+            }
+            guard keyResult == SQLITE_OK else {
+                throw sqliteError(handle: handle, code: keyResult)
+            }
+            try database.execute("SELECT count(*) FROM sqlite_master")
+            try database.execute("PRAGMA foreign_keys = ON")
+            try database.execute("PRAGMA journal_mode = WAL")
+            return database
+        } catch {
+            try? database.close()
+            throw error
+        }
+    }
+
+    func execute(_ sql: String) throws {
+        guard let handle else {
+            throw EncryptedDatabaseError.sqlite(code: SQLITE_MISUSE, message: "Database is closed.")
+        }
+        var statement: OpaquePointer?
+        let prepareResult = sqlite3_prepare_v2(handle, sql, -1, &statement, nil)
+        guard prepareResult == SQLITE_OK else {
+            throw Self.sqliteError(handle: handle, code: prepareResult)
+        }
+        defer { sqlite3_finalize(statement) }
+
+        let stepResult = sqlite3_step(statement)
+        guard stepResult == SQLITE_DONE || stepResult == SQLITE_ROW else {
+            throw Self.sqliteError(handle: handle, code: stepResult)
+        }
+    }
+
+    func scalarInt(_ sql: String) throws -> Int {
+        guard let handle else {
+            throw EncryptedDatabaseError.sqlite(code: SQLITE_MISUSE, message: "Database is closed.")
+        }
+        var statement: OpaquePointer?
+        let prepareResult = sqlite3_prepare_v2(handle, sql, -1, &statement, nil)
+        guard prepareResult == SQLITE_OK else {
+            throw Self.sqliteError(handle: handle, code: prepareResult)
+        }
+        defer { sqlite3_finalize(statement) }
+
+        let stepResult = sqlite3_step(statement)
+        guard stepResult == SQLITE_ROW else {
+            throw Self.sqliteError(handle: handle, code: stepResult)
+        }
+        return Int(sqlite3_column_int(statement, 0))
+    }
+
+    func close() throws {
+        guard let handle else { return }
+        let result = sqlite3_close_v2(handle)
+        guard result == SQLITE_OK else {
+            throw Self.sqliteError(handle: handle, code: result)
+        }
+        self.handle = nil
+    }
+
+    private static func sqliteError(handle: OpaquePointer?, code: Int32) -> EncryptedDatabaseError {
+        let message = handle.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "Unknown SQLite error."
+        return .sqlite(code: code, message: message)
+    }
+}

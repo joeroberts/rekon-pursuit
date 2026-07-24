@@ -13,6 +13,9 @@
 		100000000000000000000004 /* RekonPursuitUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000005 /* RekonPursuitUITests.swift */; };
 		100000000000000000000005 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000009 /* TestSupport.swift */; };
 		100000000000000000000006 /* fixture-manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000010 /* fixture-manifest.json */; };
+		100000000000000000000007 /* EncryptedDatabaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000011 /* EncryptedDatabaseTests.swift */; };
+		100000000000000000000008 /* EncryptedDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000012 /* EncryptedDatabase.swift */; };
+		100000000000000000000009 /* libsqlcipher.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 200000000000000000000013 /* libsqlcipher.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -43,6 +46,10 @@
 		200000000000000000000008 /* RekonPursuitUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RekonPursuitUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		200000000000000000000009 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 		200000000000000000000010 /* fixture-manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Fixtures/fixture-manifest.json; sourceTree = "<group>"; };
+		200000000000000000000011 /* EncryptedDatabaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncryptedDatabaseTests.swift; sourceTree = "<group>"; };
+		200000000000000000000012 /* EncryptedDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncryptedDatabase.swift; sourceTree = "<group>"; };
+		200000000000000000000013 /* libsqlcipher.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = lib/libsqlcipher.a; sourceTree = "<group>"; };
+		200000000000000000000014 /* module.modulemap */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.module-map; path = module.modulemap; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -50,6 +57,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				100000000000000000000009 /* libsqlcipher.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -75,7 +83,10 @@
 			children = (
 				700000000000000000000002 /* RekonPursuit */,
 				700000000000000000000003 /* RekonPursuitTests */,
+				700000000000000000000006 /* RekonPursuitCoreTests */,
 				700000000000000000000004 /* RekonPursuitUITests */,
+				700000000000000000000007 /* RekonPursuitCore */,
+				700000000000000000000008 /* SQLCipher */,
 				700000000000000000000005 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -98,6 +109,31 @@
 				200000000000000000000010 /* fixture-manifest.json */,
 			);
 			path = RekonPursuitTests;
+			sourceTree = "<group>";
+		};
+		700000000000000000000006 /* RekonPursuitCoreTests */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000011 /* EncryptedDatabaseTests.swift */,
+			);
+			path = RekonPursuitCoreTests;
+			sourceTree = "<group>";
+		};
+		700000000000000000000007 /* RekonPursuitCore */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000012 /* EncryptedDatabase.swift */,
+			);
+			path = RekonPursuitCore/Database;
+			sourceTree = "<group>";
+		};
+		700000000000000000000008 /* SQLCipher */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000013 /* libsqlcipher.a */,
+				200000000000000000000014 /* module.modulemap */,
+			);
+			path = Dependencies/SQLCipher;
 			sourceTree = "<group>";
 		};
 		700000000000000000000004 /* RekonPursuitUITests */ = {
@@ -256,6 +292,7 @@
 			files = (
 				100000000000000000000001 /* BootstrapApp.swift in Sources */,
 				100000000000000000000002 /* ContentView.swift in Sources */,
+				100000000000000000000008 /* EncryptedDatabase.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -265,6 +302,7 @@
 			files = (
 				100000000000000000000003 /* RekonPursuitTests.swift in Sources */,
 				100000000000000000000005 /* TestSupport.swift in Sources */,
+				100000000000000000000007 /* EncryptedDatabaseTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -349,6 +387,9 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
 				SDKROOT = macosx;
+				SWIFT_INCLUDE_PATHS = "$(PROJECT_DIR)/Dependencies/SQLCipher";
+				OTHER_SWIFT_FLAGS = "$(inherited) -Xcc -DSQLITE_HAS_CODEC";
+				OTHER_LDFLAGS = "$(inherited) -L$(PROJECT_DIR)/Dependencies/SQLCipher/lib -framework Security -framework CoreFoundation -lz";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_STRICT_CONCURRENCY = complete;
@@ -407,6 +448,9 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
 				SDKROOT = macosx;
+				SWIFT_INCLUDE_PATHS = "$(PROJECT_DIR)/Dependencies/SQLCipher";
+				OTHER_SWIFT_FLAGS = "$(inherited) -Xcc -DSQLITE_HAS_CODEC";
+				OTHER_LDFLAGS = "$(inherited) -L$(PROJECT_DIR)/Dependencies/SQLCipher/lib -framework Security -framework CoreFoundation -lz";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
