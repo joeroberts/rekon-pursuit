@@ -13,6 +13,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var needsAttentionCount = 0
     @Published private(set) var needsAttention: [TaskReminder] = []
     @Published private(set) var opportunities: [Opportunity] = []
+    @Published private(set) var activityEvents: [ActivityEvent] = []
     @Published var contactName = ""
     @Published var contactEmployer = ""
     @Published private(set) var contacts: [Contact] = []
@@ -72,6 +73,16 @@ final class WorkspaceViewModel: ObservableObject {
             statusMessage = error.errorDescription ?? "The opportunity could not be saved."
         } catch {
             statusMessage = "The opportunity could not be saved."
+        }
+    }
+
+    func deleteOpportunity(_ opportunity: Opportunity) {
+        do {
+            try store?.deleteOpportunity(id: opportunity.id)
+            refreshCounts()
+            statusMessage = "Opportunity deleted locally."
+        } catch {
+            statusMessage = "The opportunity could not be deleted."
         }
     }
 
@@ -179,6 +190,7 @@ final class WorkspaceViewModel: ObservableObject {
             opportunities = try store?.opportunities() ?? []
             contacts = try store?.contacts() ?? []
             activityCount = try store?.activityEvents().count ?? 0
+            activityEvents = try store?.activityEvents() ?? []
             needsAttention = try store?.needsAttention() ?? []
             needsAttentionCount = needsAttention.count
         } catch {

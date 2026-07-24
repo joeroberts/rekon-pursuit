@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 enum BootstrapCopy {
     nonisolated static let status = "Local-only foundation"
@@ -7,7 +6,7 @@ enum BootstrapCopy {
 
 struct ContentView: View {
     @StateObject private var model = WorkspaceViewModel()
-    @State private var isChoosingCSV = false
+    @State private var pendingDeletion: Opportunity?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -21,14 +20,6 @@ struct ContentView: View {
                     .accessibilityIdentifier("opportunity-title")
                 TextField("Company", text: $model.company)
                     .accessibilityIdentifier("opportunity-company")
-                Picker("Stage", selection: $model.stage) {
-                    ForEach(PipelineStage.allCases, id: \.self) { stage in
-                        Text(stage.rawValue).tag(stage)
-                    }
-                }
-                TextField("Next action (optional)", text: $model.nextAction)
-                    .accessibilityIdentifier("opportunity-next-action")
-                DatePicker("Due", selection: $model.dueAt, displayedComponents: [.date, .hourAndMinute])
                 Button("Save opportunity locally") {
                     model.createOpportunity()
                 }
@@ -44,28 +35,7 @@ struct ContentView: View {
                 .accessibilityIdentifier("create-local-workspace")
             }
 
-            GroupBox("Needs Attention") {
-                if model.needsAttention.isEmpty {
-                    Text("No upcoming actions.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(model.needsAttention, id: \.id) { task in
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(task.title)
-                                Text(task.dueAt, style: .date)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button("Snooze 1 day") { model.snoozeOneDay(task) }
-                            Button("Complete") { model.complete(task) }
-                        }
-                    }
-                }
-            }
-
-            GroupBox("Pipeline") {
+            GroupBox("Opportunities") {
                 if model.opportunities.isEmpty {
                     Text("No opportunities yet.").foregroundStyle(.secondary)
                 } else {
@@ -76,37 +46,29 @@ struct ContentView: View {
                                 Text(opportunity.company).font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Picker("Stage for \(opportunity.title)", selection: Binding(
-                                get: { opportunity.stage },
-                                set: { model.changeStage(opportunity, to: $0) }
-                            )) {
-                                ForEach(PipelineStage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                            Button("Delete", role: .destructive) {
+                                pendingDeletion = opportunity
                             }
-                            .labelsHidden()
                         }
                     }
                 }
             }
 
-            GroupBox("Contacts") {
-                TextField("Name", text: $model.contactName)
-                TextField("Employer", text: $model.contactEmployer)
-                Button("Save contact locally") { model.createContact() }
-                    .disabled(model.contactName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.contactEmployer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                ForEach(model.contacts, id: \.id) { contact in
-                    Text("\(contact.name) · \(contact.employer)")
+            GroupBox("Local activity") {
+                if model.activityEvents.isEmpty {
+                    Text("No local activity yet.").foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.activityEvents, id: \.id) { event in
+                        Text(event.kind.replacingOccurrences(of: "_", with: " ").capitalized)
+                    }
                 }
             }
 
-            GroupBox("CSV import") {
-                Button("Choose CSV file") { isChoosingCSV = true }
-                if let preview = model.csvPreview {
-                    Text("\(preview.validRows.count) valid rows · \(preview.invalidRowCount) invalid rows")
-                    Button("Import previewed rows") { model.importCSVPreview() }
-                }
-            }
+            Text("This MVP keeps data on this Mac. Backup, restore, and export are not available yet.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-            Text("\(model.opportunityCount) opportunities · \(model.needsAttentionCount) needs attention · \(model.activityCount) activity events")
+            Text("\(model.opportunityCount) opportunities · \(model.activityCount) activity events")
                 .foregroundStyle(.secondary)
             Text(model.statusMessage)
                 .accessibilityIdentifier("workspace-status")
@@ -115,8 +77,17 @@ struct ContentView: View {
         .padding(28)
         .frame(minWidth: 560, minHeight: 420, alignment: .topLeading)
         .onAppear { model.start() }
-        .fileImporter(isPresented: $isChoosingCSV, allowedContentTypes: [.commaSeparatedText]) { result in
-            if case let .success(url) = result { model.previewCSV(at: url) }
+        .alert("Delete opportunity?", isPresented: Binding(
+            get: { pendingDeletion != nil },
+            set: { if !$0 { pendingDeletion = nil } }
+        )) {
+            Button("Delete", role: .destructive) {
+                if let pendingDeletion { model.deleteOpportunity(pendingDeletion) }
+                pendingDeletion = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDeletion = nil }
+        } message: {
+            Text("This removes the opportunity and its pending actions from the active tracker. A redacted local deletion record is retained.")
         }
     }
 }

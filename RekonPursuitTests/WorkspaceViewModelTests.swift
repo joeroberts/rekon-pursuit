@@ -47,6 +47,21 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertFalse(model.canCreateWorkspace)
     }
 
+    func testDeleteRefreshesVisibleRecordsAndKeepsOnlyActivityKind() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        model.start()
+        model.title = "Product Manager"
+        model.company = "Rekon Labs"
+        model.createOpportunity()
+
+        model.deleteOpportunity(try XCTUnwrap(model.opportunities.first))
+
+        XCTAssertEqual(model.opportunityCount, 0)
+        XCTAssertEqual(model.activityEvents.map(\.kind), ["opportunity_created", "opportunity_deleted"])
+        XCTAssertEqual(model.statusMessage, "Opportunity deleted locally.")
+    }
+
     private func makeStore() throws -> WorkspaceStore {
         let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent("rekon-view-model-\(UUID().uuidString).sqlite")
         let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 5, count: 32))

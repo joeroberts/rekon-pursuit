@@ -69,6 +69,13 @@ struct ActivityEvent: Equatable {
     let occurredAt: Date
 }
 
+struct DeletionTombstone: Equatable {
+    let subjectID: String
+    let subjectType: String
+    let deletedAt: Date
+    let displayValue: String
+}
+
 struct CreateOpportunity: Equatable {
     let title: String
     let company: String

@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 5)
+        XCTAssertEqual(try store.schemaVersion(), 6)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -38,12 +38,13 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 5)
+        XCTAssertEqual(try store.schemaVersion(), 6)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
                 [.integer(4), .text(WorkspaceMigrations.baselineChecksum)],
-                [.integer(5), .text(WorkspaceMigrations.versionFiveChecksum)]
+                [.integer(5), .text(WorkspaceMigrations.versionFiveChecksum)],
+                [.integer(6), .text(WorkspaceMigrations.versionSixChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
@@ -165,6 +166,30 @@ final class WorkspaceStoreTests: XCTestCase {
 
         XCTAssertEqual(try store.interactions(forOpportunityID: opportunity.id), [interaction])
         XCTAssertEqual(try store.activityEvents().last?.kind, "interaction_recorded")
+    }
+
+    func testDeletingOpportunityHidesItAndLeavesOnlyRedactedAuditEvidence() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(
+            title: "Product Manager", company: "Rekon Labs", nextAction: "Send follow-up", dueAt: now
+        ))
+
+        try store.deleteOpportunity(id: opportunity.id)
+
+        let reference = try store.deletedOpportunityReference(for: opportunity.id)
+
+        XCTAssertEqual(try store.opportunities(), [])
+        XCTAssertEqual(try store.needsAttention(), [])
+        XCTAssertEqual(try store.activityEvents().last?.kind, "opportunity_deleted")
+        XCTAssertEqual(try store.tombstones(), [
+            DeletionTombstone(
+                subjectID: opportunity.id,
+                subjectType: "opportunity",
+                deletedAt: now,
+                displayValue: "Deleted opportunity #\(reference)"
+            )
+        ])
+        XCTAssertFalse(try store.tombstones().contains { $0.displayValue.contains(opportunity.title) || $0.displayValue.contains(opportunity.company) })
     }
 
     private func makeStore(failBeforeActivityInsert: Bool = false) throws -> WorkspaceStore {

@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 final class WorkspaceStore {
@@ -67,13 +68,42 @@ final class WorkspaceStore {
 
     func opportunities() throws -> [Opportunity] {
         try synchronized {
-            try database.rows("SELECT id, title, company, created_at, stage, next_action, due_at FROM opportunities ORDER BY created_at, id").map(opportunity(from:))
+            try database.rows("SELECT id, title, company, created_at, stage, next_action, due_at FROM opportunities WHERE deleted_at IS NULL ORDER BY created_at, id").map(opportunity(from:))
         }
     }
 
     func needsAttention() throws -> [TaskReminder] {
         try synchronized {
-            try database.rows("SELECT id, opportunity_id, title, due_at, is_complete FROM task_reminders WHERE is_complete = 0 ORDER BY due_at, id").map(task(from:))
+            try database.rows("SELECT task_reminders.id, task_reminders.opportunity_id, task_reminders.title, task_reminders.due_at, task_reminders.is_complete FROM task_reminders JOIN opportunities ON opportunities.id = task_reminders.opportunity_id WHERE task_reminders.is_complete = 0 AND opportunities.deleted_at IS NULL ORDER BY task_reminders.due_at, task_reminders.id").map(task(from:))
+        }
+    }
+
+    func deleteOpportunity(id: String) throws {
+        try synchronized {
+            guard try isActiveOpportunity(id) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+            let reference = try deletedOpportunityReferenceUnlocked(for: id)
+            let event = ActivityEvent(id: nextIdentifier(), kind: "opportunity_deleted", opportunityID: id, actorID: actorID, correlationID: correlationID, occurredAt: now)
+            try database.transaction {
+                try database.execute("UPDATE opportunities SET deleted_at = ? WHERE id = ?", values: [.real(now.timeIntervalSince1970), .text(id)])
+                try database.execute("DELETE FROM task_reminders WHERE opportunity_id = ?", values: [.text(id)])
+                try database.execute(
+                    "INSERT INTO deletion_tombstones (subject_id, subject_type, deleted_at, display_value) VALUES (?, 'opportunity', ?, ?)",
+                    values: [.text(id), .real(now.timeIntervalSince1970), .text("Deleted opportunity #\(reference)")]
+                )
+                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), .text(event.opportunityID), .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
+            }
+        }
+    }
+
+    func tombstones() throws -> [DeletionTombstone] {
+        try synchronized {
+            try database.rows("SELECT subject_id, subject_type, deleted_at, display_value FROM deletion_tombstones ORDER BY deleted_at, subject_id").map(tombstone(from:))
+        }
+    }
+
+    func deletedOpportunityReference(for opportunityID: String) throws -> String {
+        try synchronized {
+            try deletedOpportunityReferenceUnlocked(for: opportunityID)
         }
     }
 
@@ -101,7 +131,7 @@ final class WorkspaceStore {
 
     func changeStage(opportunityID: String, to stage: PipelineStage) throws {
         try synchronized {
-            guard case .text? = try database.rows("SELECT id FROM opportunities WHERE id = ?", values: [.text(opportunityID)]).first?.first else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+            guard try isActiveOpportunity(opportunityID) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
             let event = ActivityEvent(id: nextIdentifier(), kind: "opportunity_stage_changed", opportunityID: opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: now)
             try database.transaction {
                 try database.execute("UPDATE opportunities SET stage = ? WHERE id = ?", values: [.text(stage.rawValue), .text(opportunityID)])
@@ -123,13 +153,15 @@ final class WorkspaceStore {
 
     func linkContact(contactID: String, toOpportunityID opportunityID: String) throws {
         try synchronized {
+            guard try isActiveOpportunity(opportunityID) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
             try database.execute("INSERT OR IGNORE INTO contact_opportunities (contact_id, opportunity_id) VALUES (?, ?)", values: [.text(contactID), .text(opportunityID)])
         }
     }
 
     func contacts(forOpportunityID opportunityID: String) throws -> [Contact] {
         try synchronized {
-            try database.rows("SELECT contacts.id, contacts.name, contacts.employer FROM contacts JOIN contact_opportunities ON contacts.id = contact_opportunities.contact_id WHERE contact_opportunities.opportunity_id = ? ORDER BY contacts.name", values: [.text(opportunityID)]).map(contact(from:))
+            guard try isActiveOpportunity(opportunityID) else { return [] }
+            return try database.rows("SELECT contacts.id, contacts.name, contacts.employer FROM contacts JOIN contact_opportunities ON contacts.id = contact_opportunities.contact_id WHERE contact_opportunities.opportunity_id = ? ORDER BY contacts.name", values: [.text(opportunityID)]).map(contact(from:))
         }
     }
 
@@ -143,6 +175,7 @@ final class WorkspaceStore {
         let summary = command.summary.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !summary.isEmpty else { throw WorkspaceStoreError.invalidOpportunity }
         return try synchronized {
+            guard try isActiveOpportunity(command.opportunityID) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
             let interaction = Interaction(id: nextIdentifier(), opportunityID: command.opportunityID, summary: summary, occurredAt: now)
             let event = ActivityEvent(id: nextIdentifier(), kind: "interaction_recorded", opportunityID: command.opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: now)
             try database.transaction {
@@ -155,13 +188,14 @@ final class WorkspaceStore {
 
     func interactions(forOpportunityID opportunityID: String) throws -> [Interaction] {
         try synchronized {
-            try database.rows("SELECT id, opportunity_id, summary, occurred_at FROM interactions WHERE opportunity_id = ? ORDER BY occurred_at, id", values: [.text(opportunityID)]).map(interaction(from:))
+            guard try isActiveOpportunity(opportunityID) else { return [] }
+            return try database.rows("SELECT id, opportunity_id, summary, occurred_at FROM interactions WHERE opportunity_id = ? ORDER BY occurred_at, id", values: [.text(opportunityID)]).map(interaction(from:))
         }
     }
 
     func activityEvents() throws -> [ActivityEvent] {
         try synchronized {
-            try database.rows("SELECT id, kind, opportunity_id, actor_id, correlation_id, occurred_at FROM activity_events ORDER BY occurred_at, id").map(activityEvent(from:))
+            try database.rows("SELECT id, kind, opportunity_id, actor_id, correlation_id, occurred_at FROM activity_events ORDER BY occurred_at, rowid").map(activityEvent(from:))
         }
     }
 
@@ -172,8 +206,20 @@ final class WorkspaceStore {
     }
 
     private func activeTaskOpportunityID(_ taskID: String) throws -> String {
-        guard case let .text(opportunityID)? = try database.rows("SELECT opportunity_id FROM task_reminders WHERE id = ? AND is_complete = 0", values: [.text(taskID)]).first?.first else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+        guard case let .text(opportunityID)? = try database.rows("SELECT task_reminders.opportunity_id FROM task_reminders JOIN opportunities ON opportunities.id = task_reminders.opportunity_id WHERE task_reminders.id = ? AND task_reminders.is_complete = 0 AND opportunities.deleted_at IS NULL", values: [.text(taskID)]).first?.first else { throw WorkspaceStoreError.unexpectedDatabaseValue }
         return opportunityID
+    }
+
+    private func isActiveOpportunity(_ id: String) throws -> Bool {
+        guard case .text? = try database.rows("SELECT id FROM opportunities WHERE id = ? AND deleted_at IS NULL", values: [.text(id)]).first?.first else { return false }
+        return true
+    }
+
+    private func deletedOpportunityReferenceUnlocked(for opportunityID: String) throws -> String {
+        guard case let .text(workspaceID)? = try database.rows("SELECT value FROM workspace_metadata WHERE key = 'workspace_id'").first?.first else {
+            throw WorkspaceStoreError.unexpectedDatabaseValue
+        }
+        return SHA256.hash(data: Data((workspaceID + opportunityID).utf8)).map { String(format: "%02x", $0) }.joined().prefix(12).description
     }
 
     private func opportunity(from row: [DatabaseValue]) throws -> Opportunity {
@@ -209,5 +255,14 @@ final class WorkspaceStore {
             throw WorkspaceStoreError.unexpectedDatabaseValue
         }
         return ActivityEvent(id: id, kind: kind, opportunityID: opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: Date(timeIntervalSince1970: occurredAt))
+    }
+
+    private func tombstone(from row: [DatabaseValue]) throws -> DeletionTombstone {
+        guard row.count == 4,
+              case let .text(subjectID) = row[0], case let .text(subjectType) = row[1],
+              case let .real(deletedAt) = row[2], case let .text(displayValue) = row[3] else {
+            throw WorkspaceStoreError.unexpectedDatabaseValue
+        }
+        return DeletionTombstone(subjectID: subjectID, subjectType: subjectType, deletedAt: Date(timeIntervalSince1970: deletedAt), displayValue: displayValue)
     }
 }

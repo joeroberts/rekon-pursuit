@@ -2,9 +2,10 @@ import Foundation
 import CryptoKit
 
 enum WorkspaceMigrations {
-    static let currentVersion = 5
+    static let currentVersion = 6
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
+    static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
 
     static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
@@ -59,6 +60,18 @@ enum WorkspaceMigrations {
                 try? FileManager.default.removeItem(at: database.migrationSnapshotURL)
             } catch {
                 throw error
+            }
+        }
+        if version < 6 {
+            try database.transaction {
+                try database.execute("CREATE TABLE workspace_metadata (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)")
+                try database.execute("INSERT INTO workspace_metadata (key, value) VALUES ('workspace_id', lower(hex(randomblob(16))))")
+                try database.execute("CREATE TABLE deletion_tombstones (subject_id TEXT PRIMARY KEY NOT NULL, subject_type TEXT NOT NULL, deleted_at REAL NOT NULL, display_value TEXT NOT NULL)")
+                try database.execute(
+                    "INSERT INTO migration_history (version, checksum) VALUES (?, ?)",
+                    values: [.integer(6), .text(versionSixChecksum)]
+                )
+                try database.execute("UPDATE schema_migrations SET version = 6")
             }
         }
     }
