@@ -245,6 +245,7 @@ final class WorkspaceViewModel: ObservableObject {
             activityEvents = try store?.activityEvents() ?? []
             needsAttention = try store?.needsAttention() ?? []
             needsAttentionCount = needsAttention.count
+            csvImportReport = try store?.importReports().last
         } catch {
             statusMessage = "The local workspace could not be read."
         }

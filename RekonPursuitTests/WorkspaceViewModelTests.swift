@@ -73,6 +73,17 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.statusMessage, "Opportunity deleted locally.")
     }
 
+    func testStartRestoresLatestLocalImportReport() throws {
+        let store = try makeStore()
+        let preview = try CSVOpportunityImporter.preview(data: Data("title,company\nProduct Manager,Rekon Labs\n".utf8))
+        let report = try store.importCSV(try store.csvImportPlan(for: preview), invalidCount: preview.invalidRowCount)
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+
+        model.start()
+
+        XCTAssertEqual(model.csvImportReport, report)
+    }
+
     private func makeStore() throws -> WorkspaceStore {
         let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent("rekon-view-model-\(UUID().uuidString).sqlite")
         let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 5, count: 32))
