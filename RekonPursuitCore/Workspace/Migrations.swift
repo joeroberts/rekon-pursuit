@@ -2,12 +2,13 @@ import Foundation
 import CryptoKit
 
 enum WorkspaceMigrations {
-    static let currentVersion = 8
+    static let currentVersion = 9
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
     static let versionSevenChecksum = checksum(for: "7|task_reminders.due_at nullable")
     static let versionEightChecksum = checksum(for: "8|activity_events.opportunity_id nullable")
+    static let versionNineChecksum = checksum(for: "9|import_reports")
 
     static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
@@ -102,6 +103,19 @@ enum WorkspaceMigrations {
                     try database.execute("DROP TABLE activity_events_v7")
                     try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(8), .text(versionEightChecksum)])
                     try database.execute("UPDATE schema_migrations SET version = 8")
+                }
+                database.removeMigrationSnapshot()
+            } catch {
+                throw error
+            }
+        }
+        if version < 9 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    try database.execute("CREATE TABLE import_reports (id TEXT PRIMARY KEY NOT NULL, imported_count INTEGER NOT NULL, skipped_count INTEGER NOT NULL, duplicate_kept_count INTEGER NOT NULL, invalid_count INTEGER NOT NULL, created_at REAL NOT NULL)")
+                    try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(9), .text(versionNineChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 9")
                 }
                 database.removeMigrationSnapshot()
             } catch {

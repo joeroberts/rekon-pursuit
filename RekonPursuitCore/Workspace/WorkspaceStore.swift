@@ -78,6 +78,45 @@ final class WorkspaceStore {
         }
     }
 
+    func csvImportPlan(for preview: CSVImportPreview) throws -> [CSVImportPlanRow] {
+        try synchronized {
+            let existing = Set(try database.rows("SELECT title, company FROM opportunities WHERE deleted_at IS NULL").compactMap { row -> String? in
+                guard row.count == 2, case let .text(title) = row[0], case let .text(company) = row[1] else { return nil }
+                return normalizedOpportunityKey(title: title, company: company)
+            })
+            return preview.rows.map { row in
+                CSVImportPlanRow(row: row, isDuplicate: existing.contains(normalizedOpportunityKey(title: row.opportunity.title, company: row.opportunity.company)), decision: nil)
+            }
+        }
+    }
+
+    func importCSV(_ rows: [CSVImportPlanRow], invalidCount: Int) throws -> CSVImportReport {
+        try synchronized {
+            guard rows.allSatisfy({ !$0.isDuplicate || $0.decision != nil }) else { throw WorkspaceStoreError.unresolvedImportDecision }
+            let report = CSVImportReport(id: nextIdentifier(), importedCount: rows.filter { !$0.isDuplicate || $0.decision == .keepSeparate }.count, skippedCount: rows.filter { $0.decision == .skip }.count, duplicateKeptCount: rows.filter { $0.isDuplicate && $0.decision == .keepSeparate }.count, invalidCount: invalidCount, createdAt: now)
+            try database.transaction {
+                for planRow in rows {
+                    if planRow.decision == .skip {
+                        try appendActivity(kind: "csv_duplicate_skipped", opportunityID: nil)
+                        continue
+                    }
+                    let command = planRow.row.opportunity
+                    let opportunity = Opportunity(id: nextIdentifier(), title: command.title.trimmingCharacters(in: .whitespacesAndNewlines), company: command.company.trimmingCharacters(in: .whitespacesAndNewlines), createdAt: now, stage: command.stage, nextAction: command.nextAction, dueAt: command.dueAt)
+                    try database.execute("INSERT INTO opportunities (id, title, company, created_at, stage, next_action, due_at) VALUES (?, ?, ?, ?, ?, ?, ?)", values: [.text(opportunity.id), .text(opportunity.title), .text(opportunity.company), .real(now.timeIntervalSince1970), .text(opportunity.stage.rawValue), .text(opportunity.nextAction), opportunity.dueAt.map { .real($0.timeIntervalSince1970) } ?? .null])
+                    try appendActivity(kind: planRow.isDuplicate ? "csv_duplicate_kept" : "csv_imported", opportunityID: opportunity.id)
+                }
+                try database.execute("INSERT INTO import_reports (id, imported_count, skipped_count, duplicate_kept_count, invalid_count, created_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(report.id), .integer(Int64(report.importedCount)), .integer(Int64(report.skippedCount)), .integer(Int64(report.duplicateKeptCount)), .integer(Int64(report.invalidCount)), .real(now.timeIntervalSince1970)])
+            }
+            return report
+        }
+    }
+
+    func importReports() throws -> [CSVImportReport] {
+        try synchronized {
+            try database.rows("SELECT id, imported_count, skipped_count, duplicate_kept_count, invalid_count, created_at FROM import_reports ORDER BY created_at, id").map(importReport(from:))
+        }
+    }
+
     func needsAttention() throws -> [TaskReminder] {
         try synchronized {
             let calendar = Calendar(identifier: .gregorian)
@@ -233,6 +272,15 @@ final class WorkspaceStore {
         return true
     }
 
+    private func normalizedOpportunityKey(title: String, company: String) -> String {
+        "\(title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())\u{1F}\(company.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
+    }
+
+    private func appendActivity(kind: String, opportunityID: String?) throws {
+        let event = ActivityEvent(id: nextIdentifier(), kind: kind, opportunityID: opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: now)
+        try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), event.opportunityID.map(DatabaseValue.text) ?? .null, .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
+    }
+
     private func deletedOpportunityReferenceUnlocked(for opportunityID: String) throws -> String {
         guard case let .text(workspaceID)? = try database.rows("SELECT value FROM workspace_metadata WHERE key = 'workspace_id'").first?.first else {
             throw WorkspaceStoreError.unexpectedDatabaseValue
@@ -286,5 +334,10 @@ final class WorkspaceStore {
             throw WorkspaceStoreError.unexpectedDatabaseValue
         }
         return DeletionTombstone(subjectID: subjectID, subjectType: subjectType, deletedAt: Date(timeIntervalSince1970: deletedAt), displayValue: displayValue)
+    }
+
+    private func importReport(from row: [DatabaseValue]) throws -> CSVImportReport {
+        guard row.count == 6, case let .text(id) = row[0], case let .integer(imported) = row[1], case let .integer(skipped) = row[2], case let .integer(duplicateKept) = row[3], case let .integer(invalid) = row[4], case let .real(createdAt) = row[5] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+        return CSVImportReport(id: id, importedCount: Int(imported), skippedCount: Int(skipped), duplicateKeptCount: Int(duplicateKept), invalidCount: Int(invalid), createdAt: Date(timeIntervalSince1970: createdAt))
     }
 }

@@ -96,6 +96,7 @@ enum WorkspaceStoreError: Error, LocalizedError {
     case invalidOpportunity
     case injectedFailure
     case unexpectedDatabaseValue
+    case unresolvedImportDecision
 
     var errorDescription: String? {
         switch self {
@@ -105,6 +106,8 @@ enum WorkspaceStoreError: Error, LocalizedError {
             return "The opportunity could not be saved."
         case .unexpectedDatabaseValue:
             return "The workspace contains unreadable data."
+        case .unresolvedImportDecision:
+            return "Choose Skip or Keep separate for each duplicate CSV row."
         }
     }
 }

@@ -12,6 +12,28 @@ struct CSVImportRow: Equatable, Identifiable {
     let opportunity: CreateOpportunity
 }
 
+enum CSVDuplicateDecision: String, CaseIterable, Equatable {
+    case skip
+    case keepSeparate
+}
+
+struct CSVImportPlanRow: Equatable, Identifiable {
+    let row: CSVImportRow
+    let isDuplicate: Bool
+    var decision: CSVDuplicateDecision?
+
+    var id: Int { row.id }
+}
+
+struct CSVImportReport: Equatable {
+    let id: String
+    let importedCount: Int
+    let skippedCount: Int
+    let duplicateKeptCount: Int
+    let invalidCount: Int
+    let createdAt: Date
+}
+
 enum CSVOpportunityImporter {
     static func preview(data: Data) throws -> CSVImportPreview {
         guard let text = String(data: data, encoding: .utf8) else { throw CSVImportError.unreadableFile }

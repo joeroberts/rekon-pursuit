@@ -203,6 +203,25 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(preview.invalidRowCount, 1)
     }
 
+    func testCSVImportRequiresDuplicateDecisionAndPersistsReport() throws {
+        let store = try makeStore()
+        _ = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let preview = try CSVOpportunityImporter.preview(data: Data("title,company\nProduct Manager,Rekon Labs\nDirector,Rekon Labs\n".utf8))
+        var plan = try store.csvImportPlan(for: preview)
+
+        XCTAssertTrue(plan[0].isDuplicate)
+        XCTAssertThrowsError(try store.importCSV(plan, invalidCount: preview.invalidRowCount))
+        plan[0].decision = .skip
+
+        let report = try store.importCSV(plan, invalidCount: preview.invalidRowCount)
+
+        XCTAssertEqual(report.importedCount, 1)
+        XCTAssertEqual(report.skippedCount, 1)
+        XCTAssertEqual(try store.importReports(), [report])
+        XCTAssertEqual(try store.opportunities().map(\.title), ["Product Manager", "Director"])
+        XCTAssertEqual(try store.activityEvents().suffix(2).map(\.kind), ["csv_duplicate_skipped", "csv_imported"])
+    }
+
     func testInteractionIsStoredWithAnOpportunityAndActivityEvent() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
