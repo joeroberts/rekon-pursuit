@@ -15,6 +15,14 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var needsAttention: [TaskReminder] = []
     @Published private(set) var opportunities: [Opportunity] = []
     @Published private(set) var activityEvents: [ActivityEvent] = []
+    @Published var opportunitySearch = ""
+    @Published var stageFilter = "All stages"
+    @Published var selectedTitle = ""
+    @Published var selectedCompany = ""
+    @Published var selectedStage: PipelineStage = .saved
+    @Published var selectedNextAction = ""
+    @Published var selectedDueAt = Date.now
+    @Published var selectedHasDueDate = false
     @Published var contactName = ""
     @Published var contactEmployer = ""
     @Published var selectedOpportunityID = ""
@@ -123,6 +131,68 @@ final class WorkspaceViewModel: ObservableObject {
             statusMessage = "Stage updated locally."
         } catch {
             statusMessage = "The stage could not be updated."
+        }
+    }
+
+    var filteredOpportunities: [Opportunity] {
+        opportunities.filter { opportunity in
+            let matchesStage = stageFilter == "All stages" || opportunity.stage.rawValue == stageFilter
+            let query = opportunitySearch.trimmingCharacters(in: .whitespacesAndNewlines)
+            let matchesSearch = query.isEmpty || opportunity.title.localizedCaseInsensitiveContains(query) || opportunity.company.localizedCaseInsensitiveContains(query)
+            return matchesStage && matchesSearch
+        }
+    }
+
+    var selectedOpportunity: Opportunity? {
+        opportunities.first { $0.id == selectedOpportunityID }
+    }
+
+    var selectedActivityEvents: [ActivityEvent] {
+        activityEvents.filter { $0.opportunityID == selectedOpportunityID }
+    }
+
+    func open(_ task: TaskReminder) {
+        selectedOpportunityID = task.opportunityID
+        loadSelectedOpportunity()
+        statusMessage = "Opened opportunity locally."
+    }
+
+    func select(_ opportunity: Opportunity) {
+        selectedOpportunityID = opportunity.id
+        loadSelectedOpportunity()
+    }
+
+    func saveSelectedOpportunity() {
+        guard let store, !selectedOpportunityID.isEmpty else { return }
+        do {
+            try store.updateOpportunity(
+                id: selectedOpportunityID,
+                title: selectedTitle,
+                company: selectedCompany,
+                stage: selectedStage,
+                nextAction: selectedNextAction,
+                dueAt: selectedNextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedHasDueDate ? nil : selectedDueAt
+            )
+            refreshCounts()
+            statusMessage = "Opportunity updated locally."
+        } catch let error as LocalizedError {
+            statusMessage = error.errorDescription ?? "The opportunity could not be updated."
+        } catch {
+            statusMessage = "The opportunity could not be updated."
+        }
+    }
+
+    func rescheduleSelectedTask() {
+        guard let task = needsAttention.first(where: { $0.opportunityID == selectedOpportunityID }) else {
+            statusMessage = "Add a next action before rescheduling it."
+            return
+        }
+        do {
+            try store?.rescheduleTask(id: task.id, dueAt: selectedDueAt)
+            refreshCounts()
+            statusMessage = "Action rescheduled locally."
+        } catch {
+            statusMessage = "The action could not be rescheduled."
         }
     }
 
@@ -239,6 +309,7 @@ final class WorkspaceViewModel: ObservableObject {
             if selectedOpportunityID.isEmpty || !opportunities.contains(where: { $0.id == selectedOpportunityID }) {
                 selectedOpportunityID = opportunities.first?.id ?? ""
             }
+            loadSelectedOpportunity()
             refreshRelationshipMemory()
             contacts = try store?.contacts() ?? []
             activityCount = try store?.activityEvents().count ?? 0
@@ -258,6 +329,24 @@ final class WorkspaceViewModel: ObservableObject {
         } catch {
             statusMessage = "The relationship history could not be read."
         }
+    }
+
+    private func loadSelectedOpportunity() {
+        guard let opportunity = opportunities.first(where: { $0.id == selectedOpportunityID }) else {
+            selectedTitle = ""
+            selectedCompany = ""
+            selectedStage = .saved
+            selectedNextAction = ""
+            selectedHasDueDate = false
+            selectedDueAt = Date.now
+            return
+        }
+        selectedTitle = opportunity.title
+        selectedCompany = opportunity.company
+        selectedStage = opportunity.stage
+        selectedNextAction = opportunity.nextAction
+        selectedHasDueDate = opportunity.dueAt != nil
+        selectedDueAt = opportunity.dueAt ?? Date.now
     }
 
     private static func defaultWorkspaceRoot() -> URL {

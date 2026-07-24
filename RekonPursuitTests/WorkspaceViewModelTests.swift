@@ -84,6 +84,26 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.csvImportReport, report)
     }
 
+    func testSavingSelectedOpportunityUpdatesItsVisibleRecord() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        model.start()
+        model.title = "Product Manager"
+        model.company = "Rekon Labs"
+        model.nextAction = "Send follow-up"
+        model.hasDueDate = true
+        model.createOpportunity()
+
+        model.open(model.needsAttention[0])
+        model.selectedTitle = "Senior Product Manager"
+        model.selectedNextAction = "Prepare recruiter call"
+        model.saveSelectedOpportunity()
+
+        XCTAssertEqual(model.opportunities.first?.title, "Senior Product Manager")
+        XCTAssertEqual(model.needsAttention.first?.title, "Prepare recruiter call")
+        XCTAssertEqual(model.activityEvents.last?.kind, "opportunity_updated")
+    }
+
     private func makeStore() throws -> WorkspaceStore {
         let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent("rekon-view-model-\(UUID().uuidString).sqlite")
         let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 5, count: 32))

@@ -188,6 +188,44 @@ final class WorkspaceStore {
         }
     }
 
+    func updateOpportunity(
+        id: String,
+        title: String,
+        company: String,
+        stage: PipelineStage,
+        nextAction: String,
+        dueAt: Date?
+    ) throws {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let company = company.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nextAction = nextAction.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, !company.isEmpty else { throw WorkspaceStoreError.invalidOpportunity }
+
+        try synchronized {
+            guard try isActiveOpportunity(id) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+            let event = ActivityEvent(id: nextIdentifier(), kind: "opportunity_updated", opportunityID: id, actorID: actorID, correlationID: correlationID, occurredAt: now)
+            try database.transaction {
+                try database.execute(
+                    "UPDATE opportunities SET title = ?, company = ?, stage = ?, next_action = ?, due_at = ? WHERE id = ?",
+                    values: [.text(title), .text(company), .text(stage.rawValue), .text(nextAction), dueAt.map { .real($0.timeIntervalSince1970) } ?? .null, .text(id)]
+                )
+
+                let activeTaskID = try database.rows(
+                    "SELECT id FROM task_reminders WHERE opportunity_id = ? AND is_complete = 0 ORDER BY id LIMIT 1",
+                    values: [.text(id)]
+                ).first?.first
+                if nextAction.isEmpty {
+                    try database.execute("DELETE FROM task_reminders WHERE opportunity_id = ? AND is_complete = 0", values: [.text(id)])
+                } else if case let .text(taskID)? = activeTaskID {
+                    try database.execute("UPDATE task_reminders SET title = ?, due_at = ? WHERE id = ?", values: [.text(nextAction), dueAt.map { .real($0.timeIntervalSince1970) } ?? .null, .text(taskID)])
+                } else {
+                    try database.execute("INSERT INTO task_reminders (id, opportunity_id, title, due_at) VALUES (?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(id), .text(nextAction), dueAt.map { .real($0.timeIntervalSince1970) } ?? .null])
+                }
+                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), .text(id), .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
+            }
+        }
+    }
+
     func createContact(_ command: CreateContact) throws -> Contact {
         let name = command.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let employer = command.employer.trimmingCharacters(in: .whitespacesAndNewlines)

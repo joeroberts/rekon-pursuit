@@ -172,6 +172,38 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents().last?.kind, "opportunity_stage_changed")
     }
 
+    func testUpdateOpportunityReplacesItsNextActionAndWritesOneActivityEvent() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(
+            title: "Product Manager", company: "Rekon Labs", nextAction: "Send follow-up", dueAt: now
+        ))
+        let rescheduled = now.addingTimeInterval(86_400)
+
+        try store.updateOpportunity(
+            id: opportunity.id,
+            title: "Senior Product Manager",
+            company: "Rekon Labs",
+            stage: .screening,
+            nextAction: "Prepare recruiter call",
+            dueAt: rescheduled
+        )
+
+        XCTAssertEqual(try store.opportunities(), [
+            Opportunity(
+                id: opportunity.id,
+                title: "Senior Product Manager",
+                company: "Rekon Labs",
+                createdAt: now,
+                stage: .screening,
+                nextAction: "Prepare recruiter call",
+                dueAt: rescheduled
+            )
+        ])
+        XCTAssertEqual(try store.needsAttention().map(\.title), ["Prepare recruiter call"])
+        XCTAssertEqual(try store.needsAttention().first?.dueAt, rescheduled)
+        XCTAssertEqual(try store.activityEvents().map(\.kind), ["opportunity_created", "opportunity_updated"])
+    }
+
     func testClosedOpportunityIsRemovedFromQueueAndCannotBeActioned() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", nextAction: "Follow up", dueAt: now))

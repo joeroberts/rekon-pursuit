@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 enum BootstrapCopy {
     nonisolated static let status = "Local-only foundation"
@@ -8,7 +7,7 @@ enum BootstrapCopy {
 struct ContentView: View {
     @StateObject private var model = WorkspaceViewModel()
     @State private var pendingDeletion: Opportunity?
-    @State private var isChoosingCSV = false
+    @State private var showsPipelineBoard = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -52,23 +51,97 @@ struct ContentView: View {
                 if model.opportunities.isEmpty {
                     Text("No opportunities yet.").foregroundStyle(.secondary)
                 } else {
-                    ForEach(model.opportunities, id: \.id) { opportunity in
+                    HStack {
+                        TextField("Search opportunities", text: $model.opportunitySearch)
+                            .accessibilityIdentifier("opportunity-search")
+                        Picker("Stage filter", selection: $model.stageFilter) {
+                            Text("All stages").tag("All stages")
+                            ForEach(PipelineStage.allCases, id: \.self) { stage in
+                                Text(stage.rawValue).tag(stage.rawValue)
+                            }
+                        }
+                        Picker("View", selection: $showsPipelineBoard) {
+                            Text("Table").tag(false)
+                            Text("Board").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                    if model.filteredOpportunities.isEmpty {
+                        Text("No opportunities match that filter.").foregroundStyle(.secondary)
+                    }
+                    if showsPipelineBoard {
+                        ScrollView(.horizontal) {
+                            HStack(alignment: .top, spacing: 12) {
+                                ForEach(PipelineStage.allCases, id: \.self) { stage in
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text(stage.rawValue).font(.headline)
+                                        ForEach(model.filteredOpportunities.filter { $0.stage == stage }, id: \.id) { opportunity in
+                                            Button { model.select(opportunity) } label: {
+                                                VStack(alignment: .leading) {
+                                                    Text(opportunity.title)
+                                                    Text(opportunity.company).font(.caption).foregroundStyle(.secondary)
+                                                }
+                                                .frame(width: 132, alignment: .leading)
+                                                .padding(8)
+                                                .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                    .frame(width: 148, alignment: .leading)
+                                }
+                            }
+                        }
+                    } else {
+                        ForEach(model.filteredOpportunities, id: \.id) { opportunity in
                         HStack {
-                            VStack(alignment: .leading) {
-                                Text(opportunity.title)
-                                Text(opportunity.company).font(.caption).foregroundStyle(.secondary)
+                            Button { model.select(opportunity) } label: {
+                                VStack(alignment: .leading) {
+                                    Text(opportunity.title)
+                                    Text("\(opportunity.company) · \(opportunity.stage.rawValue)").font(.caption).foregroundStyle(.secondary)
+                                }
                             }
+                            .buttonStyle(.plain)
                             Spacer()
-                            Picker("Stage for \(opportunity.title)", selection: Binding(
-                                get: { opportunity.stage },
-                                set: { model.changeStage(opportunity, to: $0) }
-                            )) {
-                                ForEach(PipelineStage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                            }
-                            .labelsHidden()
                             Button("Delete", role: .destructive) {
                                 pendingDeletion = opportunity
                             }
+                        }
+                        }
+                    }
+                }
+            }
+
+            if model.selectedOpportunity != nil {
+                GroupBox("Opportunity record") {
+                    Form {
+                        TextField("Job title", text: $model.selectedTitle)
+                            .accessibilityIdentifier("selected-opportunity-title")
+                        TextField("Company", text: $model.selectedCompany)
+                        Picker("Stage", selection: $model.selectedStage) {
+                            ForEach(PipelineStage.allCases, id: \.self) { stage in
+                                Text(stage.rawValue).tag(stage)
+                            }
+                        }
+                        TextField("Next action (optional)", text: $model.selectedNextAction)
+                        Toggle("Add a due date", isOn: $model.selectedHasDueDate)
+                        if model.selectedHasDueDate {
+                            DatePicker("Due", selection: $model.selectedDueAt, displayedComponents: [.date, .hourAndMinute])
+                        }
+                        HStack {
+                            Button("Save changes locally") { model.saveSelectedOpportunity() }
+                                .accessibilityIdentifier("save-opportunity-changes")
+                            Button("Reschedule action") { model.rescheduleSelectedTask() }
+                                .disabled(model.selectedNextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                    }
+                    if model.selectedActivityEvents.isEmpty {
+                        Text("No activity for this opportunity yet.").foregroundStyle(.secondary)
+                    } else {
+                        Text("History").font(.headline)
+                        ForEach(model.selectedActivityEvents, id: \.id) { event in
+                            Text("\(event.kind.replacingOccurrences(of: "_", with: " ").capitalized) · \(event.occurredAt.formatted(date: .abbreviated, time: .shortened))")
+                                .font(.caption)
                         }
                     }
                 }
@@ -87,75 +160,11 @@ struct ContentView: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
+                            Button("Open") { model.open(task) }
                             Button("Snooze 1 day") { model.snoozeOneDay(task) }
                             Button("Complete") { model.complete(task) }
                         }
                     }
-                }
-            }
-
-            GroupBox("Contacts & interactions") {
-                TextField("Contact name", text: $model.contactName)
-                TextField("Employer", text: $model.contactEmployer)
-                Button("Save contact locally") { model.createContact() }
-                    .disabled(!model.workspaceReady || model.contactName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.contactEmployer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                if !model.opportunities.isEmpty {
-                    Picker("Opportunity", selection: $model.selectedOpportunityID) {
-                        ForEach(model.opportunities, id: \.id) { opportunity in
-                            Text("\(opportunity.title) · \(opportunity.company)").tag(opportunity.id)
-                        }
-                    }
-                    TextField("Interaction note", text: $model.interactionSummary)
-                    Button("Save interaction locally") { model.recordInteraction() }
-                        .disabled(!model.workspaceReady || model.selectedOpportunityID.isEmpty || model.interactionSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    if !model.selectedContacts.isEmpty {
-                        Text("Linked contacts: \(model.selectedContacts.map(\.name).joined(separator: ", "))")
-                            .font(.caption)
-                    }
-                    if !model.selectedInteractions.isEmpty {
-                        ForEach(model.selectedInteractions, id: \.id) { interaction in
-                            Text(interaction.summary)
-                                .font(.caption)
-                        }
-                    }
-                }
-
-                ForEach(model.contacts, id: \.id) { contact in
-                    HStack {
-                        Text("\(contact.name) · \(contact.employer)")
-                        Spacer()
-                        Button("Link") { model.link(contact) }
-                            .disabled(!model.workspaceReady || model.selectedOpportunityID.isEmpty)
-                    }
-                }
-            }
-
-            GroupBox("CSV import") {
-                Button("Choose CSV file") { isChoosingCSV = true }
-                    .disabled(!model.workspaceReady)
-                if let preview = model.csvPreview {
-                    Text("\(preview.rows.count) valid rows · \(preview.invalidRowCount) invalid rows")
-                    ForEach(model.csvImportPlan) { planRow in
-                        HStack {
-                            Text("Row \(planRow.row.id): \(planRow.row.opportunity.title) · \(planRow.row.opportunity.company)")
-                            if planRow.isDuplicate {
-                                Picker("Decision", selection: Binding(
-                                    get: { planRow.decision ?? .skip },
-                                    set: { model.setCSVDecision($0, for: planRow.id) }
-                                )) {
-                                    Text("Skip").tag(CSVDuplicateDecision.skip)
-                                    Text("Keep separate").tag(CSVDuplicateDecision.keepSeparate)
-                                }
-                            }
-                        }
-                    }
-                    Button("Import reviewed rows") { model.importCSVPreview() }
-                        .disabled(model.csvImportPlan.contains { $0.isDuplicate && $0.decision == nil })
-                }
-                if let report = model.csvImportReport {
-                    Text("Last import: \(report.importedCount) imported · \(report.skippedCount) skipped · \(report.duplicateKeptCount) duplicate-kept · \(report.invalidCount) invalid")
-                        .font(.caption)
                 }
             }
 
@@ -180,12 +189,8 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(28)
-        .frame(minWidth: 560, minHeight: 420, alignment: .topLeading)
+        .frame(minWidth: 760, minHeight: 520, alignment: .topLeading)
         .onAppear { model.start() }
-        .onChange(of: model.selectedOpportunityID) { model.refreshRelationshipMemory() }
-        .fileImporter(isPresented: $isChoosingCSV, allowedContentTypes: [.commaSeparatedText]) { result in
-            if case let .success(url) = result { model.previewCSV(at: url) }
-        }
         .alert("Delete opportunity?", isPresented: Binding(
             get: { pendingDeletion != nil },
             set: { if !$0 { pendingDeletion = nil } }
