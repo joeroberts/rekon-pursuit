@@ -66,18 +66,32 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(opportunity.stage, .applied)
         XCTAssertEqual(try store.needsAttention(), [
             TaskReminder(
-                id: "fixture-id-1", opportunityID: opportunity.id, title: "Send follow-up",
+                id: "fixture-id-2", opportunityID: opportunity.id, title: "Send follow-up",
                 dueAt: due, isComplete: false
             )
         ])
     }
 
+    func testCompleteTaskRemovesItFromQueueAndWritesActivity() throws {
+        let store = try makeStore()
+        _ = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", nextAction: "Send follow-up", dueAt: now))
+
+        try store.completeTask(id: "fixture-id-2")
+
+        XCTAssertEqual(try store.needsAttention(), [])
+        XCTAssertEqual(try store.activityEvents().last?.kind, "task_completed")
+    }
+
     private func makeStore(failBeforeActivityInsert: Bool = false) throws -> WorkspaceStore {
         let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        var identifier = 0
         return try WorkspaceStore(
             database: database,
             now: now,
-            nextIdentifier: { "fixture-id-1" },
+            nextIdentifier: {
+                defer { identifier += 1 }
+                return "fixture-id-\(identifier)"
+            },
             actorID: "local-user",
             correlationID: "fixture-correlation",
             failBeforeActivityInsert: failBeforeActivityInsert

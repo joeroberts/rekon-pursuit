@@ -77,6 +77,19 @@ final class WorkspaceStore {
         }
     }
 
+    func completeTask(id: String) throws {
+        try synchronized {
+            guard case let .text(opportunityID)? = try database.rows("SELECT opportunity_id FROM task_reminders WHERE id = ? AND is_complete = 0", values: [.text(id)]).first?.first else {
+                throw WorkspaceStoreError.unexpectedDatabaseValue
+            }
+            let event = ActivityEvent(id: nextIdentifier(), kind: "task_completed", opportunityID: opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: now)
+            try database.transaction {
+                try database.execute("UPDATE task_reminders SET is_complete = 1 WHERE id = ?", values: [.text(id)])
+                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), .text(event.opportunityID), .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
+            }
+        }
+    }
+
     func activityEvents() throws -> [ActivityEvent] {
         try synchronized {
             try database.rows("SELECT id, kind, opportunity_id, actor_id, correlation_id, occurred_at FROM activity_events ORDER BY occurred_at, id").map(activityEvent(from:))

@@ -48,13 +48,16 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(model.needsAttention, id: \.id) { task in
-                        VStack(alignment: .leading) {
-                            Text(task.title)
-                            Text(task.dueAt, style: .date)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(task.title)
+                                Text(task.dueAt, style: .date)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Complete") { model.complete(task) }
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }

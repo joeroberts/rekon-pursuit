@@ -70,6 +70,16 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
+    func complete(_ task: TaskReminder) {
+        do {
+            try store?.completeTask(id: task.id)
+            refreshCounts()
+            statusMessage = "Action completed locally."
+        } catch {
+            statusMessage = "The action could not be completed."
+        }
+    }
+
     private func apply(_ state: WorkspaceOpenState) {
         switch state {
         case let .ready(store):
