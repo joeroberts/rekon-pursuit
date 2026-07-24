@@ -48,6 +48,9 @@ final class WorkspaceStoreTests: XCTestCase {
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotArtifactURLs[1].path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotArtifactURLs[2].path))
     }
 
     func testFailedVersionFiveMigrationKeepsVerifiedRecoverySnapshot() throws {
@@ -61,6 +64,23 @@ final class WorkspaceStoreTests: XCTestCase {
 
         XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(4)]])
         XCTAssertTrue(FileManager.default.fileExists(atPath: databaseURL.appendingPathExtension("migration-snapshot").path))
+    }
+
+    func testFailedVersionSixMigrationKeepsVersionFiveWorkspaceAndSnapshot() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        try database.execute("CREATE TABLE schema_migrations (version INTEGER NOT NULL)")
+        try database.execute("INSERT INTO schema_migrations (version) VALUES (5)")
+        try database.execute("CREATE TABLE opportunities (id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, company TEXT NOT NULL, created_at REAL NOT NULL, stage TEXT NOT NULL DEFAULT 'Saved', next_action TEXT NOT NULL DEFAULT '', due_at REAL, deleted_at REAL)")
+        try database.execute("CREATE TABLE activity_events (id TEXT PRIMARY KEY NOT NULL, kind TEXT NOT NULL, opportunity_id TEXT NOT NULL, actor_id TEXT NOT NULL, correlation_id TEXT NOT NULL, occurred_at REAL NOT NULL)")
+        try database.execute("CREATE TABLE migration_history (version INTEGER PRIMARY KEY NOT NULL, checksum TEXT NOT NULL)")
+        try database.execute("INSERT INTO migration_history (version, checksum) VALUES (4, ?)", values: [.text(WorkspaceMigrations.baselineChecksum)])
+        try database.execute("INSERT INTO migration_history (version, checksum) VALUES (5, ?)", values: [.text(WorkspaceMigrations.versionFiveChecksum)])
+
+        XCTAssertThrowsError(try WorkspaceMigrations.apply(to: database, failVersionSix: true))
+
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(5)]])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
+        XCTAssertEqual(try database.rows("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'workspace_metadata'"), [])
     }
 
     func testCreateOpportunityAddsOneMatchingActivityEvent() throws {

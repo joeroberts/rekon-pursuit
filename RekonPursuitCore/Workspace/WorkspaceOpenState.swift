@@ -4,6 +4,7 @@ import Security
 enum WorkspaceOpenState: Equatable {
     case ready(WorkspaceStore)
     case missingKey
+    case missingExistingKey
     case locked
     case denied
     case corrupt
@@ -11,7 +12,7 @@ enum WorkspaceOpenState: Equatable {
 
     static func == (lhs: WorkspaceOpenState, rhs: WorkspaceOpenState) -> Bool {
         switch (lhs, rhs) {
-        case (.ready, .ready), (.missingKey, .missingKey), (.locked, .locked), (.denied, .denied), (.corrupt, .corrupt), (.unavailable, .unavailable):
+        case (.ready, .ready), (.missingKey, .missingKey), (.missingExistingKey, .missingExistingKey), (.locked, .locked), (.denied, .denied), (.corrupt, .corrupt), (.unavailable, .unavailable):
             true
         default:
             false
@@ -63,8 +64,9 @@ final class WorkspaceSession {
 
     func open() throws -> WorkspaceOpenState {
         do {
-            guard let key = try keyStore.readWorkspaceKey() else { return .missingKey }
-            guard FileManager.default.fileExists(atPath: databaseURL.path) else { return .unavailable }
+            let databaseExists = FileManager.default.fileExists(atPath: databaseURL.path)
+            guard let key = try keyStore.readWorkspaceKey() else { return databaseExists ? .missingExistingKey : .missingKey }
+            guard databaseExists else { return .unavailable }
             return .ready(try openStore(with: key, createIfMissing: false))
         } catch let error as WorkspaceKeyStoreError {
             switch error {

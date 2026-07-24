@@ -36,6 +36,17 @@ final class WorkspaceViewModelTests: XCTestCase {
 
         XCTAssertEqual(model.statusMessage, "Workspace key is unavailable. Create a new local workspace only if you intend to start over.")
         XCTAssertTrue(model.canCreateWorkspace)
+        XCTAssertFalse(model.workspaceReady)
+    }
+
+    func testExistingWorkspaceMissingKeyDoesNotOfferReplacement() {
+        let model = WorkspaceViewModel(openWorkspace: { .missingExistingKey }, createWorkspace: { throw WorkspaceStoreError.injectedFailure })
+
+        model.start()
+
+        XCTAssertEqual(model.statusMessage, "Workspace key is unavailable. The existing local workspace has not been replaced.")
+        XCTAssertFalse(model.canCreateWorkspace)
+        XCTAssertFalse(model.workspaceReady)
     }
 
     func testCorruptWorkspaceDoesNotOfferReplacement() {

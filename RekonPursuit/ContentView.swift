@@ -25,7 +25,7 @@ struct ContentView: View {
                 }
                 .accessibilityIdentifier("save-opportunity")
                 .keyboardShortcut(.defaultAction)
-                .disabled(model.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.company.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(!model.workspaceReady || model.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.company.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
 
             if model.canCreateWorkspace {

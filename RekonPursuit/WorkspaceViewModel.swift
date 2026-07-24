@@ -20,6 +20,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var csvPreview: CSVImportPreview?
     @Published private(set) var statusMessage = "Opening local workspace…"
     @Published private(set) var canCreateWorkspace = false
+    @Published private(set) var workspaceReady = false
 
     private let openWorkspace: () throws -> WorkspaceOpenState
     private let createWorkspace: () throws -> WorkspaceStore
@@ -52,6 +53,7 @@ final class WorkspaceViewModel: ObservableObject {
             refreshCounts()
             statusMessage = "Local workspace created."
             canCreateWorkspace = false
+            workspaceReady = true
         } catch {
             statusMessage = "The local workspace could not be created."
         }
@@ -166,21 +168,31 @@ final class WorkspaceViewModel: ObservableObject {
             refreshCounts()
             statusMessage = "Local workspace ready."
             canCreateWorkspace = false
+            workspaceReady = true
         case .missingKey:
             statusMessage = "Workspace key is unavailable. Create a new local workspace only if you intend to start over."
             canCreateWorkspace = true
+            workspaceReady = false
+        case .missingExistingKey:
+            statusMessage = "Workspace key is unavailable. The existing local workspace has not been replaced."
+            canCreateWorkspace = false
+            workspaceReady = false
         case .locked:
             statusMessage = "Unlock your Mac to reopen the local workspace."
             canCreateWorkspace = false
+            workspaceReady = false
         case .denied:
             statusMessage = "Keychain access was denied. Allow access to reopen the local workspace."
             canCreateWorkspace = false
+            workspaceReady = false
         case .corrupt:
             statusMessage = "The local workspace is unreadable. It has not been replaced; keep its files intact."
             canCreateWorkspace = false
+            workspaceReady = false
         case .unavailable:
             statusMessage = "The local workspace could not be opened."
             canCreateWorkspace = false
+            workspaceReady = false
         }
     }
 

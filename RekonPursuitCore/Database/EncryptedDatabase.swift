@@ -168,11 +168,19 @@ nonisolated final class EncryptedDatabase {
         url.appendingPathExtension("migration-snapshot")
     }
 
+    var migrationSnapshotArtifactURLs: [URL] {
+        let snapshotURL = migrationSnapshotURL
+        return [snapshotURL, URL(fileURLWithPath: snapshotURL.path + "-wal"), URL(fileURLWithPath: snapshotURL.path + "-shm")]
+    }
+
+    func removeMigrationSnapshot() {
+        migrationSnapshotArtifactURLs.forEach { try? FileManager.default.removeItem(at: $0) }
+    }
+
     func createVerifiedSnapshot() throws {
         let snapshotURL = migrationSnapshotURL
-        try? FileManager.default.removeItem(at: snapshotURL)
+        removeMigrationSnapshot()
         let snapshot = try Self.open(url: snapshotURL, key: key, createIfMissing: true)
-        defer { try? snapshot.close() }
         guard let handle, let snapshotHandle = snapshot.handle,
               let backup = sqlite3_backup_init(snapshotHandle, "main", handle, "main") else {
             throw EncryptedDatabaseError.sqlite(code: SQLITE_ERROR, message: "Could not create migration recovery snapshot.")
@@ -187,6 +195,7 @@ nonisolated final class EncryptedDatabase {
         guard sourceObjectCount == snapshotObjectCount else {
             throw EncryptedDatabaseError.sqlite(code: SQLITE_ERROR, message: "Migration recovery snapshot verification failed.")
         }
+        try snapshot.checkpointAndClose()
     }
 
     private static func sqliteError(handle: OpaquePointer?, code: Int32) -> EncryptedDatabaseError {

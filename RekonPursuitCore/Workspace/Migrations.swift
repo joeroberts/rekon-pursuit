@@ -7,7 +7,7 @@ enum WorkspaceMigrations {
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
 
-    static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false) throws {
+    static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
         let versions = try database.rows("SELECT version FROM schema_migrations LIMIT 1")
         if versions.isEmpty {
@@ -45,33 +45,33 @@ enum WorkspaceMigrations {
             "INSERT OR IGNORE INTO migration_history (version, checksum) VALUES (?, ?)",
             values: [.integer(4), .text(baselineChecksum)]
         )
-        if version < 5 {
+        if version < 5 || version < 6 {
             try database.createVerifiedSnapshot()
             do {
                 try database.transaction {
-                    try database.execute("ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
-                    if failVersionFive { throw WorkspaceStoreError.injectedFailure }
-                    try database.execute(
-                        "INSERT INTO migration_history (version, checksum) VALUES (?, ?)",
-                        values: [.integer(5), .text(versionFiveChecksum)]
-                    )
-                    try database.execute("UPDATE schema_migrations SET version = 5")
+                    if version < 5 {
+                        try database.execute("ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
+                        if failVersionFive { throw WorkspaceStoreError.injectedFailure }
+                        try database.execute(
+                            "INSERT INTO migration_history (version, checksum) VALUES (?, ?)",
+                            values: [.integer(5), .text(versionFiveChecksum)]
+                        )
+                    }
+                    if version < 6 {
+                        try database.execute("CREATE TABLE workspace_metadata (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)")
+                        try database.execute("INSERT INTO workspace_metadata (key, value) VALUES ('workspace_id', lower(hex(randomblob(16))))")
+                        try database.execute("CREATE TABLE deletion_tombstones (subject_id TEXT PRIMARY KEY NOT NULL, subject_type TEXT NOT NULL, deleted_at REAL NOT NULL, display_value TEXT NOT NULL)")
+                        if failVersionSix { throw WorkspaceStoreError.injectedFailure }
+                        try database.execute(
+                            "INSERT INTO migration_history (version, checksum) VALUES (?, ?)",
+                            values: [.integer(6), .text(versionSixChecksum)]
+                        )
+                    }
+                    try database.execute("UPDATE schema_migrations SET version = 6")
                 }
-                try? FileManager.default.removeItem(at: database.migrationSnapshotURL)
+                database.removeMigrationSnapshot()
             } catch {
                 throw error
-            }
-        }
-        if version < 6 {
-            try database.transaction {
-                try database.execute("CREATE TABLE workspace_metadata (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)")
-                try database.execute("INSERT INTO workspace_metadata (key, value) VALUES ('workspace_id', lower(hex(randomblob(16))))")
-                try database.execute("CREATE TABLE deletion_tombstones (subject_id TEXT PRIMARY KEY NOT NULL, subject_type TEXT NOT NULL, deleted_at REAL NOT NULL, display_value TEXT NOT NULL)")
-                try database.execute(
-                    "INSERT INTO migration_history (version, checksum) VALUES (?, ?)",
-                    values: [.integer(6), .text(versionSixChecksum)]
-                )
-                try database.execute("UPDATE schema_migrations SET version = 6")
             }
         }
     }
