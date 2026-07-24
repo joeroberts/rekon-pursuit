@@ -21,6 +21,31 @@ final class RekonPursuitTests: XCTestCase {
         })
     }
 
+    func testFixtureManifestRejectsDuplicateIDs() {
+        let fixture = FixtureManifest.Fixture(
+            id: "WS-EMPTY-001", schemaVersion: 1, provenance: "synthetic",
+            fixedClock: "2024-01-01T00:00:00Z", fixedIDSeed: "seed",
+            fixedRandomSeed: "seed", path: "fixtures/WS-EMPTY-001", expectedResult: "ok"
+        )
+        let manifest = FixtureManifest(schemaVersion: 1, fixtures: Array(repeating: fixture, count: 22))
+
+        XCTAssertThrowsError(try FixtureManifest.validate(manifest))
+    }
+
+    func testFixtureManifestRejectsTraversalPath() {
+        let fixtures = FixtureManifest.requiredM1FixtureIDs.sorted().map { id in
+            FixtureManifest.Fixture(
+                id: id, schemaVersion: 1, provenance: "synthetic",
+                fixedClock: "2024-01-01T00:00:00Z", fixedIDSeed: id,
+                fixedRandomSeed: id,
+                path: id == "WS-EMPTY-001" ? "fixtures/../../outside" : "fixtures/\(id)",
+                expectedResult: "ok"
+            )
+        }
+
+        XCTAssertThrowsError(try FixtureManifest.validate(FixtureManifest(schemaVersion: 1, fixtures: fixtures)))
+    }
+
     func testHarnessDefaultsToOfflineAndNoXPCLaunch() throws {
         let harness = try TestHarness.make()
 

@@ -29,10 +29,28 @@ struct FixtureManifest: Decodable {
             throw HarnessError.missingFixtureManifest
         }
         let manifest = try JSONDecoder().decode(FixtureManifest.self, from: Data(contentsOf: url))
-        guard Set(manifest.fixtures.map(\.id)) == requiredM1FixtureIDs else {
+        try validate(manifest)
+        return manifest
+    }
+
+    static func validate(_ manifest: FixtureManifest) throws {
+        guard manifest.schemaVersion == 1,
+              manifest.fixtures.count == requiredM1FixtureIDs.count,
+              Set(manifest.fixtures.map(\.id)) == requiredM1FixtureIDs else {
             throw HarnessError.invalidFixtureManifest
         }
-        return manifest
+
+        for fixture in manifest.fixtures {
+            guard fixture.schemaVersion == 1,
+                  fixture.provenance == "synthetic",
+                  !fixture.fixedClock.isEmpty,
+                  !fixture.fixedIDSeed.isEmpty,
+                  !fixture.fixedRandomSeed.isEmpty,
+                  fixture.path == "fixtures/\(fixture.id)",
+                  !fixture.expectedResult.isEmpty else {
+                throw HarnessError.invalidFixtureManifest
+            }
+        }
     }
 }
 
