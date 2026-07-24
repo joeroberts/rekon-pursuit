@@ -4,10 +4,17 @@ enum BootstrapCopy {
     nonisolated static let status = "Local-only foundation"
 }
 
+private enum TrackerPage: String, CaseIterable {
+    case home = "Needs Attention"
+    case pipeline = "Pipeline"
+    case add = "Add opportunity"
+}
+
 struct ContentView: View {
     @StateObject private var model = WorkspaceViewModel()
     @State private var pendingDeletion: Opportunity?
     @State private var showsPipelineBoard = false
+    @State private var page: TrackerPage = .home
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -16,6 +23,15 @@ struct ContentView: View {
             Text("Local job tracker")
                 .foregroundStyle(.secondary)
 
+            Picker("Workspace", selection: $page) {
+                ForEach(TrackerPage.allCases, id: \.self) { page in
+                    Text(page.rawValue).tag(page)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("workspace-navigation")
+
+            if page == .add {
             Form {
                 TextField("Job title", text: $model.title)
                     .accessibilityIdentifier("opportunity-title")
@@ -39,14 +55,16 @@ struct ContentView: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(!model.workspaceReady || model.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.company.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+            }
 
-            if model.canCreateWorkspace {
+            if page == .add && model.canCreateWorkspace {
                 Button("Create new local workspace") {
                     model.createWorkspaceIfNeeded()
                 }
                 .accessibilityIdentifier("create-local-workspace")
             }
 
+            if page == .pipeline {
             GroupBox("Opportunities") {
                 if model.opportunities.isEmpty {
                     Text("No opportunities yet.").foregroundStyle(.secondary)
@@ -146,10 +164,19 @@ struct ContentView: View {
                     }
                 }
             }
+            }
 
+            if page == .home {
+            Text("Needs Attention")
+                .font(.title2.bold())
+                .accessibilityIdentifier("needs-attention-home")
             GroupBox("Needs Attention") {
                 if model.needsAttention.isEmpty {
-                    Text("No next actions yet.").foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("No next actions yet.").foregroundStyle(.secondary)
+                        Button("Add an opportunity") { page = .add }
+                            .accessibilityIdentifier("show-add-opportunity")
+                    }
                 } else {
                     ForEach(model.needsAttention, id: \.id) { task in
                         HStack {
@@ -160,14 +187,20 @@ struct ContentView: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Button("Open") { model.open(task) }
+                            Button("Open") {
+                                model.open(task)
+                                page = .pipeline
+                            }
                             Button("Snooze 1 day") { model.snoozeOneDay(task) }
                             Button("Complete") { model.complete(task) }
                         }
                     }
                 }
             }
+            .accessibilityIdentifier("needs-attention-home")
+            }
 
+            if page == .home {
             GroupBox("Local activity") {
                 if model.activityEvents.isEmpty {
                     Text("No local activity yet.").foregroundStyle(.secondary)
@@ -176,6 +209,7 @@ struct ContentView: View {
                         Text(event.kind.replacingOccurrences(of: "_", with: " ").capitalized)
                     }
                 }
+            }
             }
 
             Text("This MVP keeps data on this Mac. Backup, restore, and export are not available yet.")

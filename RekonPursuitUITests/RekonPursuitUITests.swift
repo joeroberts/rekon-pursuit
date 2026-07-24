@@ -2,10 +2,10 @@ import XCTest
 
 final class RekonPursuitUITests: XCTestCase {
     @MainActor
-    func testWorkspaceStatusIsVisible() {
+    func testNeedsAttentionIsTheDefaultHome() {
         let app = XCUIApplication()
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["workspace-status"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["needs-attention-home"].waitForExistence(timeout: 5))
     }
 }
