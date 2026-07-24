@@ -20,6 +20,9 @@
 		100000000000000000000011 /* WorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* WorkspaceStore.swift */; };
 		100000000000000000000012 /* WorkspaceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* WorkspaceModels.swift */; };
 		100000000000000000000013 /* Migrations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* Migrations.swift */; };
+		100000000000000000000014 /* WorkspaceOpenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000019 /* WorkspaceOpenTests.swift */; };
+		100000000000000000000015 /* WorkspaceKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000020 /* WorkspaceKeyStore.swift */; };
+		100000000000000000000016 /* WorkspaceOpenState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000021 /* WorkspaceOpenState.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,6 +61,9 @@
 		200000000000000000000016 /* WorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/WorkspaceStore.swift; sourceTree = "<group>"; };
 		200000000000000000000017 /* WorkspaceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/WorkspaceModels.swift; sourceTree = "<group>"; };
 		200000000000000000000018 /* Migrations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/Migrations.swift; sourceTree = "<group>"; };
+		200000000000000000000019 /* WorkspaceOpenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceOpenTests.swift; sourceTree = "<group>"; };
+		200000000000000000000020 /* WorkspaceKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Security/WorkspaceKeyStore.swift; sourceTree = "<group>"; };
+		200000000000000000000021 /* WorkspaceOpenState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/WorkspaceOpenState.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -98,6 +104,8 @@
 				200000000000000000000016 /* WorkspaceStore.swift */,
 				200000000000000000000017 /* WorkspaceModels.swift */,
 				200000000000000000000018 /* Migrations.swift */,
+				200000000000000000000020 /* WorkspaceKeyStore.swift */,
+				200000000000000000000021 /* WorkspaceOpenState.swift */,
 				700000000000000000000005 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -127,6 +135,7 @@
 			children = (
 				200000000000000000000011 /* EncryptedDatabaseTests.swift */,
 				200000000000000000000015 /* WorkspaceStoreTests.swift */,
+				200000000000000000000019 /* WorkspaceOpenTests.swift */,
 			);
 			path = RekonPursuitCoreTests;
 			sourceTree = "<group>";
@@ -308,6 +317,8 @@
 				100000000000000000000011 /* WorkspaceStore.swift in Sources */,
 				100000000000000000000012 /* WorkspaceModels.swift in Sources */,
 				100000000000000000000013 /* Migrations.swift in Sources */,
+				100000000000000000000015 /* WorkspaceKeyStore.swift in Sources */,
+				100000000000000000000016 /* WorkspaceOpenState.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -319,6 +330,7 @@
 				100000000000000000000005 /* TestSupport.swift in Sources */,
 				100000000000000000000007 /* EncryptedDatabaseTests.swift in Sources */,
 				100000000000000000000010 /* WorkspaceStoreTests.swift in Sources */,
+				100000000000000000000014 /* WorkspaceOpenTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
