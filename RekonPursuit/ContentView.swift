@@ -92,6 +92,33 @@ struct ContentView: View {
                 }
             }
 
+            GroupBox("Contacts & interactions") {
+                TextField("Contact name", text: $model.contactName)
+                TextField("Employer", text: $model.contactEmployer)
+                Button("Save contact locally") { model.createContact() }
+                    .disabled(!model.workspaceReady || model.contactName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.contactEmployer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                if !model.opportunities.isEmpty {
+                    Picker("Opportunity", selection: $model.selectedOpportunityID) {
+                        ForEach(model.opportunities, id: \.id) { opportunity in
+                            Text("\(opportunity.title) · \(opportunity.company)").tag(opportunity.id)
+                        }
+                    }
+                    TextField("Interaction note", text: $model.interactionSummary)
+                    Button("Save interaction locally") { model.recordInteraction() }
+                        .disabled(!model.workspaceReady || model.selectedOpportunityID.isEmpty || model.interactionSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
+                ForEach(model.contacts, id: \.id) { contact in
+                    HStack {
+                        Text("\(contact.name) · \(contact.employer)")
+                        Spacer()
+                        Button("Link") { model.link(contact) }
+                            .disabled(!model.workspaceReady || model.selectedOpportunityID.isEmpty)
+                    }
+                }
+            }
+
             GroupBox("Local activity") {
                 if model.activityEvents.isEmpty {
                     Text("No local activity yet.").foregroundStyle(.secondary)

@@ -39,14 +39,15 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 7)
+        XCTAssertEqual(try store.schemaVersion(), 8)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
                 [.integer(4), .text(WorkspaceMigrations.baselineChecksum)],
                 [.integer(5), .text(WorkspaceMigrations.versionFiveChecksum)],
                 [.integer(6), .text(WorkspaceMigrations.versionSixChecksum)],
-                [.integer(7), .text(WorkspaceMigrations.versionSevenChecksum)]
+                [.integer(7), .text(WorkspaceMigrations.versionSevenChecksum)],
+                [.integer(8), .text(WorkspaceMigrations.versionEightChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])

@@ -17,6 +17,8 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var activityEvents: [ActivityEvent] = []
     @Published var contactName = ""
     @Published var contactEmployer = ""
+    @Published var selectedOpportunityID = ""
+    @Published var interactionSummary = ""
     @Published private(set) var contacts: [Contact] = []
     @Published private(set) var csvPreview: CSVImportPreview?
     @Published private(set) var statusMessage = "Opening local workspace…"
@@ -134,6 +136,31 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
+    func link(_ contact: Contact) {
+        guard !selectedOpportunityID.isEmpty else { return }
+        do {
+            try store?.linkContact(contactID: contact.id, toOpportunityID: selectedOpportunityID)
+            refreshCounts()
+            statusMessage = "Contact linked locally."
+        } catch {
+            statusMessage = "The contact could not be linked."
+        }
+    }
+
+    func recordInteraction() {
+        guard !selectedOpportunityID.isEmpty else { return }
+        do {
+            _ = try store?.recordInteraction(CreateInteraction(opportunityID: selectedOpportunityID, summary: interactionSummary))
+            interactionSummary = ""
+            refreshCounts()
+            statusMessage = "Interaction saved locally."
+        } catch let error as LocalizedError {
+            statusMessage = error.errorDescription ?? "The interaction could not be saved."
+        } catch {
+            statusMessage = "The interaction could not be saved."
+        }
+    }
+
     func previewCSV(at url: URL) {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
@@ -202,6 +229,9 @@ final class WorkspaceViewModel: ObservableObject {
         do {
             opportunityCount = try store?.opportunities().count ?? 0
             opportunities = try store?.opportunities() ?? []
+            if selectedOpportunityID.isEmpty || !opportunities.contains(where: { $0.id == selectedOpportunityID }) {
+                selectedOpportunityID = opportunities.first?.id ?? ""
+            }
             contacts = try store?.contacts() ?? []
             activityCount = try store?.activityEvents().count ?? 0
             activityEvents = try store?.activityEvents() ?? []
