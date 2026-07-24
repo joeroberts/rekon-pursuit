@@ -48,6 +48,21 @@ require_literal \
   'XCODE_BUILD: "17C529"' \
   'declare the exact CI Xcode build 17C529'
 require_literal \
+  'printf '\''%s\n'\'' "${version_output}"' \
+  'emit the exact xcodebuild version output to the CI log'
+require_literal \
+  'tee "${RUNNER_TEMP}/m0-runner-toolchain-identity.txt"' \
+  'write a redacted runner and toolchain identity evidence artifact'
+require_literal \
+  'name: m0-runner-toolchain-identity' \
+  'retain the runner and toolchain identity evidence artifact'
+require_literal \
+  'ImageOS=' \
+  'record the GitHub runner image operating-system identity'
+require_literal \
+  'ImageVersion=' \
+  'record the GitHub runner image version identity'
+require_literal \
   'scripts/m0/test_workflow_policy.sh .' \
   'run this workflow-policy regression'
 require_literal \

@@ -37,6 +37,22 @@ jobs:
           version_output="$(xcodebuild -version)"
           grep -Fxq "Xcode ${XCODE_VERSION}" <<<"${version_output}"
           grep -Fxq "Build version ${XCODE_BUILD}" <<<"${version_output}"
+          {
+            printf '%s\n' "${version_output}"
+            printf 'ImageOS=%s\n' "${ImageOS:-unknown}"
+            printf 'ImageVersion=%s\n' "${ImageVersion:-unknown}"
+            printf 'RUNNER_OS=%s\n' "${RUNNER_OS}"
+            printf 'RUNNER_ARCH=%s\n' "${RUNNER_ARCH}"
+            printf 'uname_machine=%s\n' "$(uname -m)"
+          } | tee "${RUNNER_TEMP}/m0-runner-toolchain-identity.txt"
+
+      - name: Retain runner and toolchain identity evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: m0-runner-toolchain-identity
+          path: ${{ runner.temp }}/m0-runner-toolchain-identity.txt
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Verify workflow policy
         shell: bash
