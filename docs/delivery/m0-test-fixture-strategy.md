@@ -52,7 +52,7 @@ Test setup must create a fresh workspace root, test Keychain namespace, fixture 
 
 ## Fixture catalog
 
-Fixture IDs are stable references for task briefs, automated tests, and release evidence. Fixtures contain synthetic names, URLs, email addresses, document text, and recovery material only. They must never be derived from a user's job-search data.
+Fixture IDs are stable references for task briefs, automated tests, and release evidence. Fixtures contain synthetic names, URLs, email addresses, and document text only. They must never be derived from a user's job-search data and must never contain database keys, OAuth tokens, recovery secrets, plaintext backup keys, or recovery material. Test-only recovery inputs are deterministically synthesized by an in-memory builder at test runtime from fixed non-secret test seed labels; they are neither persisted nor committed.
 
 ### Workspace, schema, and migration fixtures
 
@@ -71,21 +71,21 @@ The architect must add one migration fixture for **every** supported prior schem
 
 | ID | Contents / setup | Assertions it enables |
 | --- | --- | --- |
-| `BACKUP-VALID-001` | `WS-CORE-001` backup with manifest, blob inventory, fixed archive ID, authenticated envelope, and recovery material fixture. | Archive integrity, manifest binding, backup inventory, restore-to-new-workspace behavior. |
+| `BACKUP-VALID-001` | `WS-CORE-001` backup metadata with manifest, blob inventory, fixed archive ID, authenticated-envelope metadata, and a runtime-builder recovery-input label (not recovery material). | Archive integrity, manifest binding, backup inventory, restore-to-new-workspace behavior. |
 | `BACKUP-CORRUPT-001` | `BACKUP-VALID-001` with one modified archive/manifest/envelope byte, one variant per corruption class. | Authentication/checksum failure; no partial restore or overwritten active workspace. |
 | `BACKUP-SWAP-001` | Two otherwise valid workspaces with exchanged archive, envelope, or verification material. | Detect swapped/bound-to-wrong-workspace recovery artifacts. |
 | `RESTORE-KEYCHAIN-001` | Valid backup restored with the expected local Keychain recovery path available. | Restore/re-wrap behavior dictated by the ADR; restored data and activity evidence are complete. |
-| `RESTORE-CLEANMAC-001` | Valid backup and recovery material with no prior workspace Keychain entries. | Portable recovery verification/re-wrap behavior dictated by ADR; no hidden dependency on prior Keychain state. |
-| `RECOVERY-ENROLL-001` | Fixed enrollment flow with one user-mediated recovery-secret reveal/re-entry and variants for cancel, mismatch, Keychain locked/denied, and disk interruption. | No recovery archive/envelope on unsuccessful enrollment; no reset/escrow, file/clipboard write, secret log, or plaintext fallback. |
-| `RECOVERY-MISSING-001` | Backup with required recovery material in separate `locked`, `denied`, `missing`, and Keychain-cleanup-retry variants. | Exact unavailable state and guidance; never plaintext fallback or empty workspace creation; cleanup occurs only after dependent database/filesystem deletion succeeds. |
-| `DELETE-LOGICAL-001` | `WS-CORE-001` after fixed-time deletion variants for every supported deletable entity. | Record disappears from normal views, FTS, cache keys, and active workflow projections; redacted tombstone/activity remains; injected transaction fault yields all-old or all-new state. |
+| `RESTORE-CLEANMAC-001` | Valid backup metadata and a runtime-builder recovery-input label with no prior workspace Keychain entries. | Portable recovery verification/re-wrap behavior dictated by ADR; no hidden dependency on prior Keychain state or committed secret. |
+| `RECOVERY-ENROLL-001` | Fixed enrollment flow whose test-only input is generated in memory by the deterministic runtime builder; variants cover cancel, mismatch, Keychain locked/denied, and disk interruption. | No recovery archive/envelope on unsuccessful enrollment; no reset/escrow, file/clipboard write, secret log, plaintext fallback, or persisted/committed secret. |
+| `RECOVERY-MISSING-001` | Backup metadata with the runtime builder withholding its recovery input in separate `locked`, `denied`, `missing`, and Keychain-cleanup-retry variants. | Exact unavailable state and guidance; never plaintext fallback or empty workspace creation; cleanup occurs only after dependent database/filesystem deletion succeeds. |
+| `DELETE-LOGICAL-001` | `WS-CORE-001` after fixed-time deletion variants for every supported deletable entity. | Record disappears from normal views, FTS, cache keys, and active workflow projections; tombstone display equals `Deleted <entity-type> #<first-12-hex(SHA-256(workspaceID || subjectID))>` and contains no user-entered subject text; injected transaction fault yields all-old or all-new state. |
 | `DELETE-QUEUED-WORK-001` | A deletion with queued AI, provider, and reconciliation work referencing the source. | Each queued operation is atomically cancelled or given durable visible `blocked_deleted_source`; no external call is made. |
 | `BACKUP-RETENTION-001` | A recoverable backup created at fixed `T0`, containing data deleted at `T1 > T0`, inspected at `T1`, `T0 + 29 days`, and `T0 + 30 days`. | `expires_at = T0 + 30 days`; the deletion time never shifts expiry. UI exposes expiry and `expired_pending_removal` truthfully. |
 | `BACKUP-PURGE-001` | Multiple retained backups containing deleted/non-deleted data, with confirm, cancellation-before-promotion, per-backup verify failure, predecessor-removal failure, interruption/relaunch, retry, and concurrent-backup-attempt variants. | Scope/cutoff blocks or queues mutation; predecessor survives until verified replacement; predecessor-removal failure is `incomplete_retryable` or `blocked`; durable per-backup progress is observable; no false completed result. |
 | `EXPORT-ENCRYPTED-001` | Valid encrypted export fixture. | Export inventory, integrity, and no plaintext material in protected export path. |
 | `EXPORT-UNENCRYPTED-001` | User-approved plaintext export with fixed type/categories/filename/destination and variants changing each reviewed field. | Exact warning and final review precede write; any reviewed-field change invalidates confirmation; event retains only safe metadata. |
 | `EXPORT-CANCELLED-001` | User opens plaintext-export warning then cancels. | No file written, no export-completed activity event, workspace unchanged. |
-| `LIFECYCLE-REDACTION-001` | Synthetic lifecycle operation corpus covering before/after audit patches, errors/diagnostics, backup manifests/envelopes, export ledger metadata, and delete/purge results. | Redaction scan proves no database key, OAuth token, recovery secret, plaintext backup key, raw deleted content, full local path, or raw export payload is retained. |
+| `LIFECYCLE-REDACTION-001` | Synthetic lifecycle operation corpus covering before/after audit patches, errors/diagnostics, backup manifests/envelopes, export ledger metadata, and delete/purge results. | Redaction scan proves no database key, OAuth token, recovery secret, plaintext backup key, raw deleted content, full local path, or raw export payload is retained; every tombstone display exactly equals `Deleted <entity-type> #<first-12-hex(SHA-256(workspaceID || subjectID))>` and contains no user-entered subject text. |
 
 ### CSV import fixtures
 
