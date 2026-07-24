@@ -31,7 +31,7 @@
 `DeleteEntity` has one database transaction boundary. It commits all of the following together or commits none:
 
 1. `deleted_at`, deleter, deletion reason/category (if supplied), and version change on the subject;
-2. a redacted append-only deletion activity event and the minimum audit tombstone (stable subject ID/type, deletion time/actor, optional reason/category, redacted display snapshot);
+2. a redacted append-only deletion activity event and the minimum audit tombstone: stable subject ID/type, deletion time/actor, optional allowlisted reason category, and display value exactly `Deleted <entity-type> #<first-12-hex(SHA-256(workspaceID || subjectID))>`. Tombstones contain no user-entered title, employer, contact, document, transcript, research, filename, URL, or other subject text;
 3. removal/invalidation of every normal-view, needs-attention, FTS/search, cache-key, and active-workflow projection for the subject; and
 4. cancellation of queued external/AI/provider/reconciliation work referencing the subject, or a durable visible `blocked_deleted_source` state plus an audit reference.
 
@@ -67,7 +67,7 @@ The `StartExport` → `ReviewExport` → `ConfirmExport` state machine defaults 
 | Purge is destructive, verified, truthful | §2 Purge | `BACKUP-PURGE-001` cases `confirm`, `cancel`, `multi_backup_failure`, `predecessor_removal_failure`, `interruption_relaunch`, `retry`, `concurrent_create` | No predecessor removal before verified replacement; predecessor-removal failure remains `incomplete_retryable`/`blocked`; per-backup durable status; no false complete result. | QA + Security |
 | Restore uses new workspace and rejects tampering/substitution | §2 Restore | `BACKUP-VALID-001`, `BACKUP-CORRUPT-001` variants, `BACKUP-SWAP-001` variants, `RESTORE-KEYCHAIN-001` cases, `RESTORE-CLEANMAC-001` cases | New workspace only; no overwrite/partial promotion; correct trust-binding/re-wrap/fresh keys after clean-Mac restore. | Architect + QA + Security |
 | Encrypted default / warned unencrypted export | §2 Export | `EXPORT-ENCRYPTED-001`, `EXPORT-UNENCRYPTED-001` cases `warning`, `filename_change`, `destination_change`, `category_change`, `EXPORT-CANCELLED-001` | Encryption is default. Any fingerprint input change invalidates confirmation; cancelled export has no file/event. | QA + Security |
-| Sensitive material never leaves protected boundary | §1 Secret boundary; §2 all operations | `LIFECYCLE-REDACTION-001` across events, diagnostics, manifests, envelopes, export ledger metadata | Redaction scans find no key/token/secret/full path/raw export content, or raw deleted payload in metadata/diagnostics/exports. A pre-delete encrypted archive is allowed only the bounded retained payload described above. | Security |
+| Sensitive material never leaves protected boundary | §1 Secret boundary; §2 all operations | `LIFECYCLE-REDACTION-001` across tombstones/activity patches, events, diagnostics, manifests, envelopes, export ledger metadata | Redaction scans find no key/token/secret/full path/raw export content, raw deleted payload in metadata/diagnostics/exports, or user-entered subject text in tombstones; each tombstone display value must equal the deterministic opaque token formula above. A pre-delete encrypted archive is allowed only the bounded retained payload described above. | Security |
 
 ## 4. UX-copy acceptance references
 

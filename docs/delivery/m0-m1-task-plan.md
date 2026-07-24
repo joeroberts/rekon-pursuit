@@ -103,7 +103,7 @@ For every task below:
 
 **Dependencies:** ADR-001 and M0-1 are accepted. This task must use the selected dependency/encryption decision record and must not choose a conflicting implementation.
 
-**Permitted scope:** `docs/architecture/adr/`, `docs/architecture/`, `docs/delivery/evidence/m0/`, and `docs/delivery/m0-readiness-ledger.md`. It must not implement storage, write backup code, or alter PRD behavior.
+**Permitted scope:** Lifecycle-contract and traceability documents under `docs/architecture/` and `docs/architecture/adr/`; M0 evidence, fixture strategy, task plan, roadmap, and readiness ledger under `docs/delivery/`; and only the lifecycle-decision cross-references in `docs/product/prd.md` and `docs/implementation-handoff.md`. It must not implement storage, write backup code, or change accepted product behavior.
 
 ### Test-first work order
 
