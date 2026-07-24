@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum BootstrapCopy {
     nonisolated static let status = "Local-only foundation"
@@ -7,6 +8,7 @@ enum BootstrapCopy {
 struct ContentView: View {
     @StateObject private var model = WorkspaceViewModel()
     @State private var pendingDeletion: Opportunity?
+    @State private var isChoosingCSV = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -129,6 +131,32 @@ struct ContentView: View {
                 }
             }
 
+            GroupBox("CSV import") {
+                Button("Choose CSV file") { isChoosingCSV = true }
+                    .disabled(!model.workspaceReady)
+                if let preview = model.csvPreview {
+                    Text("\(preview.rows.count) valid rows · \(preview.invalidRowCount) invalid rows")
+                    ForEach(model.csvImportPlan.filter(\.isDuplicate)) { planRow in
+                        HStack {
+                            Text("Row \(planRow.row.id): \(planRow.row.opportunity.title) · \(planRow.row.opportunity.company)")
+                            Picker("Decision", selection: Binding(
+                                get: { planRow.decision ?? .skip },
+                                set: { model.setCSVDecision($0, for: planRow.id) }
+                            )) {
+                                Text("Skip").tag(CSVDuplicateDecision.skip)
+                                Text("Keep separate").tag(CSVDuplicateDecision.keepSeparate)
+                            }
+                        }
+                    }
+                    Button("Import reviewed rows") { model.importCSVPreview() }
+                        .disabled(model.csvImportPlan.contains { $0.isDuplicate && $0.decision == nil })
+                }
+                if let report = model.csvImportReport {
+                    Text("Last import: \(report.importedCount) imported · \(report.skippedCount) skipped · \(report.duplicateKeptCount) duplicate-kept · \(report.invalidCount) invalid")
+                        .font(.caption)
+                }
+            }
+
             GroupBox("Local activity") {
                 if model.activityEvents.isEmpty {
                     Text("No local activity yet.").foregroundStyle(.secondary)
@@ -153,6 +181,9 @@ struct ContentView: View {
         .frame(minWidth: 560, minHeight: 420, alignment: .topLeading)
         .onAppear { model.start() }
         .onChange(of: model.selectedOpportunityID) { model.refreshRelationshipMemory() }
+        .fileImporter(isPresented: $isChoosingCSV, allowedContentTypes: [.commaSeparatedText]) { result in
+            if case let .success(url) = result { model.previewCSV(at: url) }
+        }
         .alert("Delete opportunity?", isPresented: Binding(
             get: { pendingDeletion != nil },
             set: { if !$0 { pendingDeletion = nil } }

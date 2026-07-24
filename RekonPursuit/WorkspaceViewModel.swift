@@ -23,6 +23,8 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var selectedContacts: [Contact] = []
     @Published private(set) var selectedInteractions: [Interaction] = []
     @Published private(set) var csvPreview: CSVImportPreview?
+    @Published private(set) var csvImportPlan: [CSVImportPlanRow] = []
+    @Published private(set) var csvImportReport: CSVImportReport?
     @Published private(set) var statusMessage = "Opening local workspace…"
     @Published private(set) var canCreateWorkspace = false
     @Published private(set) var workspaceReady = false
@@ -168,9 +170,11 @@ final class WorkspaceViewModel: ObservableObject {
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         do {
             csvPreview = try CSVOpportunityImporter.preview(data: Data(contentsOf: url))
+            csvImportPlan = try store?.csvImportPlan(for: csvPreview!) ?? []
             statusMessage = "CSV preview ready. Review before importing."
         } catch {
             csvPreview = nil
+            csvImportPlan = []
             statusMessage = "The CSV file could not be read. It needs title and company columns."
         }
     }
@@ -178,18 +182,19 @@ final class WorkspaceViewModel: ObservableObject {
     func importCSVPreview() {
         guard let preview = csvPreview, let store else { return }
         do {
-            var seen = Set(try store.opportunities().map { "\($0.title.lowercased())\u{1F}\($0.company.lowercased())" })
-            for row in preview.validRows {
-                let key = "\(row.title.lowercased())\u{1F}\(row.company.lowercased())"
-                guard seen.insert(key).inserted else { continue }
-                _ = try store.create(row)
-            }
+            csvImportReport = try store.importCSV(csvImportPlan, invalidCount: preview.invalidRowCount)
             csvPreview = nil
+            csvImportPlan = []
             refreshCounts()
-            statusMessage = "CSV rows imported locally. Existing matching opportunities were left unchanged."
+            statusMessage = "CSV import saved locally."
         } catch {
             statusMessage = "The CSV rows could not be imported."
         }
+    }
+
+    func setCSVDecision(_ decision: CSVDuplicateDecision, for rowID: Int) {
+        guard let index = csvImportPlan.firstIndex(where: { $0.id == rowID }) else { return }
+        csvImportPlan[index].decision = decision
     }
 
     private func apply(_ state: WorkspaceOpenState) {

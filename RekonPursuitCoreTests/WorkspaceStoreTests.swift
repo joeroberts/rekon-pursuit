@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 8)
+        XCTAssertEqual(try store.schemaVersion(), 9)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -39,7 +39,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 8)
+        XCTAssertEqual(try store.schemaVersion(), 9)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -47,7 +47,8 @@ final class WorkspaceStoreTests: XCTestCase {
                 [.integer(5), .text(WorkspaceMigrations.versionFiveChecksum)],
                 [.integer(6), .text(WorkspaceMigrations.versionSixChecksum)],
                 [.integer(7), .text(WorkspaceMigrations.versionSevenChecksum)],
-                [.integer(8), .text(WorkspaceMigrations.versionEightChecksum)]
+                [.integer(8), .text(WorkspaceMigrations.versionEightChecksum)],
+                [.integer(9), .text(WorkspaceMigrations.versionNineChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
