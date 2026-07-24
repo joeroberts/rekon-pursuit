@@ -59,6 +59,8 @@ enum HarnessError: Error {
     case invalidFixtureManifest
     case networkDenied
     case outsideTestRoot
+    case injectedFault
+    case keychainUnavailable
 }
 
 struct FixedClock {
@@ -92,7 +94,7 @@ final class DeterministicRandom {
     }
 }
 
-enum FileSystemFaultMode {
+enum FileSystemFaultMode: Equatable {
     case none
     case diskFull
     case interrupted
@@ -114,6 +116,13 @@ struct TestFileStore {
         guard isConfined(url) else { throw HarnessError.outsideTestRoot }
         return url
     }
+
+    func write(_ data: Data, relativePath: String) throws {
+        let url = try checkedURL(relativePath: relativePath)
+        guard faultMode == .none else { throw HarnessError.injectedFault }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: url, options: .atomic)
+    }
 }
 
 enum FakeKeychainState {
@@ -126,8 +135,29 @@ enum FakeKeychainState {
 final class FakeKeychain {
     let namespace: String
     var state: FakeKeychainState = .available
+    private var values: [String: Data] = [:]
 
     init(namespace: String) { self.namespace = namespace }
+
+    func read(_ key: String) throws -> Data? {
+        guard case .available = state else { throw HarnessError.keychainUnavailable }
+        return values[key]
+    }
+
+    func write(_ value: Data, for key: String) throws {
+        guard case .available = state else { throw HarnessError.keychainUnavailable }
+        values[key] = value
+    }
+
+    func delete(_ key: String) throws {
+        guard case .available = state else { throw HarnessError.keychainUnavailable }
+        values.removeValue(forKey: key)
+    }
+}
+
+struct FixedLocaleTimeZone {
+    let locale = Locale(identifier: "en_US_POSIX")
+    let timeZone = TimeZone(secondsFromGMT: 0)!
 }
 
 final class DefaultDenyHTTP {
@@ -154,6 +184,7 @@ final class FakeLifecycleCoordinator {
 final class TestHarness {
     let root: URL
     let clock = FixedClock()
+    let localeTimeZone = FixedLocaleTimeZone()
     let ids: DeterministicIDs
     let random: DeterministicRandom
     let fileStore: TestFileStore

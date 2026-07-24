@@ -79,4 +79,25 @@ final class RekonPursuitTests: XCTestCase {
         try first.tearDown()
         XCTAssertFalse(FileManager.default.fileExists(atPath: first.root.path))
     }
+
+    func testHarnessInjectsFilesystemFaultsAndIsolatesKeychain() throws {
+        let harness = try TestHarness.make()
+        defer { try? harness.tearDown() }
+        let faultingStore = TestFileStore(root: harness.root, faultMode: .diskFull)
+
+        XCTAssertThrowsError(try faultingStore.write(Data("x".utf8), relativePath: "fixture.bin"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: harness.root.appendingPathComponent("fixture.bin").path))
+        try harness.keychain.write(Data("value".utf8), for: "fixture")
+        XCTAssertEqual(try harness.keychain.read("fixture"), Data("value".utf8))
+        harness.keychain.state = .locked
+        XCTAssertThrowsError(try harness.keychain.read("fixture"))
+    }
+
+    func testHarnessUsesFixedLocaleAndUTC() throws {
+        let harness = try TestHarness.make()
+        defer { try? harness.tearDown() }
+
+        XCTAssertEqual(harness.localeTimeZone.locale.identifier, "en_US_POSIX")
+        XCTAssertEqual(harness.localeTimeZone.timeZone.secondsFromGMT(), 0)
+    }
 }

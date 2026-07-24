@@ -140,7 +140,7 @@ For every task below:
 
 ### Test-first work order
 
-- [ ] Add a failing clean-checkout CI job specification before project scaffolding. Its required checks are: resolve only pinned approved dependencies; build universal app from empty derived data; execute a placeholder test target; inspect architecture and entitlement allowlist; run dependency and secret scans; and preserve redacted diagnostics/evidence on failure.
+- [ ] Add a failing clean-checkout CI job specification before project scaffolding. Its required checks are: resolve only pinned approved dependencies; build universal app from empty derived data; inspect architecture and entitlement allowlist; run dependency and secret scans; preserve redacted diagnostics/evidence on failure; and launch the archive on macOS 14. Focused tests remain local MVP evidence, not a hosted-CI coverage gate.
 - [ ] Add a failing local reproducibility command specification before project files. It must create an unsigned test archive non-interactively from a clean checkout; the separate signed command must require externally supplied CI secrets and must not run from developer fixtures.
 - [ ] Define entitlement-negative tests before creating entitlements. They must fail if App Sandbox/Hardened Runtime are missing or if network client/server, app groups/shared containers, privileged helper/system extension, automation/Apple Events, accessibility control, camera, microphone, contacts, calendars, reminders, location, JIT, debug exception, or Keychain Sharing appears.
 - [ ] Create the minimum SwiftUI shell and test targets needed to make these checks pass, with macOS 14.0, explicit Swift language mode/strict-concurrency setting, universal architectures, App Sandbox, Hardened Runtime, and default team-scoped Keychain access only.
@@ -156,8 +156,8 @@ For every task below:
 
 ### Definition of done
 
-- A clean checkout can build and run the test target with no live network, credentials, signing identity, or user workspace.
-- CI fails deterministically for a prohibited entitlement, unsupported architecture/deployment target, unpinned/unapproved dependency, tracked secret, or failed test.
+- A clean checkout can build and run the focused local test target with no live network, credentials, signing identity, or user workspace.
+- CI fails deterministically for a prohibited entitlement, unsupported architecture/deployment target, unpinned/unapproved dependency, or tracked secret. Hosted CI is build/archive/smoke-only for the MVP.
 - The project supplies no feature-facing tracker screen beyond a minimal boot/recovery placeholder and makes no persistence claim yet.
 - Architect approves build configuration; QA/Test independently validates clean CI and local commands; Security/Privacy verifies the entitlement/secret posture; Code Reviewer verifies no feature scope leaked into scaffolding; TPM/Delivery Manager record acceptance.
 
