@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 3)
+        XCTAssertEqual(try store.schemaVersion(), 4)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -121,6 +121,16 @@ final class WorkspaceStoreTests: XCTestCase {
 
         XCTAssertEqual(preview.validRows, [CreateOpportunity(title: "Product Manager", company: "Rekon Labs")])
         XCTAssertEqual(preview.invalidRowCount, 1)
+    }
+
+    func testInteractionIsStoredWithAnOpportunityAndActivityEvent() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+
+        let interaction = try store.recordInteraction(CreateInteraction(opportunityID: opportunity.id, summary: "Spoke with hiring manager."))
+
+        XCTAssertEqual(try store.interactions(forOpportunityID: opportunity.id), [interaction])
+        XCTAssertEqual(try store.activityEvents().last?.kind, "interaction_recorded")
     }
 
     private func makeStore(failBeforeActivityInsert: Bool = false) throws -> WorkspaceStore {

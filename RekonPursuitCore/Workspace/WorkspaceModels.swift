@@ -48,6 +48,18 @@ struct CreateContact {
     let employer: String
 }
 
+struct Interaction: Equatable {
+    let id: String
+    let opportunityID: String
+    let summary: String
+    let occurredAt: Date
+}
+
+struct CreateInteraction {
+    let opportunityID: String
+    let summary: String
+}
+
 struct ActivityEvent: Equatable {
     let id: String
     let kind: String
