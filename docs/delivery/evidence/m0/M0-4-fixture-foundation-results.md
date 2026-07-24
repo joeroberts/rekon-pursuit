@@ -1,6 +1,6 @@
 # M0-4 Deterministic Fixture Foundation Results
 
-**State:** Ready for independent review only. This evidence does not accept M0-4, release `M0-GATE-01`, or release M1.
+**State:** M0-4 accepted. This evidence releases `M0-GATE-01` for its final decision only; it does not release M1.
 
 **Scope:** Test-target-only fixture catalog and fakes. No production persistence, crypto, network adapter, Keychain access, workspace, or feature behavior was added.
 
@@ -21,6 +21,6 @@ The manifest is a catalog/binding artifact, not an encryption, backup, recovery,
 | Tracked-secret scan | `scripts/m0/check_tracked_secrets.sh .` | Passed |
 | Diff whitespace | `git diff --check` | Passed |
 
-## Review required
+## Acceptance record
 
-QA/Test, Architect, Security/Privacy, Code Reviewer, TPM, and Delivery Manager must independently review this evidence. M1 remains blocked until M0-4 and `M0-GATE-01` are accepted.
+QA/Test, Code Reviewer, Security/Privacy, Architect, TPM, and Delivery Manager independently accepted this test-only foundation. M1 remains blocked until `M0-GATE-01` is accepted.

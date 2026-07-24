@@ -1,6 +1,6 @@
 # Rekon Pursuit — M0 Readiness and Delivery Ledger
 
-- **Status:** M0 in progress — M0-1 and M0-2 are accepted; M0-3 native bootstrap/CI evidence is released. No application feature or M1 work is released.
+- **Status:** M0 final gate in progress — M0-1 through M0-4 are accepted. No application feature or M1 work is released.
 - **Last updated:** 2026-07-24
 - **Delivery Manager:** Independent Delivery Manager agent
 - **Authority:** This ledger is the durable delivery record required by [`AGENTS.md`](../../AGENTS.md). The approved [PRD](../product/prd.md), [architecture specification](../architecture/specification.md), [implementation roadmap](roadmap.md), [M0 test and fixture strategy](m0-test-fixture-strategy.md), [compatibility matrix](../architecture/macos-compatibility-matrix.md), and accepted [ADR-001](../architecture/adr/ADR-001-local-data-lifecycle.md) remain controlling artifacts.
@@ -46,7 +46,8 @@ Only one M0 task may be released at a time. The first releasable task is compati
 | Task | Scope boundary | Current state | Release conditions | Completion evidence | Next task allowed |
 | --- | --- | --- | --- | --- | --- |
 | `M0-1 — Compatibility and toolchain decision evidence` | Record selected toolchain, CI runner, bundle/signing convention, entitlement baseline, dependency-selection criteria, and reproducible evidence design. Do not create app code, CI workflows, workspace storage, integrations, AI, or production secrets. | **Accepted — evidence-only** | Full-Xcode selection evidence is accepted at current state `3867bd9`; explicit macOS 14 targets are accepted for both architectures. The selected runner policy pins `macos-15-intel` for build/inspection and `macos-14` arm64 for baseline smoke. No project/CI execution evidence is claimed. | [M0-1 toolchain record](evidence/m0/M0-1-toolchain-selection-and-blocker.md) records `M0-EVID-01`–`M0-EVID-05`, the redacted command output, selection policies, and remaining M0-3 boundaries. Project build/archive/settings/binary evidence remains M0-3 work. | M0-2 only is released; M0-3 still depends on accepted M0-1 and M0-2. |
-| `M0-2` / `M0-4` | Lifecycle-policy integration / fixture-harness foundation, as defined in the controlling task plan. | **Accepted — M0-GATE-01 released** | M0-3 and M0-4 accepted on 2026-07-24. | Required independent reviewers | Serial release: M0-2 follows accepted M0-1; M0-4 follows accepted M0-3. | M1 remains blocked until the final M0 gate accepts. |
+| `M0-2 — Lifecycle-policy integration` | Integrate the accepted lifecycle ADR/contract into planning, fixtures, and evidence only. | **Accepted** | M0-1 accepted. | Lifecycle contract, traceability, and independent approvals are recorded. | M0-3 was released and accepted. |
+| `M0-4 — Fixture/harness foundation` | Test-only deterministic fixture catalog and local fakes; no production behavior. | **Accepted** | M0-3 accepted; QA, Code Review, Security/Privacy, Architect, TPM, and Delivery approvals are recorded. | 22 synthetic fixtures and 9 focused local tests. | **M0-GATE-01 is ready for final decision only.** M1 remains blocked. |
 | `M0-3 — SwiftUI/Xcode bootstrap and CI` | Native project, app/test targets, scripts, CI workflow, entitlement checks, and synthetic smoke harness only. | **Accepted** | M0-1/M0-2 accepted; run `30074424747` passed; Architect, QA/Test, Security/Privacy, TPM, and Delivery approved. | Architect; QA/test; Security/privacy verifier; Code Reviewer; TPM; Delivery Manager | **Release M0-4 only.** M1 and M0 gate remain blocked. |
 | `M1-*` | Local record spine and every user-facing feature slice. | Blocked | M0-GATE-01 must pass, then TPM/Delivery Manager releases one dependency-safe brief at a time. | Per-task evidence bundle required by the QA strategy. | Determined only by the accepted task plan and gate process. |
 
@@ -117,7 +118,7 @@ Append one row per task state transition. Store only redacted paths/identities a
 | Milestone | Decision date | Decision | Required approvers | Evidence summary | Conditions / follow-up |
 | --- | --- | --- | --- | --- | --- |
 | M0 | — | Not yet decided | Architect, TPM, QA/test agent, Delivery Manager, Security/privacy verifier | ADR-001 accepted; matrix and fixture strategy prepared | Do not open M1 until `M0-GATE-01` is accepted. |
-| M1 | — | Blocked | Architect, TPM, QA/test agent, Delivery Manager | No approved M1 task plan or compatibility evidence yet | May be considered only after M0 passes. |
+| M1 | — | Blocked | Architect, TPM, QA/test agent, Delivery Manager | An approved M1 task plan exists, but no M1 task is released. | May be considered only after M0 passes and a specific M1 task is explicitly released. |
 
 ## Release rule
 
