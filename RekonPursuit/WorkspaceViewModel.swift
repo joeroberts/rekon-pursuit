@@ -16,6 +16,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var opportunities: [Opportunity] = []
     @Published private(set) var activityEvents: [ActivityEvent] = []
     @Published private(set) var selectedStageHistory: [StageHistoryEntry] = []
+    @Published private(set) var selectedTask: TaskReminder?
     @Published var opportunitySearch = ""
     @Published var stageFilter = "All stages"
     @Published var selectedTitle = ""
@@ -117,7 +118,7 @@ final class WorkspaceViewModel: ObservableObject {
 
     func snoozeOneDay(_ task: TaskReminder) {
         do {
-            try store?.rescheduleTask(id: task.id, dueAt: (task.dueAt ?? Date.now).addingTimeInterval(86_400))
+            try store?.snoozeTask(id: task.id)
             refreshCounts()
             statusMessage = "Action snoozed for one day."
         } catch {
@@ -177,6 +178,7 @@ final class WorkspaceViewModel: ObservableObject {
         selectedOpportunityID = opportunity.id
         loadSelectedOpportunity()
         refreshStageHistory()
+        refreshSelectedTask()
     }
 
     func saveSelectedOpportunity() {
@@ -328,6 +330,7 @@ final class WorkspaceViewModel: ObservableObject {
             }
             loadSelectedOpportunity()
             refreshStageHistory()
+            refreshSelectedTask()
             refreshRelationshipMemory()
             contacts = try store?.contacts() ?? []
             activityCount = try store?.activityEvents().count ?? 0
@@ -372,6 +375,14 @@ final class WorkspaceViewModel: ObservableObject {
             selectedStageHistory = selectedOpportunityID.isEmpty ? [] : try store?.stageHistory(forOpportunityID: selectedOpportunityID) ?? []
         } catch {
             statusMessage = "The stage history could not be read."
+        }
+    }
+
+    private func refreshSelectedTask() {
+        do {
+            selectedTask = selectedOpportunityID.isEmpty ? nil : try store?.latestTask(forOpportunityID: selectedOpportunityID)
+        } catch {
+            statusMessage = "The task state could not be read."
         }
     }
 

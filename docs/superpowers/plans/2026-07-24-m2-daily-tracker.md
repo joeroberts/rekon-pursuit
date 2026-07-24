@@ -7,10 +7,10 @@
 M2 is the complete local-only opportunity workspace, pipeline, and daily loop. It must not be narrowed to the subset already implemented.
 
 - Opportunity create, edit, search, and filter.
-- Configurable stages and a pipeline presented in both board and table/list forms.
+- The six fixed standard stages (Saved, Applied, Screening, Interviewing, Offer, Closed) and a pipeline presented in both board and table/list forms. Custom stage administration is deferred to a later explicitly released milestone.
 - A canonical opportunity record containing its stage/status history, next action, task/reminder state, and activity timeline.
 - An active opportunity may have one next action with an optional due date. Closed and deleted opportunities never enter the queue.
-- A deterministic Needs Attention queue with overdue, due-today, future, no-due-date, and manual-review items; within each bucket, use due date and then a stable task/opportunity ID tie-breaker.
+- A deterministic Needs Attention queue with overdue, due-today, future, and no-due-date items; within each bucket, use due date and then a stable task/opportunity ID tie-breaker. Manual-review work enters the queue only when its producing workflows ship in M5/M7.
 - Queue actions: complete, snooze, reschedule, and open the canonical record. Every one changes only its intended record and appends the required local activity event.
 - Local-only persistence, validation/recovery behavior, keyboard/accessibility baseline, and relaunch durability.
 
@@ -23,14 +23,14 @@ Existing commits provide candidate evidence for pipeline creation, stage selecti
 The fresh M2 gate must inspect the whole required scope above, including the prior P1: opening a queue item must append exactly one local activity event linked to the target opportunity/task. It must also verify that all M3/M4 UI remains unavailable and that the following Workstream-B requirements are either implemented and verified or explicitly remediated before acceptance:
 
 1. opportunity editing plus search/filter;
-2. configurable stage treatment and both required pipeline presentations;
+2. fixed standard-stage treatment and both required pipeline presentations;
 3. canonical-record navigation and visible status/activity history;
-4. deterministic manual-review bucket ordering and all queue actions, including arbitrary reschedule and open;
+4. deterministic overdue, due-today, future, and no-due-date ordering and all queue actions, including arbitrary reschedule and open;
 5. primary failure, empty, and keyboard/accessibility states.
 
 ## Acceptance evidence
 
-1. Seed equal-priority overdue, due-today, upcoming, no-due-date, and manual-review items. Verify the documented order and stable tie-breaker across relaunch.
+1. Seed equal-priority overdue, due-today, upcoming, and no-due-date items. Verify the documented order and stable tie-breaker across relaunch.
 2. Create and edit an opportunity; search/filter it; change its stage; and verify its canonical record, stage history, and activity timeline persist after relaunch.
 3. Complete, snooze, reschedule, and open each applicable queue item. Verify only the intended item changes and every action, including `Open`, appends the required local event.
 4. Verify deletion suppresses the record and its queued action without leaking deleted content through normal views/search.

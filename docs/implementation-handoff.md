@@ -30,11 +30,11 @@ The roadmap's milestone IDs are authoritative. The current release sequence is:
 | M4 | D | Local CSV import, duplicate decisions, import report, and batch traceability |
 | M5 | E + F | Conservative posting reconciliation plus MVP hardening, lifecycle/export work, and release readiness |
 
-M2 is the only active MVP feature milestone. Its implementation has a P1 remediation awaiting a fresh independent gate; it is not accepted. M3 and M4 code/artifacts are retained but frozen and unreleased until M2 is accepted. Do not expose, extend, or claim M3/M4 functionality as released while that dependency is open.
+M2 is accepted. M3 is the only active MVP feature milestone; M4 code/artifacts remain frozen and unreleased until M3 is accepted. Do not expose, extend, or claim M4 functionality as released while that dependency is open.
 
 1. **Foundation (M1):** native SwiftUI shell, encrypted SQLite, migrations, Keychain abstraction, core entities, and append-only activity events.
-2. **Daily tracker (M2, released for remediation and fresh gate only):** the offline opportunity workspace, stages, tasks, pipeline/search, and deterministic Needs attention loop. M2 is not accepted yet.
-3. **Relationship memory (M3, frozen/unreleased):** contact links and interaction history. It may not be exposed or extended until M2 is accepted and M3 is explicitly released.
+2. **Daily tracker (M2, accepted):** the offline opportunity workspace, six fixed standard stages, tasks, pipeline/search, and deterministic Needs attention loop.
+3. **Relationship memory (M3, released for completion and gate):** contact links and interaction history. It may not be claimed as accepted until its independent gate passes.
 4. **Safe bulk capture (M4, frozen/unreleased):** local CSV map/validate/duplicate decisions, import report, and batch traceability. It may not be exposed or extended until M2 and M3 are accepted and M4 is explicitly released.
 5. **Reconciliation and hardening (M5):** conservative posting reconciliation with explicit closure confirmation; manual local DOCX/PDF attachment links with source hashes; the empty/read-only local AI ledger; lifecycle/export work; and release readiness. Fully offline reconciliation makes no check, preserves the prior result, and creates retry/manual-review work. Signing, notarization, and DMG distribution remain M5 release work.
 6. **Privacy and AI foundation (M6):** local/sanitized/full-cloud routing, sanitization/disclosure, consent/no-fallback tests, populated AI ledger/cost budgets, local runtime adapter, then cloud adapter only after consent tests pass. No AI feature ships earlier.

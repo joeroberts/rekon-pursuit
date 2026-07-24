@@ -100,7 +100,7 @@ Restore creates a new workspace only after it verifies the manifest signature, r
 | Table | Key columns and constraints |
 | --- | --- |
 | `opportunities` | `id`, `employer_id`, `title`, `stage_id`, `status`, `job_url`, normalized URL/title/employer keys, compensation JSON, location, description_blob_id, `next_action_at`, `closed_at`; unique partial index on normalized URL when non-null is advisory only, not automatic dedupe |
-| `stages`, `opportunity_stage_history` | user-configured ordered stages; history has from/to stage, reason, actor, activity ID; stage change requires an explicit command |
+| `stages`, `opportunity_stage_history` | M2 persists the fixed ordered stages `Saved`, `Applied`, `Screening`, `Interviewing`, `Offer`, and `Closed`; history has from/to stage and timestamp. A later explicitly released milestone may introduce user-configured stage definitions, stable stage IDs, and ordering migration. |
 | `employers`, `contacts`, `contact_employers`, `opportunity_contacts` | many-to-many contacts/opportunities, employer association history, relationship context and link source |
 | `interactions`, `tasks`, `interviews`, `offers` | interactions may link contact/opportunity; task has status, due/snoozed timestamps, source and completion activity; interviews link events, prep, audio/transcript; offers store structured terms and a versioned comparison input snapshot |
 | `documents`, `document_versions`, `document_links`, `experience_library_items` | document identity and immutable versions; base/version lineage; SHA-256 and blob references; `final_for_opportunity` link is immutable once marked sent except explicit correction event |

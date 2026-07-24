@@ -62,13 +62,13 @@ For a small team, one person may hold multiple roles, but the accountability bou
 
 **Objective:** Deliver the first useful daily workflow: add an opportunity → choose stage and next action → clear Needs attention.
 
-**Scope:** Opportunity create/edit/search/filter; configurable stages; board and table views; canonical opportunity record; task/reminder model; deterministic Needs attention queue; complete/snooze/reschedule/open actions; stage/status history; activity timeline.
+**Scope:** Opportunity create/edit/search/filter; six fixed standard stages (custom stage administration deferred); board and table views; canonical opportunity record; task/reminder model; deterministic Needs attention queue; complete/snooze/reschedule/open actions; stage/status history; activity timeline. Manual-review work enters the queue only when its producing workflows ship in M5/M7.
 
 **Vertical-slice exit:** A newly created opportunity with a linked next action appears in the default Needs attention home at the correct deterministic position; each queue action updates the task and activity log; the user can navigate from queue to the canonical record and back.
 
 **Dependencies:** Workstream A; product-owner decision on initial stage set and deterministic urgency/order rules.
 
-**Acceptance checkpoint:** Seed equal-priority overdue, due-today, upcoming, and manual-review items. Verify documented ordering and a stable tie-breaker across relaunch. Complete, snooze, reschedule, and open each type; verify only the intended item changes and every action is logged.
+**Acceptance checkpoint:** Seed equal-priority overdue, due-today, upcoming, and no-due-date items. Verify documented ordering and a stable tie-breaker across relaunch. Complete, snooze, reschedule, and open each type; verify only the intended item changes and every action is logged.
 
 ### Workstream C — Contacts, interactions, and relationship links
 

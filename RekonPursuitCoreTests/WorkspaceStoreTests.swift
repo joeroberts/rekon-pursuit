@@ -163,6 +163,17 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents().last?.kind, "task_rescheduled")
     }
 
+    func testSnoozeTaskMovesOnlyItsDueDateAndWritesDistinctActivity() throws {
+        let store = try makeStore()
+        _ = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", nextAction: "Send follow-up", dueAt: now))
+        let snoozedDueAt = now.addingTimeInterval(86_400)
+
+        try store.snoozeTask(id: "fixture-id-2")
+
+        XCTAssertEqual(try store.needsAttention().first?.dueAt, snoozedDueAt)
+        XCTAssertEqual(try store.activityEvents().last?.kind, "task_snoozed")
+    }
+
     func testNeedsAttentionOrdersOverdueTodayFutureThenUndatedActions() throws {
         let store = try makeStore()
         _ = try store.create(CreateOpportunity(title: "Undated", company: "Rekon Labs", nextAction: "Research"))

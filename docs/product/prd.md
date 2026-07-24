@@ -49,7 +49,7 @@ Today, they struggle to:
 | --- | --- | --- |
 | Daily triage | Know exactly what needs a decision today. | Default **Needs attention** queue for overdue/upcoming tasks, interview prep, follow-ups, reconciliation reviews, and offer deadlines; each item has complete, snooze, reschedule, and open actions. |
 | Capture | Add many leads without retyping. | CSV import with column mapping, validation, duplicate detection, preview, and import report. |
-| Manage pipeline | Know what is active and needs attention. | Board and table views, customizable stages, responses, deadlines, follow-ups, and posting-status reconciliation. |
+| Manage pipeline | Know what is active and needs attention. | Board and table views, the six standard MVP stages, responses, deadlines, follow-ups, and posting-status reconciliation. Custom stage administration is deferred to a later explicitly released milestone. |
 | Build relationships | Remember people and make network data useful. | Contact CRM linked to employers, roles, meetings, correspondence, notes, and opportunity discovery. |
 | Apply | Tailor strong materials without losing versions. | Master résumé / cover-letter library, role-specific variants, change review, final-file tracking, and export. |
 | Interview | Prepare with relevant, credible talking points. | Role and company brief, experience-to-requirement mapping, practice prompts, interview notes, and transcript/audio coaching. |

@@ -139,6 +139,23 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.activityEvents.last?.kind, "task_rescheduled")
     }
 
+    func testSelectedOpportunityShowsCompletedTaskState() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        model.start()
+        model.title = "Product Manager"
+        model.company = "Rekon Labs"
+        model.nextAction = "Send follow-up"
+        model.createOpportunity()
+        let task = try XCTUnwrap(model.needsAttention.first)
+
+        model.open(task)
+        model.complete(task)
+
+        XCTAssertEqual(model.selectedTask?.id, task.id)
+        XCTAssertTrue(model.selectedTask?.isComplete == true)
+    }
+
     func testSelectedOpportunityShowsStageHistory() throws {
         let store = try makeStore()
         let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })

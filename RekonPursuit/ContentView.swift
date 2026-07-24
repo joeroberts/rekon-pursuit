@@ -155,6 +155,15 @@ struct ContentView: View {
                                 .disabled(model.selectedNextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         }
                     }
+                    if let task = model.selectedTask {
+                        LabeledContent("Task status", value: task.isComplete ? "Completed" : "Active")
+                        Text("Tracked action: \(task.title)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("No tracked next action.")
+                            .foregroundStyle(.secondary)
+                    }
                     if !model.selectedStageHistory.isEmpty {
                         Text("Stage history").font(.headline)
                         ForEach(model.selectedStageHistory, id: \.id) { entry in
