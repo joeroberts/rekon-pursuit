@@ -1,6 +1,6 @@
 # Local-data lifecycle contract
 
-**Status:** Accepted M0-2 contract draft — pending independent M0-2 acceptance  
+**Status:** Accepted M0-2 contract
 **Authority:** ADR-001 (Accepted, 2026-07-23) is controlling. This document makes its implementation and test obligations explicit; it does not change product behavior.  
 **Applies to:** workspace, supported entities, encrypted blobs/caches, activity/audit records, recoverable backups, Keychain material, and exports.
 
