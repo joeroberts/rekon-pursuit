@@ -65,7 +65,7 @@ final class WorkspaceStore {
                 if failBeforeActivityInsert { throw WorkspaceStoreError.injectedFailure }
                 try database.execute(
                     "INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)",
-                    values: [.text(event.id), .text(event.kind), .text(event.opportunityID), .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)]
+                    values: [.text(event.id), .text(event.kind), event.opportunityID.map(DatabaseValue.text) ?? .null, .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)]
                 )
             }
             return opportunity
@@ -99,7 +99,7 @@ final class WorkspaceStore {
                     "INSERT INTO deletion_tombstones (subject_id, subject_type, deleted_at, display_value) VALUES (?, 'opportunity', ?, ?)",
                     values: [.text(id), .real(now.timeIntervalSince1970), .text("Deleted opportunity #\(reference)")]
                 )
-                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), .text(event.opportunityID), .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
+                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), event.opportunityID.map(DatabaseValue.text) ?? .null, .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
             }
         }
     }
@@ -122,7 +122,7 @@ final class WorkspaceStore {
             let event = ActivityEvent(id: nextIdentifier(), kind: "task_completed", opportunityID: opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: now)
             try database.transaction {
                 try database.execute("UPDATE task_reminders SET is_complete = 1 WHERE id = ?", values: [.text(id)])
-                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), .text(event.opportunityID), .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
+                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), event.opportunityID.map(DatabaseValue.text) ?? .null, .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
             }
         }
     }
@@ -133,7 +133,7 @@ final class WorkspaceStore {
             let event = ActivityEvent(id: nextIdentifier(), kind: "task_rescheduled", opportunityID: opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: now)
             try database.transaction {
                 try database.execute("UPDATE task_reminders SET due_at = ? WHERE id = ?", values: [.real(dueAt.timeIntervalSince1970), .text(id)])
-                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), .text(event.opportunityID), .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
+                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), event.opportunityID.map(DatabaseValue.text) ?? .null, .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
             }
         }
     }
@@ -144,7 +144,7 @@ final class WorkspaceStore {
             let event = ActivityEvent(id: nextIdentifier(), kind: "opportunity_stage_changed", opportunityID: opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: now)
             try database.transaction {
                 try database.execute("UPDATE opportunities SET stage = ? WHERE id = ?", values: [.text(stage.rawValue), .text(opportunityID)])
-                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), .text(event.opportunityID), .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
+                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), event.opportunityID.map(DatabaseValue.text) ?? .null, .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
             }
         }
     }
@@ -155,7 +155,11 @@ final class WorkspaceStore {
         guard !name.isEmpty, !employer.isEmpty else { throw WorkspaceStoreError.invalidOpportunity }
         return try synchronized {
             let contact = Contact(id: nextIdentifier(), name: name, employer: employer)
-            try database.execute("INSERT INTO contacts (id, name, employer) VALUES (?, ?, ?)", values: [.text(contact.id), .text(contact.name), .text(contact.employer)])
+            let event = ActivityEvent(id: nextIdentifier(), kind: "contact_created", opportunityID: nil, actorID: actorID, correlationID: correlationID, occurredAt: now)
+            try database.transaction {
+                try database.execute("INSERT INTO contacts (id, name, employer) VALUES (?, ?, ?)", values: [.text(contact.id), .text(contact.name), .text(contact.employer)])
+                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), .null, .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
+            }
             return contact
         }
     }
@@ -163,7 +167,12 @@ final class WorkspaceStore {
     func linkContact(contactID: String, toOpportunityID opportunityID: String) throws {
         try synchronized {
             guard try isActiveOpportunity(opportunityID) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
-            try database.execute("INSERT OR IGNORE INTO contact_opportunities (contact_id, opportunity_id) VALUES (?, ?)", values: [.text(contactID), .text(opportunityID)])
+            guard (try database.rows("SELECT contact_id FROM contact_opportunities WHERE contact_id = ? AND opportunity_id = ?", values: [.text(contactID), .text(opportunityID)])).isEmpty else { return }
+            let event = ActivityEvent(id: nextIdentifier(), kind: "contact_linked", opportunityID: opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: now)
+            try database.transaction {
+                try database.execute("INSERT INTO contact_opportunities (contact_id, opportunity_id) VALUES (?, ?)", values: [.text(contactID), .text(opportunityID)])
+                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), .text(event.opportunityID!), .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
+            }
         }
     }
 
@@ -189,7 +198,7 @@ final class WorkspaceStore {
             let event = ActivityEvent(id: nextIdentifier(), kind: "interaction_recorded", opportunityID: command.opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: now)
             try database.transaction {
                 try database.execute("INSERT INTO interactions (id, opportunity_id, summary, occurred_at) VALUES (?, ?, ?, ?)", values: [.text(interaction.id), .text(interaction.opportunityID), .text(interaction.summary), .real(interaction.occurredAt.timeIntervalSince1970)])
-                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), .text(event.opportunityID), .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
+                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), event.opportunityID.map(DatabaseValue.text) ?? .null, .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
             }
             return interaction
         }
@@ -261,10 +270,12 @@ final class WorkspaceStore {
 
     private func activityEvent(from row: [DatabaseValue]) throws -> ActivityEvent {
         guard row.count == 6,
-              case let .text(id) = row[0], case let .text(kind) = row[1], case let .text(opportunityID) = row[2],
+              case let .text(id) = row[0], case let .text(kind) = row[1],
               case let .text(actorID) = row[3], case let .text(correlationID) = row[4], case let .real(occurredAt) = row[5] else {
             throw WorkspaceStoreError.unexpectedDatabaseValue
         }
+        let opportunityID: String?
+        if case let .text(value) = row[2] { opportunityID = value } else { opportunityID = nil }
         return ActivityEvent(id: id, kind: kind, opportunityID: opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: Date(timeIntervalSince1970: occurredAt))
     }
 

@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 7)
+        XCTAssertEqual(try store.schemaVersion(), 8)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -191,6 +191,8 @@ final class WorkspaceStoreTests: XCTestCase {
 
         XCTAssertEqual(try store.contacts(forOpportunityID: first.id), [contact])
         XCTAssertEqual(try store.contacts(forOpportunityID: second.id), [contact])
+        XCTAssertEqual(try store.activityEvents().map(\.kind), ["opportunity_created", "opportunity_created", "contact_created", "contact_linked", "contact_linked"])
+        XCTAssertNil(try store.activityEvents().first { $0.kind == "contact_created" }?.opportunityID)
     }
 
     func testCSVPreviewMapsTitleAndCompanyAndRejectsIncompleteRows() throws {
