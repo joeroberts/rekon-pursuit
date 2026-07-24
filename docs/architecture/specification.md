@@ -278,7 +278,7 @@ The app keeps a local diagnostics journal with correlation IDs across command, e
 | Failure | Required user-visible result and recovery |
 | --- | --- |
 | Database/key unavailable or corruption | Open read-only recovery mode if possible; block mutations; offer verified backup restore/export and diagnostic bundle. Never create a replacement empty workspace silently. |
-| Migration failure | Roll back transaction; keep pre-migration backup; show version/error and offer retry/restore. |
+| Migration failure | Roll back transaction; preserve the verified transaction-scoped rollback snapshot required for retry/recovery; show version/error and offer retry/keep-current-workspace. Offer portable-backup restore only if the user separately has an enrolled recoverable backup. |
 | Disk full/blob write interruption | Preserve source document where possible, mark ingest failed, release temporary files, show space/retry guidance; do not create a partial version. |
 | App crash during mutation | SQLite atomic transaction leaves old or new state; on launch resume only idempotent local jobs and reconcile queued provider operations by operation state. |
 | Offline/provider outage | Persist local draft/command and provider operation state; show Offline/Retry when connection returns. Never represent queued external work as completed. |

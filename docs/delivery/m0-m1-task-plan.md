@@ -218,7 +218,7 @@ For every task below:
 ### Exact outputs and evidence
 
 - [ ] An encrypted, versioned workspace store using the M0-1 accepted SQLite/encryption implementation, with serialized writes, read-only queries, foreign keys/WAL settings, keyed open/create/close, and no plaintext fallback.
-- [ ] Versioned schema/migration framework with `migration_history`, pre-migration verified backup/recovery path, checksums, idempotent forward migrations, and deterministic migration fixtures.
+- [ ] Versioned schema/migration framework with `migration_history`, pre-migration verified transaction-scoped rollback snapshot/recovery path (not a retained/recoverable backup), checksums, idempotent forward migrations, and deterministic migration fixtures.
 - [ ] A Keychain abstraction that wraps workspace keys and returns available/locked/denied/missing state without logging secrets. The default access group is team-scoped and Keychain Sharing remains absent.
 - [ ] One minimal `CreateOpportunity` command carrying actor and correlation ID; it persists the record and exactly one redacted append-only activity event in the same transaction. A compact local UI exposes create, validation, success, read-only/corrupt/key-unavailable/migration-failure recovery states, and relaunch evidence.
 - [ ] Lifecycle integration proving logical deletion/tombstone/index removal, backup expiry/purge state, and export warnings through the M0-2 contracts, or a documented task split approved by Architect/TPM/QA if the user-facing backup/export UI must wait while all underlying M1 contract tests still pass.
