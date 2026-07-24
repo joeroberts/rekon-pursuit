@@ -63,7 +63,7 @@ struct CreateInteraction {
 struct ActivityEvent: Equatable {
     let id: String
     let kind: String
-    let opportunityID: String
+    let opportunityID: String?
     let actorID: String
     let correlationID: String
     let occurredAt: Date
