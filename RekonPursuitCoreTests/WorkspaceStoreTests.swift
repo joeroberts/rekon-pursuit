@@ -141,6 +141,16 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents().last?.kind, "task_completed")
     }
 
+    func testOpenTaskKeepsItInQueueAndWritesActivity() throws {
+        let store = try makeStore()
+        _ = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", nextAction: "Send follow-up", dueAt: now))
+
+        try store.openTask(id: "fixture-id-2")
+
+        XCTAssertEqual(try store.needsAttention().map(\.title), ["Send follow-up"])
+        XCTAssertEqual(try store.activityEvents().last?.kind, "task_opened")
+    }
+
     func testRescheduleTaskUpdatesDueDateAndWritesActivity() throws {
         let store = try makeStore()
         _ = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", nextAction: "Send follow-up", dueAt: now))

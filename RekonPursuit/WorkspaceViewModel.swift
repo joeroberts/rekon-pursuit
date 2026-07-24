@@ -152,9 +152,14 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func open(_ task: TaskReminder) {
-        selectedOpportunityID = task.opportunityID
-        loadSelectedOpportunity()
-        statusMessage = "Opened opportunity locally."
+        do {
+            try store?.openTask(id: task.id)
+            selectedOpportunityID = task.opportunityID
+            refreshCounts()
+            statusMessage = "Opened opportunity locally."
+        } catch {
+            statusMessage = "The opportunity could not be opened."
+        }
     }
 
     func select(_ opportunity: Opportunity) {

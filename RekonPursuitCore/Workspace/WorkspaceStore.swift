@@ -166,6 +166,16 @@ final class WorkspaceStore {
         }
     }
 
+    func openTask(id: String) throws {
+        try synchronized {
+            let opportunityID = try activeTaskOpportunityID(id)
+            let event = ActivityEvent(id: nextIdentifier(), kind: "task_opened", opportunityID: opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: now)
+            try database.transaction {
+                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), .text(opportunityID), .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
+            }
+        }
+    }
+
     func rescheduleTask(id: String, dueAt: Date) throws {
         try synchronized {
             let opportunityID = try activeTaskOpportunityID(id)
