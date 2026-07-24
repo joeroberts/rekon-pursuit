@@ -16,6 +16,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var contactName = ""
     @Published var contactEmployer = ""
     @Published private(set) var contacts: [Contact] = []
+    @Published private(set) var csvPreview: CSVImportPreview?
     @Published private(set) var statusMessage = "Opening local workspace…"
     @Published private(set) var canCreateWorkspace = false
 
@@ -115,6 +116,35 @@ final class WorkspaceViewModel: ObservableObject {
             statusMessage = error.errorDescription ?? "The contact could not be saved."
         } catch {
             statusMessage = "The contact could not be saved."
+        }
+    }
+
+    func previewCSV(at url: URL) {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        do {
+            csvPreview = try CSVOpportunityImporter.preview(data: Data(contentsOf: url))
+            statusMessage = "CSV preview ready. Review before importing."
+        } catch {
+            csvPreview = nil
+            statusMessage = "The CSV file could not be read. It needs title and company columns."
+        }
+    }
+
+    func importCSVPreview() {
+        guard let preview = csvPreview, let store else { return }
+        do {
+            var seen = Set(try store.opportunities().map { "\($0.title.lowercased())\u{1F}\($0.company.lowercased())" })
+            for row in preview.validRows {
+                let key = "\(row.title.lowercased())\u{1F}\(row.company.lowercased())"
+                guard seen.insert(key).inserted else { continue }
+                _ = try store.create(row)
+            }
+            csvPreview = nil
+            refreshCounts()
+            statusMessage = "CSV rows imported locally. Existing matching opportunities were left unchanged."
+        } catch {
+            statusMessage = "The CSV rows could not be imported."
         }
     }
 

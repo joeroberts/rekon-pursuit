@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum BootstrapCopy {
     nonisolated static let status = "Local-only foundation"
@@ -6,6 +7,7 @@ enum BootstrapCopy {
 
 struct ContentView: View {
     @StateObject private var model = WorkspaceViewModel()
+    @State private var isChoosingCSV = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -96,6 +98,14 @@ struct ContentView: View {
                 }
             }
 
+            GroupBox("CSV import") {
+                Button("Choose CSV file") { isChoosingCSV = true }
+                if let preview = model.csvPreview {
+                    Text("\(preview.validRows.count) valid rows · \(preview.invalidRowCount) invalid rows")
+                    Button("Import previewed rows") { model.importCSVPreview() }
+                }
+            }
+
             Text("\(model.opportunityCount) opportunities · \(model.needsAttentionCount) needs attention · \(model.activityCount) activity events")
                 .foregroundStyle(.secondary)
             Text(model.statusMessage)
@@ -105,5 +115,8 @@ struct ContentView: View {
         .padding(28)
         .frame(minWidth: 560, minHeight: 420, alignment: .topLeading)
         .onAppear { model.start() }
+        .fileImporter(isPresented: $isChoosingCSV, allowedContentTypes: [.commaSeparatedText]) { result in
+            if case let .success(url) = result { model.previewCSV(at: url) }
+        }
     }
 }
