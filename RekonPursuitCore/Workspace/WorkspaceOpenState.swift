@@ -50,11 +50,12 @@ final class WorkspaceSession {
         let stagingStore = try openStore(at: stagingDatabaseURL, with: key, createIfMissing: true)
         try stagingStore.close()
         do {
-            try keyStore.writeWorkspaceKey(key)
+            try keyStore.writePendingWorkspaceKey(key)
             try FileManager.default.moveItem(at: stagingDatabaseURL, to: databaseURL)
+            try keyStore.promotePendingWorkspaceKey()
             return try openStore(with: key, createIfMissing: false)
         } catch {
-            try? keyStore.deleteWorkspaceKey()
+            try? keyStore.deletePendingWorkspaceKey()
             try? FileManager.default.removeItem(at: databaseURL)
             try? FileManager.default.removeItem(at: sidecarURL("-wal"))
             try? FileManager.default.removeItem(at: sidecarURL("-shm"))
@@ -65,8 +66,20 @@ final class WorkspaceSession {
     func open() throws -> WorkspaceOpenState {
         do {
             let databaseExists = FileManager.default.fileExists(atPath: databaseURL.path)
-            guard let key = try keyStore.readWorkspaceKey() else { return databaseExists ? .missingExistingKey : .missingKey }
-            guard databaseExists else { return .unavailable }
+            guard databaseExists else {
+                try? keyStore.deletePendingWorkspaceKey()
+                return try keyStore.readWorkspaceKey() == nil ? .missingKey : .unavailable
+            }
+            let key: Data
+            if let existingKey = try keyStore.readWorkspaceKey() {
+                key = existingKey
+            } else if try keyStore.readPendingWorkspaceKey() != nil {
+                try keyStore.promotePendingWorkspaceKey()
+                guard let recoveredKey = try keyStore.readWorkspaceKey() else { return .missingExistingKey }
+                key = recoveredKey
+            } else {
+                return .missingExistingKey
+            }
             return .ready(try openStore(with: key, createIfMissing: false))
         } catch let error as WorkspaceKeyStoreError {
             switch error {

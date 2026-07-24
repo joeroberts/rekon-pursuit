@@ -5,6 +5,10 @@ protocol WorkspaceKeyStore: AnyObject {
     func readWorkspaceKey() throws -> Data?
     func writeWorkspaceKey(_ key: Data) throws
     func deleteWorkspaceKey() throws
+    func readPendingWorkspaceKey() throws -> Data?
+    func writePendingWorkspaceKey(_ key: Data) throws
+    func promotePendingWorkspaceKey() throws
+    func deletePendingWorkspaceKey() throws
 }
 
 enum WorkspaceKeyStoreError: Error {
@@ -16,8 +20,39 @@ enum WorkspaceKeyStoreError: Error {
 final class KeychainWorkspaceKeyStore: WorkspaceKeyStore {
     private let service = "com.rekonlabs.RekonPursuit.workspace"
     private let account = "primary-workspace-key"
+    private let pendingAccount = "pending-workspace-key"
 
     func readWorkspaceKey() throws -> Data? {
+        try readKey(account: account)
+    }
+
+    func readPendingWorkspaceKey() throws -> Data? {
+        try readKey(account: pendingAccount)
+    }
+
+    func writeWorkspaceKey(_ key: Data) throws {
+        try writeKey(key, account: account)
+    }
+
+    func writePendingWorkspaceKey(_ key: Data) throws {
+        try writeKey(key, account: pendingAccount)
+    }
+
+    func promotePendingWorkspaceKey() throws {
+        guard let key = try readPendingWorkspaceKey() else { throw WorkspaceKeyStoreError.unavailable(errSecItemNotFound) }
+        try writeWorkspaceKey(key)
+        try? deletePendingWorkspaceKey()
+    }
+
+    func deleteWorkspaceKey() throws {
+        try deleteKey(account: account)
+    }
+
+    func deletePendingWorkspaceKey() throws {
+        try deleteKey(account: pendingAccount)
+    }
+
+    private func readKey(account: String) throws -> Data? {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
@@ -32,7 +67,7 @@ final class KeychainWorkspaceKeyStore: WorkspaceKeyStore {
         return data
     }
 
-    func writeWorkspaceKey(_ key: Data) throws {
+    private func writeKey(_ key: Data, account: String) throws {
         let attributes: [CFString: Any] = [
             kSecValueData: key,
             kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
@@ -53,7 +88,7 @@ final class KeychainWorkspaceKeyStore: WorkspaceKeyStore {
         }
     }
 
-    func deleteWorkspaceKey() throws {
+    private func deleteKey(account: String) throws {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
