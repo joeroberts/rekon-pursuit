@@ -18,6 +18,20 @@ Repository-level multi-agent delivery governance is binding: [AGENTS.md](../AGEN
 
 Implement vertical slices, not disconnected layers or screens. Each slice must persist real local state, use the shared command/activity-event path, expose recovery states, and pass its acceptance checks before the next gate.
 
+### Canonical MVP milestone order
+
+The roadmap's milestone IDs are authoritative. The current release sequence is:
+
+| Milestone | Workstream(s) | Release boundary |
+| --- | --- | --- |
+| M1 | A + first B slice | Encrypted local record spine and safety controls |
+| M2 | B | Complete offline opportunity workspace, pipeline, task/reminder model, and daily queue |
+| M3 | C | Contacts, interactions, and relationship links |
+| M4 | D | Local CSV import, duplicate decisions, import report, and batch traceability |
+| M5 | E + F | Conservative posting reconciliation plus MVP hardening, lifecycle/export work, and release readiness |
+
+M2 is the only active MVP feature milestone. Its implementation has a P1 remediation awaiting a fresh independent gate; it is not accepted. M3 and M4 code/artifacts are retained but frozen and unreleased until M2 is accepted. Do not expose, extend, or claim M3/M4 functionality as released while that dependency is open.
+
 1. **Foundation:** native SwiftUI shell, encrypted SQLite, migrations/backups, Keychain abstraction, core entities, append-only activity events, and a deterministic Needs attention query.
 2. **Local MVP tracker:** opportunity workspace, stages, tasks, pipeline/search, contact links, CSV map/validate/duplicate decisions, reversible import batches, conservative reconciliation with explicit closure confirmation, manual local DOCX/PDF attachment links with source hashes, and an empty/read-only locally searchable AI ledger. Fully offline reconciliation makes no check, preserves the prior result, and creates retry/manual-review work.
 3. **Privacy and AI foundation:** local/sanitized/full-cloud routing, sanitization/disclosure, consent/no-fallback tests, populated AI ledger/cost budgets, local runtime adapter, then cloud adapter only after consent tests pass. No AI feature ships earlier.
@@ -44,9 +58,9 @@ The local-data lifecycle gate is **resolved** by [ADR-001](architecture/adr/ADR-
 | Gate | Resolve before | Decision |
 | --- | --- | --- |
 | Local data lifecycle | Resolved for M1 foundation and M5 lifecycle | ADR-001 plus M0-2 lifecycle contract: M1 migration snapshot/safe-open/logical deletion; M5 recovery-key strategy, authenticated backup envelope, restore/re-wrap, retention, purge, and export |
-| Tracker semantics | Daily tracker | Initial stages, queue ordering, archive/delete rules |
-| Import policy | CSV completion | Duplicate signals, allowed update fields, undo scope |
-| Reconciliation policy | Posting checks | Approved methods/providers, thresholds, retry cadence |
+| Tracker semantics | M2 daily tracker | Initial stages, queue ordering, archive/delete rules |
+| Import policy | M4 CSV completion | Duplicate signals, allowed update fields, undo scope |
+| Reconciliation policy | M5 posting checks | Approved methods/providers, thresholds, retry cadence |
 | AI routing and ledger policy | Privacy/AI foundation | Model catalog, pricing source, local-runtime policy, sanitization fields, full-cloud disclosure, ledger redaction/search, budgets |
 | Integration consent | Gmail/Calendar after privacy/AI foundation | Gmail selection scope, classification confidence/manual-review thresholds, task-acceptance behavior, OAuth scopes, Calendar conflict rules |
 | AI data/source policy | Documents/research after connected workflow | Approved provider/license list and user-provided evidence labeling |

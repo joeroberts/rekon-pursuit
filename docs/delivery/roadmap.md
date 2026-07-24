@@ -184,10 +184,10 @@ No calendar dates or effort estimates are assumed. A milestone is complete only 
 | --- | --- | --- | --- |
 | M0 — Product and architecture readiness | A design/architecture decisions | Reviewed domain, audit, privacy, state, and migration contracts; test fixtures identified | Product owner, tech lead, UX, and privacy owner approve the non-negotiable invariants and open decisions needed for MVP |
 | M1 — Local record spine | A + first B slice | Persisted opportunity plus auditable activity timeline and recoverable states | Architecture review confirms commands/logs are atomic enough for all MVP mutations |
-| M2 — Daily tracker | B + C | Daily queue, pipeline/record workspace, contacts, interactions, and links work together offline | UX/QA accept the daily-loop acceptance suite and accessibility baseline |
-| M3 — Safe bulk capture | D | Import map/validate/duplicate-choice/report flow has no silent overwrite | Product/QA accept re-import and row-decision regression evidence |
-| M4 — Safe reconciliation | E | Evidence-to-decision review path, manual-review routing, and confirmed closure are complete | Privacy/legal/tech review approves check behavior and QA accepts the fixture suite |
-| M5 — MVP release candidate | F plus M1–M4 hardening | Reliable daily tracker satisfies all MVP success criteria locally | Release readiness review; no unresolved P0 trust, data-loss, accessibility, or audit defects |
+| M2 — Daily tracker | B | Offline opportunity workspace, pipeline, next actions, and deterministic Needs attention loop work together | UX/QA accept the complete Workstream-B daily-loop acceptance suite and accessibility baseline |
+| M3 — Contacts and interactions | C | Offline contacts, interactions, and opportunity links work together | UX/QA accept the Workstream-C relationship-history and unlink regression suite |
+| M4 — Safe bulk capture | D | Import map/validate/duplicate-choice/report flow has no silent overwrite | Product/QA accept re-import and row-decision regression evidence |
+| M5 — Reconciliation, MVP hardening, and release readiness | E + F | Evidence-to-decision reconciliation, lifecycle/export boundaries, accessibility, and release readiness satisfy the local MVP criteria | Privacy/legal/tech review approves check behavior; QA accepts reconciliation and MVP release suites; no unresolved P0 trust, data-loss, accessibility, or audit defects |
 | M6 — Privacy and AI foundation | G | Accepted routing, consent, local ledger, and budget contracts before any AI feature or connected workflow | Privacy/AI acceptance gate passes, including no-fallback and ledger evidence |
 | M7 — Connected workflow | H | Permissioned Gmail/Calendar workflow, confidence/manual-review classification, accepted follow-up tasks, and explicit approvals | OAuth/security/privacy and integration acceptance gates pass |
 | M8 — Documents and research | I | Full document versioning and sourced AI/research workflow | Document-provenance and source-policy acceptance gates pass |
@@ -199,8 +199,8 @@ No calendar dates or effort estimates are assumed. A milestone is complete only 
 | --- | --- | --- | --- |
 | Local data lifecycle | Product owner + privacy owner + tech lead | M0/M1 | Encryption posture, backup/export, default retention, deletion semantics, and recovery expectations are explicit. |
 | Tracker semantics | Product owner + UX + tech lead | M2 | Initial stages, task/reminder rules, deterministic queue ordering, record deletion/archive behavior, and status history semantics are specified. |
-| Import policy | Product owner + tech lead | M3 | Duplicate signals, candidate rationale, allowed update fields, reversibility behavior, and invalid-row handling are specified. |
-| Reconciliation policy | Product owner + security/legal + tech lead | M4 | Allowed sources/request behavior, classification/evidence thresholds, retry behavior, and human closure confirmation are approved. |
+| Import policy | Product owner + tech lead | M4 | Duplicate signals, candidate rationale, allowed update fields, reversibility behavior, and invalid-row handling are specified. |
+| Reconciliation policy | Product owner + security/legal + tech lead | M5 | Allowed sources/request behavior, classification/evidence thresholds, retry behavior, and human closure confirmation are approved. |
 | AI routing and ledger policy | Product owner + privacy/security + AI owner | M6 | Local runtime capability, sanitization fields, full-cloud disclosure copy, OpenAI terms/retention, pricing/budget behavior, and ledger redaction/search are approved. |
 | Integration consent | Product owner + privacy/security + integration owner | M7 | Gmail scope (selected threads/label versus broader search), classification confidence/manual-review thresholds, follow-up task acceptance behavior, Calendar scope/conflict behavior, token lifecycle, and disconnect/deletion behavior are approved. |
 | AI data and source policy | Product owner + privacy/security + AI owner | M8 | Approved sources/providers and user-provided evidence labeling are approved for research use on the already-accepted routing/ledger foundation. |
