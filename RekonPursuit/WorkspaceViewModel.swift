@@ -125,6 +125,16 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
+    func reschedule(_ task: TaskReminder, to dueAt: Date) {
+        do {
+            try store?.rescheduleTask(id: task.id, dueAt: dueAt)
+            refreshCounts()
+            statusMessage = "Action rescheduled locally."
+        } catch {
+            statusMessage = "The action could not be rescheduled."
+        }
+    }
+
     func changeStage(_ opportunity: Opportunity, to stage: PipelineStage) {
         do {
             try store?.changeStage(opportunityID: opportunity.id, to: stage)

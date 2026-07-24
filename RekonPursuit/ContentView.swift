@@ -13,6 +13,8 @@ private enum TrackerPage: String, CaseIterable {
 struct ContentView: View {
     @StateObject private var model = WorkspaceViewModel()
     @State private var pendingDeletion: Opportunity?
+    @State private var taskToReschedule: TaskReminder?
+    @State private var rescheduledDueAt = Date.now
     @State private var showsPipelineBoard = false
     @State private var page: TrackerPage = .home
 
@@ -199,6 +201,10 @@ struct ContentView: View {
                                 page = .pipeline
                             }
                             Button("Snooze 1 day") { model.snoozeOneDay(task) }
+                            Button("Reschedule…") {
+                                taskToReschedule = task
+                                rescheduledDueAt = task.dueAt ?? Date.now
+                            }
                             Button("Complete") { model.complete(task) }
                         }
                     }
@@ -243,6 +249,32 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) { pendingDeletion = nil }
         } message: {
             Text("This removes the opportunity and its pending actions from the active tracker. A redacted local deletion record is retained.")
+        }
+        .sheet(isPresented: Binding(
+            get: { taskToReschedule != nil },
+            set: { if !$0 { taskToReschedule = nil } }
+        )) {
+            if let task = taskToReschedule {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Reschedule action")
+                        .font(.title2.bold())
+                    Text(task.title)
+                        .foregroundStyle(.secondary)
+                    DatePicker("New due date", selection: $rescheduledDueAt, displayedComponents: [.date, .hourAndMinute])
+                    HStack {
+                        Button("Cancel") { taskToReschedule = nil }
+                            .keyboardShortcut(.cancelAction)
+                        Spacer()
+                        Button("Save locally") {
+                            model.reschedule(task, to: rescheduledDueAt)
+                            taskToReschedule = nil
+                        }
+                        .keyboardShortcut(.defaultAction)
+                    }
+                }
+                .padding(24)
+                .frame(width: 380)
+            }
         }
     }
 }

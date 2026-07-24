@@ -119,6 +119,26 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.activityEvents.last?.kind, "task_opened")
     }
 
+    func testQueueRescheduleChangesOnlyTheSelectedTaskAndRecordsActivity() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        model.start()
+        model.title = "Product Manager"
+        model.company = "Rekon Labs"
+        model.nextAction = "Send follow-up"
+        model.hasDueDate = true
+        model.dueAt = Date(timeIntervalSince1970: 1_704_067_200)
+        model.createOpportunity()
+        let task = try XCTUnwrap(model.needsAttention.first)
+        let rescheduled = Date(timeIntervalSince1970: 1_704_240_000)
+
+        model.reschedule(task, to: rescheduled)
+
+        XCTAssertEqual(model.needsAttention.first?.id, task.id)
+        XCTAssertEqual(model.needsAttention.first?.dueAt, rescheduled)
+        XCTAssertEqual(model.activityEvents.last?.kind, "task_rescheduled")
+    }
+
     func testSelectedOpportunityShowsStageHistory() throws {
         let store = try makeStore()
         let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
