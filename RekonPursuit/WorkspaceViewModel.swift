@@ -80,6 +80,16 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
+    func snoozeOneDay(_ task: TaskReminder) {
+        do {
+            try store?.rescheduleTask(id: task.id, dueAt: task.dueAt.addingTimeInterval(86_400))
+            refreshCounts()
+            statusMessage = "Action snoozed for one day."
+        } catch {
+            statusMessage = "The action could not be rescheduled."
+        }
+    }
+
     private func apply(_ state: WorkspaceOpenState) {
         switch state {
         case let .ready(store):

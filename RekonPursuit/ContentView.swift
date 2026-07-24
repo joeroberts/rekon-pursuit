@@ -56,6 +56,7 @@ struct ContentView: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
+                            Button("Snooze 1 day") { model.snoozeOneDay(task) }
                             Button("Complete") { model.complete(task) }
                         }
                     }
