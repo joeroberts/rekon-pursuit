@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 6)
+        XCTAssertEqual(try store.schemaVersion(), 7)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -34,17 +34,19 @@ final class WorkspaceStoreTests: XCTestCase {
         try database.execute("INSERT INTO schema_migrations (version) VALUES (4)")
         try database.execute("CREATE TABLE opportunities (id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, company TEXT NOT NULL, created_at REAL NOT NULL, stage TEXT NOT NULL DEFAULT 'Saved', next_action TEXT NOT NULL DEFAULT '', due_at REAL)")
         try database.execute("CREATE TABLE activity_events (id TEXT PRIMARY KEY NOT NULL, kind TEXT NOT NULL, opportunity_id TEXT NOT NULL, actor_id TEXT NOT NULL, correlation_id TEXT NOT NULL, occurred_at REAL NOT NULL)")
+        try database.execute("CREATE TABLE task_reminders (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL, title TEXT NOT NULL, due_at REAL NOT NULL, is_complete INTEGER NOT NULL DEFAULT 0)")
         try database.execute("INSERT INTO opportunities (id, title, company, created_at, stage, next_action) VALUES ('opportunity-1', 'Product Manager', 'Rekon Labs', 1704067200, 'Saved', '')")
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 6)
+        XCTAssertEqual(try store.schemaVersion(), 7)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
                 [.integer(4), .text(WorkspaceMigrations.baselineChecksum)],
                 [.integer(5), .text(WorkspaceMigrations.versionFiveChecksum)],
-                [.integer(6), .text(WorkspaceMigrations.versionSixChecksum)]
+                [.integer(6), .text(WorkspaceMigrations.versionSixChecksum)],
+                [.integer(7), .text(WorkspaceMigrations.versionSevenChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
@@ -146,6 +148,16 @@ final class WorkspaceStoreTests: XCTestCase {
 
         XCTAssertEqual(try store.needsAttention().first?.dueAt, rescheduled)
         XCTAssertEqual(try store.activityEvents().last?.kind, "task_rescheduled")
+    }
+
+    func testNeedsAttentionOrdersOverdueTodayFutureThenUndatedActions() throws {
+        let store = try makeStore()
+        _ = try store.create(CreateOpportunity(title: "Undated", company: "Rekon Labs", nextAction: "Research"))
+        _ = try store.create(CreateOpportunity(title: "Future", company: "Rekon Labs", nextAction: "Follow up", dueAt: now.addingTimeInterval(86_400)))
+        _ = try store.create(CreateOpportunity(title: "Today", company: "Rekon Labs", nextAction: "Apply", dueAt: now.addingTimeInterval(3_600)))
+        _ = try store.create(CreateOpportunity(title: "Overdue", company: "Rekon Labs", nextAction: "Reply", dueAt: now.addingTimeInterval(-3_600)))
+
+        XCTAssertEqual(try store.needsAttention().map(\.title), ["Reply", "Apply", "Follow up", "Research"])
     }
 
     func testStageChangePersistsAndWritesActivity() throws {

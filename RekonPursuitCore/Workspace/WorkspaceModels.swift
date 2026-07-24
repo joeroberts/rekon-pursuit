@@ -33,7 +33,7 @@ struct TaskReminder: Equatable {
     let id: String
     let opportunityID: String
     let title: String
-    let dueAt: Date
+    let dueAt: Date?
     let isComplete: Bool
 }
 

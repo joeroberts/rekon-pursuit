@@ -20,6 +20,17 @@ struct ContentView: View {
                     .accessibilityIdentifier("opportunity-title")
                 TextField("Company", text: $model.company)
                     .accessibilityIdentifier("opportunity-company")
+                Picker("Stage", selection: $model.stage) {
+                    ForEach(PipelineStage.allCases, id: \.self) { stage in
+                        Text(stage.rawValue).tag(stage)
+                    }
+                }
+                TextField("Next action (optional)", text: $model.nextAction)
+                    .accessibilityIdentifier("opportunity-next-action")
+                Toggle("Add a due date", isOn: $model.hasDueDate)
+                if model.hasDueDate {
+                    DatePicker("Due", selection: $model.dueAt, displayedComponents: [.date, .hourAndMinute])
+                }
                 Button("Save opportunity locally") {
                     model.createOpportunity()
                 }
@@ -46,9 +57,36 @@ struct ContentView: View {
                                 Text(opportunity.company).font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
+                            Picker("Stage for \(opportunity.title)", selection: Binding(
+                                get: { opportunity.stage },
+                                set: { model.changeStage(opportunity, to: $0) }
+                            )) {
+                                ForEach(PipelineStage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                            }
+                            .labelsHidden()
                             Button("Delete", role: .destructive) {
                                 pendingDeletion = opportunity
                             }
+                        }
+                    }
+                }
+            }
+
+            GroupBox("Needs Attention") {
+                if model.needsAttention.isEmpty {
+                    Text("No next actions yet.").foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.needsAttention, id: \.id) { task in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(task.title)
+                                Text(task.dueAt.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "No due date")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Snooze 1 day") { model.snoozeOneDay(task) }
+                            Button("Complete") { model.complete(task) }
                         }
                     }
                 }
@@ -68,7 +106,7 @@ struct ContentView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Text("\(model.opportunityCount) opportunities · \(model.activityCount) activity events")
+            Text("\(model.opportunityCount) opportunities · \(model.needsAttentionCount) needs attention · \(model.activityCount) activity events")
                 .foregroundStyle(.secondary)
             Text(model.statusMessage)
                 .accessibilityIdentifier("workspace-status")

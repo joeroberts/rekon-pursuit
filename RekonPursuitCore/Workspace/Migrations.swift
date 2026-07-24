@@ -2,10 +2,11 @@ import Foundation
 import CryptoKit
 
 enum WorkspaceMigrations {
-    static let currentVersion = 6
+    static let currentVersion = 7
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
+    static let versionSevenChecksum = checksum(for: "7|task_reminders.due_at nullable")
 
     static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
@@ -68,6 +69,22 @@ enum WorkspaceMigrations {
                         )
                     }
                     try database.execute("UPDATE schema_migrations SET version = 6")
+                }
+                database.removeMigrationSnapshot()
+            } catch {
+                throw error
+            }
+        }
+        if version < 7 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    try database.execute("ALTER TABLE task_reminders RENAME TO task_reminders_v6")
+                    try database.execute("CREATE TABLE task_reminders (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), title TEXT NOT NULL, due_at REAL, is_complete INTEGER NOT NULL DEFAULT 0)")
+                    try database.execute("INSERT INTO task_reminders (id, opportunity_id, title, due_at, is_complete) SELECT id, opportunity_id, title, due_at, is_complete FROM task_reminders_v6")
+                    try database.execute("DROP TABLE task_reminders_v6")
+                    try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(7), .text(versionSevenChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 7")
                 }
                 database.removeMigrationSnapshot()
             } catch {

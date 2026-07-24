@@ -8,6 +8,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var stage: PipelineStage = .saved
     @Published var nextAction = ""
     @Published var dueAt = Date.now
+    @Published var hasDueDate = false
     @Published private(set) var opportunityCount = 0
     @Published private(set) var activityCount = 0
     @Published private(set) var needsAttentionCount = 0
@@ -65,10 +66,11 @@ final class WorkspaceViewModel: ObservableObject {
             return
         }
         do {
-            _ = try store.create(CreateOpportunity(title: title, company: company, stage: stage, nextAction: nextAction, dueAt: nextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : dueAt))
+            _ = try store.create(CreateOpportunity(title: title, company: company, stage: stage, nextAction: nextAction, dueAt: nextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !hasDueDate ? nil : dueAt))
             title = ""
             company = ""
             nextAction = ""
+            hasDueDate = false
             refreshCounts()
             statusMessage = "Saved locally."
         } catch let error as LocalizedError {
@@ -100,7 +102,7 @@ final class WorkspaceViewModel: ObservableObject {
 
     func snoozeOneDay(_ task: TaskReminder) {
         do {
-            try store?.rescheduleTask(id: task.id, dueAt: task.dueAt.addingTimeInterval(86_400))
+            try store?.rescheduleTask(id: task.id, dueAt: (task.dueAt ?? Date.now).addingTimeInterval(86_400))
             refreshCounts()
             statusMessage = "Action snoozed for one day."
         } catch {

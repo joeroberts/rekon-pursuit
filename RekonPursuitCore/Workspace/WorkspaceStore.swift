@@ -59,8 +59,8 @@ final class WorkspaceStore {
                     "INSERT INTO opportunities (id, title, company, created_at, stage, next_action, due_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     values: [.text(opportunity.id), .text(opportunity.title), .text(opportunity.company), .real(opportunity.createdAt.timeIntervalSince1970), .text(opportunity.stage.rawValue), .text(nextAction), opportunity.dueAt.map { .real($0.timeIntervalSince1970) } ?? .null]
                 )
-                if !nextAction.isEmpty, let dueAt = opportunity.dueAt {
-                    try database.execute("INSERT INTO task_reminders (id, opportunity_id, title, due_at) VALUES (?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(opportunity.id), .text(nextAction), .real(dueAt.timeIntervalSince1970)])
+                if !nextAction.isEmpty {
+                    try database.execute("INSERT INTO task_reminders (id, opportunity_id, title, due_at) VALUES (?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(opportunity.id), .text(nextAction), opportunity.dueAt.map { .real($0.timeIntervalSince1970) } ?? .null])
                 }
                 if failBeforeActivityInsert { throw WorkspaceStoreError.injectedFailure }
                 try database.execute(
@@ -80,7 +80,10 @@ final class WorkspaceStore {
 
     func needsAttention() throws -> [TaskReminder] {
         try synchronized {
-            try database.rows("SELECT task_reminders.id, task_reminders.opportunity_id, task_reminders.title, task_reminders.due_at, task_reminders.is_complete FROM task_reminders JOIN opportunities ON opportunities.id = task_reminders.opportunity_id WHERE task_reminders.is_complete = 0 AND opportunities.deleted_at IS NULL ORDER BY task_reminders.due_at, task_reminders.id").map(task(from:))
+            let calendar = Calendar(identifier: .gregorian)
+            let startOfToday = calendar.startOfDay(for: now)
+            let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
+            return try database.rows("SELECT task_reminders.id, task_reminders.opportunity_id, task_reminders.title, task_reminders.due_at, task_reminders.is_complete FROM task_reminders JOIN opportunities ON opportunities.id = task_reminders.opportunity_id WHERE task_reminders.is_complete = 0 AND opportunities.deleted_at IS NULL ORDER BY CASE WHEN task_reminders.due_at IS NULL THEN 4 WHEN task_reminders.due_at < ? THEN 1 WHEN task_reminders.due_at < ? THEN 2 ELSE 3 END, task_reminders.due_at, task_reminders.id", values: [.real(startOfToday.timeIntervalSince1970), .real(startOfTomorrow.timeIntervalSince1970)]).map(task(from:))
         }
     }
 
@@ -240,8 +243,10 @@ final class WorkspaceStore {
     }
 
     private func task(from row: [DatabaseValue]) throws -> TaskReminder {
-        guard row.count == 5, case let .text(id) = row[0], case let .text(opportunityID) = row[1], case let .text(title) = row[2], case let .real(dueAt) = row[3], case let .integer(isComplete) = row[4] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
-        return TaskReminder(id: id, opportunityID: opportunityID, title: title, dueAt: Date(timeIntervalSince1970: dueAt), isComplete: isComplete != 0)
+        guard row.count == 5, case let .text(id) = row[0], case let .text(opportunityID) = row[1], case let .text(title) = row[2], case let .integer(isComplete) = row[4] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+        let dueAt: Date?
+        if case let .real(value) = row[3] { dueAt = Date(timeIntervalSince1970: value) } else { dueAt = nil }
+        return TaskReminder(id: id, opportunityID: opportunityID, title: title, dueAt: dueAt, isComplete: isComplete != 0)
     }
 
     private func contact(from row: [DatabaseValue]) throws -> Contact {
