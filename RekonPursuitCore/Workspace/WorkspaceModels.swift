@@ -37,6 +37,17 @@ struct TaskReminder: Equatable {
     let isComplete: Bool
 }
 
+struct Contact: Equatable {
+    let id: String
+    let name: String
+    let employer: String
+}
+
+struct CreateContact {
+    let name: String
+    let employer: String
+}
+
 struct ActivityEvent: Equatable {
     let id: String
     let kind: String

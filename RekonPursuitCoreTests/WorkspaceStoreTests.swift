@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 2)
+        XCTAssertEqual(try store.schemaVersion(), 3)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -101,6 +101,19 @@ final class WorkspaceStoreTests: XCTestCase {
 
         XCTAssertEqual(try store.opportunities().first?.stage, .screening)
         XCTAssertEqual(try store.activityEvents().last?.kind, "opportunity_stage_changed")
+    }
+
+    func testContactCanLinkToMultipleOpportunities() throws {
+        let store = try makeStore()
+        let first = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let second = try store.create(CreateOpportunity(title: "Director", company: "Rekon Labs"))
+        let contact = try store.createContact(CreateContact(name: "Alex Morgan", employer: "Rekon Labs"))
+
+        try store.linkContact(contactID: contact.id, toOpportunityID: first.id)
+        try store.linkContact(contactID: contact.id, toOpportunityID: second.id)
+
+        XCTAssertEqual(try store.contacts(forOpportunityID: first.id), [contact])
+        XCTAssertEqual(try store.contacts(forOpportunityID: second.id), [contact])
     }
 
     private func makeStore(failBeforeActivityInsert: Bool = false) throws -> WorkspaceStore {

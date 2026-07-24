@@ -110,6 +110,29 @@ final class WorkspaceStore {
         }
     }
 
+    func createContact(_ command: CreateContact) throws -> Contact {
+        let name = command.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let employer = command.employer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !employer.isEmpty else { throw WorkspaceStoreError.invalidOpportunity }
+        return try synchronized {
+            let contact = Contact(id: nextIdentifier(), name: name, employer: employer)
+            try database.execute("INSERT INTO contacts (id, name, employer) VALUES (?, ?, ?)", values: [.text(contact.id), .text(contact.name), .text(contact.employer)])
+            return contact
+        }
+    }
+
+    func linkContact(contactID: String, toOpportunityID opportunityID: String) throws {
+        try synchronized {
+            try database.execute("INSERT OR IGNORE INTO contact_opportunities (contact_id, opportunity_id) VALUES (?, ?)", values: [.text(contactID), .text(opportunityID)])
+        }
+    }
+
+    func contacts(forOpportunityID opportunityID: String) throws -> [Contact] {
+        try synchronized {
+            try database.rows("SELECT contacts.id, contacts.name, contacts.employer FROM contacts JOIN contact_opportunities ON contacts.id = contact_opportunities.contact_id WHERE contact_opportunities.opportunity_id = ? ORDER BY contacts.name", values: [.text(opportunityID)]).map(contact(from:))
+        }
+    }
+
     func activityEvents() throws -> [ActivityEvent] {
         try synchronized {
             try database.rows("SELECT id, kind, opportunity_id, actor_id, correlation_id, occurred_at FROM activity_events ORDER BY occurred_at, id").map(activityEvent(from:))
@@ -141,6 +164,11 @@ final class WorkspaceStore {
     private func task(from row: [DatabaseValue]) throws -> TaskReminder {
         guard row.count == 5, case let .text(id) = row[0], case let .text(opportunityID) = row[1], case let .text(title) = row[2], case let .real(dueAt) = row[3], case let .integer(isComplete) = row[4] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
         return TaskReminder(id: id, opportunityID: opportunityID, title: title, dueAt: Date(timeIntervalSince1970: dueAt), isComplete: isComplete != 0)
+    }
+
+    private func contact(from row: [DatabaseValue]) throws -> Contact {
+        guard row.count == 3, case let .text(id) = row[0], case let .text(name) = row[1], case let .text(employer) = row[2] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+        return Contact(id: id, name: name, employer: employer)
     }
 
     private func activityEvent(from row: [DatabaseValue]) throws -> ActivityEvent {
