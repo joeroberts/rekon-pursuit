@@ -5,8 +5,12 @@ import Foundation
 final class WorkspaceViewModel: ObservableObject {
     @Published var title = ""
     @Published var company = ""
+    @Published var stage: PipelineStage = .saved
+    @Published var nextAction = ""
+    @Published var dueAt = Date.now
     @Published private(set) var opportunityCount = 0
     @Published private(set) var activityCount = 0
+    @Published private(set) var needsAttentionCount = 0
     @Published private(set) var statusMessage = "Opening local workspace…"
     @Published private(set) var canCreateWorkspace = false
 
@@ -52,9 +56,10 @@ final class WorkspaceViewModel: ObservableObject {
             return
         }
         do {
-            _ = try store.create(CreateOpportunity(title: title, company: company))
+            _ = try store.create(CreateOpportunity(title: title, company: company, stage: stage, nextAction: nextAction, dueAt: nextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : dueAt))
             title = ""
             company = ""
+            nextAction = ""
             refreshCounts()
             statusMessage = "Saved locally."
         } catch let error as LocalizedError {
@@ -90,6 +95,7 @@ final class WorkspaceViewModel: ObservableObject {
         do {
             opportunityCount = try store?.opportunities().count ?? 0
             activityCount = try store?.activityEvents().count ?? 0
+            needsAttentionCount = try store?.needsAttention().count ?? 0
         } catch {
             statusMessage = "The local workspace could not be read."
         }

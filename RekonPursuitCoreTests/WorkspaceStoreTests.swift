@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 1)
+        XCTAssertEqual(try store.schemaVersion(), 2)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -52,6 +52,24 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertThrowsError(try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs")))
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
+    }
+
+    func testCreateOpportunityWithNextActionAppearsInNeedsAttention() throws {
+        let store = try makeStore()
+        let due = now.addingTimeInterval(-3_600)
+
+        let opportunity = try store.create(CreateOpportunity(
+            title: "Product Manager", company: "Rekon Labs", stage: .applied,
+            nextAction: "Send follow-up", dueAt: due
+        ))
+
+        XCTAssertEqual(opportunity.stage, .applied)
+        XCTAssertEqual(try store.needsAttention(), [
+            TaskReminder(
+                id: "fixture-id-1", opportunityID: opportunity.id, title: "Send follow-up",
+                dueAt: due, isComplete: false
+            )
+        ])
     }
 
     private func makeStore(failBeforeActivityInsert: Bool = false) throws -> WorkspaceStore {

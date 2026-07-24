@@ -19,6 +19,14 @@ struct ContentView: View {
                     .accessibilityIdentifier("opportunity-title")
                 TextField("Company", text: $model.company)
                     .accessibilityIdentifier("opportunity-company")
+                Picker("Stage", selection: $model.stage) {
+                    ForEach(PipelineStage.allCases, id: \.self) { stage in
+                        Text(stage.rawValue).tag(stage)
+                    }
+                }
+                TextField("Next action (optional)", text: $model.nextAction)
+                    .accessibilityIdentifier("opportunity-next-action")
+                DatePicker("Due", selection: $model.dueAt, displayedComponents: [.date, .hourAndMinute])
                 Button("Save opportunity locally") {
                     model.createOpportunity()
                 }
@@ -34,7 +42,7 @@ struct ContentView: View {
                 .accessibilityIdentifier("create-local-workspace")
             }
 
-            Text("\(model.opportunityCount) opportunities · \(model.activityCount) activity events")
+            Text("\(model.opportunityCount) opportunities · \(model.needsAttentionCount) needs attention · \(model.activityCount) activity events")
                 .foregroundStyle(.secondary)
             Text(model.statusMessage)
                 .accessibilityIdentifier("workspace-status")

@@ -5,6 +5,36 @@ struct Opportunity: Equatable {
     let title: String
     let company: String
     let createdAt: Date
+    let stage: PipelineStage
+    let nextAction: String
+    let dueAt: Date?
+
+    init(id: String, title: String, company: String, createdAt: Date, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil) {
+        self.id = id
+        self.title = title
+        self.company = company
+        self.createdAt = createdAt
+        self.stage = stage
+        self.nextAction = nextAction
+        self.dueAt = dueAt
+    }
+}
+
+enum PipelineStage: String, CaseIterable, Equatable {
+    case saved = "Saved"
+    case applied = "Applied"
+    case screening = "Screening"
+    case interviewing = "Interviewing"
+    case offer = "Offer"
+    case closed = "Closed"
+}
+
+struct TaskReminder: Equatable {
+    let id: String
+    let opportunityID: String
+    let title: String
+    let dueAt: Date
+    let isComplete: Bool
 }
 
 struct ActivityEvent: Equatable {
@@ -19,6 +49,17 @@ struct ActivityEvent: Equatable {
 struct CreateOpportunity {
     let title: String
     let company: String
+    let stage: PipelineStage
+    let nextAction: String
+    let dueAt: Date?
+
+    init(title: String, company: String, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil) {
+        self.title = title
+        self.company = company
+        self.stage = stage
+        self.nextAction = nextAction
+        self.dueAt = dueAt
+    }
 }
 
 enum WorkspaceStoreError: Error, LocalizedError {
