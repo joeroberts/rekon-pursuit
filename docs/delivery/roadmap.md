@@ -213,7 +213,7 @@ If a gate is unresolved, the dependent slice may proceed only with a clearly iso
 | Risk | Consequence | Mitigation / early signal |
 | --- | --- | --- |
 | Building screens before the command/audit model | Inconsistent history and unsafe later integrations | Require every MVP mutation to use the shared command and activity-event path; review this at M1. |
-| Local schema changes become destructive | User record loss or upgrade failure | Versioned migrations, fixture migration tests, backup/export before migration, and rollback/recovery guidance. |
+| Local schema changes become destructive | User record loss or upgrade failure | Versioned migrations, fixture migration tests, an always-required verified transaction-scoped rollback snapshot, and rollback/recovery guidance. Offer backup/export before migration only when a separately enrolled recoverable backup already exists; do not create a retained pre-enrollment backup. |
 | Ambiguous reconciliation is treated as closure | Incorrect opportunity status and lost follow-up | Enforce taxonomy and explicit closure confirmation in service/UI tests; fixtures include failures and changed pages. |
 | CSV duplicate logic is opaque or overly aggressive | Fragmented records or accidental overwrite | Show match rationale and row-level decision; preserve raw import/report evidence; test re-import fixtures. |
 | Scope expands into Phase 2 during MVP | Delayed usable release and compromised local-first quality | M5 scope is limited to tracker, contacts, CSV, manual attachment/hash support, reminders, conservative reconciliation, and an empty/read-only local AI ledger; AI execution, connected services, document processing, and research stay behind gates. |
