@@ -116,6 +116,24 @@ expect_failure_containing \
   "${universal_identity_fixture}/scripts/m0/test_workflow_policy.sh" \
   "${universal_identity_fixture}"
 
+# A required control written only after an inline YAML comment must not satisfy
+# the job-scoped policy. The policy needs to inspect YAML content, not merely
+# find a literal somewhere in the job's source text.
+inline_comment_fixture="${fixture_root}/inline-comment-universal-runner"
+mkdir -p "${inline_comment_fixture}/.github/workflows" "${inline_comment_fixture}/scripts/m0"
+cp "${repo_root}/.github/workflows/m0-bootstrap.yml" \
+  "${inline_comment_fixture}/.github/workflows/m0-bootstrap.yml"
+cp "${script_dir}/test_workflow_policy.sh" \
+  "${inline_comment_fixture}/scripts/m0/"
+sed -i '' \
+  '/^  universal-validation:/,/^  macos-14-smoke:/ s/runs-on: macos-15-intel/runs-on: # runs-on: macos-15-intel/' \
+  "${inline_comment_fixture}/.github/workflows/m0-bootstrap.yml"
+expect_failure_containing \
+  "inline-comment-universal-runner" \
+  "workflow must pin universal-validation to macos-15-intel" \
+  "${inline_comment_fixture}/scripts/m0/test_workflow_policy.sh" \
+  "${inline_comment_fixture}"
+
 # The macOS 14 smoke runner is a distinct evidence environment.  Its runner
 # image identity must be retained by that job, rather than being satisfied by
 # the universal-validation job's artifact.

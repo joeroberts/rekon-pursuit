@@ -30,21 +30,68 @@ require_literal() {
   fi
 }
 
+job_body_without_yaml_comments() {
+  local job_name="$1"
+
+  awk -v job="${job_name}" '
+    function strip_yaml_comment(line,    i, character, next_character, output, in_single, in_double, escaped) {
+      for (i = 1; i <= length(line); i++) {
+        character = substr(line, i, 1)
+        next_character = substr(line, i + 1, 1)
+
+        if (in_single) {
+          output = output character
+          if (character == "\047") {
+            if (next_character == "\047") {
+              output = output next_character
+              i++
+            } else {
+              in_single = 0
+            }
+          }
+          continue
+        }
+
+        if (in_double) {
+          output = output character
+          if (escaped) {
+            escaped = 0
+          } else if (character == "\\") {
+            escaped = 1
+          } else if (character == "\"") {
+            in_double = 0
+          }
+          continue
+        }
+
+        if (character == "#") {
+          return output
+        }
+        output = output character
+        if (character == "\047") {
+          in_single = 1
+        } else if (character == "\"") {
+          in_double = 1
+        }
+      }
+      return output
+    }
+
+    $0 == "  " job ":" { in_job = 1; next }
+    in_job && /^  [[:alnum:]_-]+:$/ { exit }
+    in_job { print strip_yaml_comment($0) }
+  ' "${workflow_path}"
+}
+
 require_job_literal() {
   local job_name="$1"
   local expected="$2"
   local description="$3"
   local job_body
 
-  job_body="$(awk -v job="${job_name}" '
-    $0 == "  " job ":" { in_job = 1; next }
-    in_job && /^  [[:alnum:]_-]+:$/ { exit }
-    in_job { print }
-  ' "${workflow_path}")"
+  job_body="$(job_body_without_yaml_comments "${job_name}")"
 
-  if [[ -z "${job_body}" ]] \
-    || ! grep -Ev '^[[:space:]]*#' <<<"${job_body}" \
-      | grep -Fq -- "${expected}"; then
+  if [[ -z "${job_body}" ]] || ! grep -Fq -- "${expected}" <<<"${job_body}"; then
     record_failure "workflow must ${description}"
   fi
 }
@@ -55,11 +102,7 @@ forbid_job_literal() {
   local description="$3"
   local job_body
 
-  job_body="$(awk -v job="${job_name}" '
-    $0 == "  " job ":" { in_job = 1; next }
-    in_job && /^  [[:alnum:]_-]+:$/ { exit }
-    in_job { print }
-  ' "${workflow_path}")"
+  job_body="$(job_body_without_yaml_comments "${job_name}")"
 
   if grep -Fq -- "${forbidden}" <<<"${job_body}"; then
     record_failure "workflow must not ${description}"
