@@ -20,6 +20,8 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var selectedOpportunityID = ""
     @Published var interactionSummary = ""
     @Published private(set) var contacts: [Contact] = []
+    @Published private(set) var selectedContacts: [Contact] = []
+    @Published private(set) var selectedInteractions: [Interaction] = []
     @Published private(set) var csvPreview: CSVImportPreview?
     @Published private(set) var statusMessage = "Opening local workspace…"
     @Published private(set) var canCreateWorkspace = false
@@ -232,6 +234,7 @@ final class WorkspaceViewModel: ObservableObject {
             if selectedOpportunityID.isEmpty || !opportunities.contains(where: { $0.id == selectedOpportunityID }) {
                 selectedOpportunityID = opportunities.first?.id ?? ""
             }
+            refreshRelationshipMemory()
             contacts = try store?.contacts() ?? []
             activityCount = try store?.activityEvents().count ?? 0
             activityEvents = try store?.activityEvents() ?? []
@@ -239,6 +242,15 @@ final class WorkspaceViewModel: ObservableObject {
             needsAttentionCount = needsAttention.count
         } catch {
             statusMessage = "The local workspace could not be read."
+        }
+    }
+
+    func refreshRelationshipMemory() {
+        do {
+            selectedContacts = selectedOpportunityID.isEmpty ? [] : try store?.contacts(forOpportunityID: selectedOpportunityID) ?? []
+            selectedInteractions = selectedOpportunityID.isEmpty ? [] : try store?.interactions(forOpportunityID: selectedOpportunityID) ?? []
+        } catch {
+            statusMessage = "The relationship history could not be read."
         }
     }
 

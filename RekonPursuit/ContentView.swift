@@ -107,6 +107,16 @@ struct ContentView: View {
                     TextField("Interaction note", text: $model.interactionSummary)
                     Button("Save interaction locally") { model.recordInteraction() }
                         .disabled(!model.workspaceReady || model.selectedOpportunityID.isEmpty || model.interactionSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    if !model.selectedContacts.isEmpty {
+                        Text("Linked contacts: \(model.selectedContacts.map(\.name).joined(separator: ", "))")
+                            .font(.caption)
+                    }
+                    if !model.selectedInteractions.isEmpty {
+                        ForEach(model.selectedInteractions, id: \.id) { interaction in
+                            Text(interaction.summary)
+                                .font(.caption)
+                        }
+                    }
                 }
 
                 ForEach(model.contacts, id: \.id) { contact in
@@ -142,6 +152,7 @@ struct ContentView: View {
         .padding(28)
         .frame(minWidth: 560, minHeight: 420, alignment: .topLeading)
         .onAppear { model.start() }
+        .onChange(of: model.selectedOpportunityID) { model.refreshRelationshipMemory() }
         .alert("Delete opportunity?", isPresented: Binding(
             get: { pendingDeletion != nil },
             set: { if !$0 { pendingDeletion = nil } }
