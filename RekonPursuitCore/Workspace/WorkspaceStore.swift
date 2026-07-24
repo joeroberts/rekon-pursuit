@@ -133,6 +133,12 @@ final class WorkspaceStore {
         }
     }
 
+    func contacts() throws -> [Contact] {
+        try synchronized {
+            try database.rows("SELECT id, name, employer FROM contacts ORDER BY name, id").map(contact(from:))
+        }
+    }
+
     func activityEvents() throws -> [ActivityEvent] {
         try synchronized {
             try database.rows("SELECT id, kind, opportunity_id, actor_id, correlation_id, occurred_at FROM activity_events ORDER BY occurred_at, id").map(activityEvent(from:))

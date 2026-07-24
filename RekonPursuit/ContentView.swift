@@ -86,6 +86,16 @@ struct ContentView: View {
                 }
             }
 
+            GroupBox("Contacts") {
+                TextField("Name", text: $model.contactName)
+                TextField("Employer", text: $model.contactEmployer)
+                Button("Save contact locally") { model.createContact() }
+                    .disabled(model.contactName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.contactEmployer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                ForEach(model.contacts, id: \.id) { contact in
+                    Text("\(contact.name) · \(contact.employer)")
+                }
+            }
+
             Text("\(model.opportunityCount) opportunities · \(model.needsAttentionCount) needs attention · \(model.activityCount) activity events")
                 .foregroundStyle(.secondary)
             Text(model.statusMessage)

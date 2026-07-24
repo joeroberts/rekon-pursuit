@@ -13,6 +13,9 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var needsAttentionCount = 0
     @Published private(set) var needsAttention: [TaskReminder] = []
     @Published private(set) var opportunities: [Opportunity] = []
+    @Published var contactName = ""
+    @Published var contactEmployer = ""
+    @Published private(set) var contacts: [Contact] = []
     @Published private(set) var statusMessage = "Opening local workspace…"
     @Published private(set) var canCreateWorkspace = false
 
@@ -101,6 +104,20 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
+    func createContact() {
+        do {
+            _ = try store?.createContact(CreateContact(name: contactName, employer: contactEmployer))
+            contactName = ""
+            contactEmployer = ""
+            refreshCounts()
+            statusMessage = "Contact saved locally."
+        } catch let error as LocalizedError {
+            statusMessage = error.errorDescription ?? "The contact could not be saved."
+        } catch {
+            statusMessage = "The contact could not be saved."
+        }
+    }
+
     private func apply(_ state: WorkspaceOpenState) {
         switch state {
         case let .ready(store):
@@ -127,6 +144,7 @@ final class WorkspaceViewModel: ObservableObject {
         do {
             opportunityCount = try store?.opportunities().count ?? 0
             opportunities = try store?.opportunities() ?? []
+            contacts = try store?.contacts() ?? []
             activityCount = try store?.activityEvents().count ?? 0
             needsAttention = try store?.needsAttention() ?? []
             needsAttentionCount = needsAttention.count
