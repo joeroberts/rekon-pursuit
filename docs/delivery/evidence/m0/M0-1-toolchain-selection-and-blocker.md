@@ -114,7 +114,7 @@ This evidence is reproducible with the commands listed in the task plan. The `sw
 
 ## Blocker, completion condition, and follow-up
 
-**Evidence commits:** baseline repository commit is `ebe521237813fe94df4c38b643de052bd308c799` (`docs: establish M0 readiness package`); this M0-1 evidence correction is committed as `04129c234d7a1fbf7a2e60e52e5c5df1f2a5f1f` (`docs: pin M0 toolchain evidence`). All later evidence and reviews must identify their commit SHA relative to this baseline.
+**Evidence commits:** baseline repository commit is `ebe521237813fe94df4c38b643de052bd308c799` (`docs: establish M0 readiness package`); this M0-1 evidence record is committed as `04129c234d8410b118fa37375256fc94cd19f8a9` (`docs: pin M0 toolchain evidence`); its traceability correction is `632dd18` (`docs: reconcile M0 evidence traceability`). All later evidence and reviews must identify their commit SHA relative to this baseline.
 
 **Open evidence limitations:** The owner has not yet confirmed the proposed bundle identifier under an Apple Developer team. CI-runner image version/Xcode build output is selected for capture but cannot exist until M0-3 creates the permitted CI workflow. Neither limitation authorizes an M0-1 scope expansion.
 
