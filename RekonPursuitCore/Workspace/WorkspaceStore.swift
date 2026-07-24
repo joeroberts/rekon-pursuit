@@ -67,6 +67,10 @@ final class WorkspaceStore {
                     "INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)",
                     values: [.text(event.id), .text(event.kind), event.opportunityID.map(DatabaseValue.text) ?? .null, .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)]
                 )
+                try database.execute(
+                    "INSERT INTO opportunity_stage_history (id, opportunity_id, from_stage, to_stage, occurred_at) VALUES (?, ?, NULL, ?, ?)",
+                    values: [.text(nextIdentifier()), .text(opportunity.id), .text(opportunity.stage.rawValue), .real(now.timeIntervalSince1970)]
+                )
             }
             return opportunity
         }
@@ -104,6 +108,7 @@ final class WorkspaceStore {
                     let opportunity = Opportunity(id: nextIdentifier(), title: command.title.trimmingCharacters(in: .whitespacesAndNewlines), company: command.company.trimmingCharacters(in: .whitespacesAndNewlines), createdAt: now, stage: command.stage, nextAction: command.nextAction, dueAt: command.dueAt)
                     try database.execute("INSERT INTO opportunities (id, title, company, created_at, stage, next_action, due_at) VALUES (?, ?, ?, ?, ?, ?, ?)", values: [.text(opportunity.id), .text(opportunity.title), .text(opportunity.company), .real(now.timeIntervalSince1970), .text(opportunity.stage.rawValue), .text(opportunity.nextAction), opportunity.dueAt.map { .real($0.timeIntervalSince1970) } ?? .null])
                     try appendActivity(kind: planRow.isDuplicate ? "csv_duplicate_kept" : "csv_imported", opportunityID: opportunity.id)
+                    try database.execute("INSERT INTO opportunity_stage_history (id, opportunity_id, from_stage, to_stage, occurred_at) VALUES (?, ?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(opportunity.id), .null, .text(opportunity.stage.rawValue), .real(now.timeIntervalSince1970)])
                 }
                 try database.execute("INSERT INTO import_reports (id, imported_count, skipped_count, duplicate_kept_count, invalid_count, created_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(report.id), .integer(Int64(report.importedCount)), .integer(Int64(report.skippedCount)), .integer(Int64(report.duplicateKeptCount)), .integer(Int64(report.invalidCount)), .real(now.timeIntervalSince1970)])
             }
@@ -190,10 +195,13 @@ final class WorkspaceStore {
     func changeStage(opportunityID: String, to stage: PipelineStage) throws {
         try synchronized {
             guard try isActiveOpportunity(opportunityID) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+            let currentStage = try activeOpportunityStage(id: opportunityID)
+            guard currentStage != stage else { return }
             let event = ActivityEvent(id: nextIdentifier(), kind: "opportunity_stage_changed", opportunityID: opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: now)
             try database.transaction {
                 try database.execute("UPDATE opportunities SET stage = ? WHERE id = ?", values: [.text(stage.rawValue), .text(opportunityID)])
                 try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), event.opportunityID.map(DatabaseValue.text) ?? .null, .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
+                try database.execute("INSERT INTO opportunity_stage_history (id, opportunity_id, from_stage, to_stage, occurred_at) VALUES (?, ?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(opportunityID), .text(currentStage.rawValue), .text(stage.rawValue), .real(now.timeIntervalSince1970)])
             }
         }
     }
@@ -213,7 +221,9 @@ final class WorkspaceStore {
 
         try synchronized {
             guard try isActiveOpportunity(id) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
-            let event = ActivityEvent(id: nextIdentifier(), kind: "opportunity_updated", opportunityID: id, actorID: actorID, correlationID: correlationID, occurredAt: now)
+            let currentStage = try activeOpportunityStage(id: id)
+            let didChangeStage = currentStage != stage
+            let event = ActivityEvent(id: nextIdentifier(), kind: didChangeStage ? "opportunity_stage_changed" : "opportunity_updated", opportunityID: id, actorID: actorID, correlationID: correlationID, occurredAt: now)
             try database.transaction {
                 try database.execute(
                     "UPDATE opportunities SET title = ?, company = ?, stage = ?, next_action = ?, due_at = ? WHERE id = ?",
@@ -230,6 +240,9 @@ final class WorkspaceStore {
                     try database.execute("UPDATE task_reminders SET title = ?, due_at = ? WHERE id = ?", values: [.text(nextAction), dueAt.map { .real($0.timeIntervalSince1970) } ?? .null, .text(taskID)])
                 } else {
                     try database.execute("INSERT INTO task_reminders (id, opportunity_id, title, due_at) VALUES (?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(id), .text(nextAction), dueAt.map { .real($0.timeIntervalSince1970) } ?? .null])
+                }
+                if didChangeStage {
+                    try database.execute("INSERT INTO opportunity_stage_history (id, opportunity_id, from_stage, to_stage, occurred_at) VALUES (?, ?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(id), .text(currentStage.rawValue), .text(stage.rawValue), .real(now.timeIntervalSince1970)])
                 }
                 try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), .text(id), .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
             }
@@ -304,6 +317,12 @@ final class WorkspaceStore {
         }
     }
 
+    func stageHistory(forOpportunityID opportunityID: String) throws -> [StageHistoryEntry] {
+        try synchronized {
+            try database.rows("SELECT id, opportunity_id, from_stage, to_stage, occurred_at FROM opportunity_stage_history WHERE opportunity_id = ? ORDER BY occurred_at, rowid", values: [.text(opportunityID)]).map(stageHistoryEntry(from:))
+        }
+    }
+
     private func synchronized<T>(_ work: () throws -> T) throws -> T {
         lock.lock()
         defer { lock.unlock() }
@@ -313,6 +332,14 @@ final class WorkspaceStore {
     private func activeTaskOpportunityID(_ taskID: String) throws -> String {
         guard case let .text(opportunityID)? = try database.rows("SELECT task_reminders.opportunity_id FROM task_reminders JOIN opportunities ON opportunities.id = task_reminders.opportunity_id WHERE task_reminders.id = ? AND task_reminders.is_complete = 0 AND opportunities.deleted_at IS NULL AND opportunities.stage != 'Closed'", values: [.text(taskID)]).first?.first else { throw WorkspaceStoreError.unexpectedDatabaseValue }
         return opportunityID
+    }
+
+    private func activeOpportunityStage(id: String) throws -> PipelineStage {
+        guard case let .text(stageValue)? = try database.rows("SELECT stage FROM opportunities WHERE id = ? AND deleted_at IS NULL", values: [.text(id)]).first?.first,
+              let stage = PipelineStage(rawValue: stageValue) else {
+            throw WorkspaceStoreError.unexpectedDatabaseValue
+        }
+        return stage
     }
 
     private func isActiveOpportunity(_ id: String) throws -> Bool {
@@ -373,6 +400,25 @@ final class WorkspaceStore {
         let opportunityID: String?
         if case let .text(value) = row[2] { opportunityID = value } else { opportunityID = nil }
         return ActivityEvent(id: id, kind: kind, opportunityID: opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: Date(timeIntervalSince1970: occurredAt))
+    }
+
+    private func stageHistoryEntry(from row: [DatabaseValue]) throws -> StageHistoryEntry {
+        guard row.count == 5,
+              case let .text(id) = row[0],
+              case let .text(opportunityID) = row[1],
+              case let .text(toStageValue) = row[3],
+              let toStage = PipelineStage(rawValue: toStageValue),
+              case let .real(occurredAt) = row[4] else {
+            throw WorkspaceStoreError.unexpectedDatabaseValue
+        }
+        let fromStage: PipelineStage?
+        if case let .text(fromStageValue) = row[2] {
+            guard let stage = PipelineStage(rawValue: fromStageValue) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+            fromStage = stage
+        } else {
+            fromStage = nil
+        }
+        return StageHistoryEntry(id: id, opportunityID: opportunityID, fromStage: fromStage, toStage: toStage, occurredAt: Date(timeIntervalSince1970: occurredAt))
     }
 
     private func tombstone(from row: [DatabaseValue]) throws -> DeletionTombstone {

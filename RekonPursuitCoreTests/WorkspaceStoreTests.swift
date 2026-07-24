@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 9)
+        XCTAssertEqual(try store.schemaVersion(), 10)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -39,7 +39,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 9)
+        XCTAssertEqual(try store.schemaVersion(), 10)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -48,7 +48,8 @@ final class WorkspaceStoreTests: XCTestCase {
                 [.integer(6), .text(WorkspaceMigrations.versionSixChecksum)],
                 [.integer(7), .text(WorkspaceMigrations.versionSevenChecksum)],
                 [.integer(8), .text(WorkspaceMigrations.versionEightChecksum)],
-                [.integer(9), .text(WorkspaceMigrations.versionNineChecksum)]
+                [.integer(9), .text(WorkspaceMigrations.versionNineChecksum)],
+                [.integer(10), .text(WorkspaceMigrations.versionTenChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
@@ -182,6 +183,17 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents().last?.kind, "opportunity_stage_changed")
     }
 
+    func testStageHistoryRecordsCreationAndRealStageChanges() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+
+        try store.changeStage(opportunityID: opportunity.id, to: .screening)
+        try store.changeStage(opportunityID: opportunity.id, to: .screening)
+
+        XCTAssertEqual(try store.stageHistory(forOpportunityID: opportunity.id).map { "\($0.fromStage?.rawValue ?? "Created") → \($0.toStage.rawValue)" }, ["Created → Saved", "Saved → Screening"])
+        XCTAssertEqual(try store.activityEvents().map(\.kind), ["opportunity_created", "opportunity_stage_changed"])
+    }
+
     func testUpdateOpportunityReplacesItsNextActionAndWritesOneActivityEvent() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(
@@ -211,7 +223,7 @@ final class WorkspaceStoreTests: XCTestCase {
         ])
         XCTAssertEqual(try store.needsAttention().map(\.title), ["Prepare recruiter call"])
         XCTAssertEqual(try store.needsAttention().first?.dueAt, rescheduled)
-        XCTAssertEqual(try store.activityEvents().map(\.kind), ["opportunity_created", "opportunity_updated"])
+        XCTAssertEqual(try store.activityEvents().map(\.kind), ["opportunity_created", "opportunity_stage_changed"])
     }
 
     func testClosedOpportunityIsRemovedFromQueueAndCannotBeActioned() throws {

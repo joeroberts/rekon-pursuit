@@ -119,6 +119,20 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.activityEvents.last?.kind, "task_opened")
     }
 
+    func testSelectedOpportunityShowsStageHistory() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        model.start()
+        model.title = "Product Manager"
+        model.company = "Rekon Labs"
+        model.createOpportunity()
+
+        let opportunity = try XCTUnwrap(model.opportunities.first)
+        model.changeStage(opportunity, to: .screening)
+
+        XCTAssertEqual(model.selectedStageHistory.map(\.toStage), [.saved, .screening])
+    }
+
     private func makeStore() throws -> WorkspaceStore {
         let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent("rekon-view-model-\(UUID().uuidString).sqlite")
         let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 5, count: 32))

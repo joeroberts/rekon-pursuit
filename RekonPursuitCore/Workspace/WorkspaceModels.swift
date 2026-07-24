@@ -29,6 +29,14 @@ enum PipelineStage: String, CaseIterable, Equatable {
     case closed = "Closed"
 }
 
+struct StageHistoryEntry: Equatable {
+    let id: String
+    let opportunityID: String
+    let fromStage: PipelineStage?
+    let toStage: PipelineStage
+    let occurredAt: Date
+}
+
 struct TaskReminder: Equatable {
     let id: String
     let opportunityID: String

@@ -153,10 +153,17 @@ struct ContentView: View {
                                 .disabled(model.selectedNextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         }
                     }
+                    if !model.selectedStageHistory.isEmpty {
+                        Text("Stage history").font(.headline)
+                        ForEach(model.selectedStageHistory, id: \.id) { entry in
+                            Text("\(entry.fromStage?.rawValue ?? "Created") → \(entry.toStage.rawValue) · \(entry.occurredAt.formatted(date: .abbreviated, time: .shortened))")
+                                .font(.caption)
+                        }
+                    }
                     if model.selectedActivityEvents.isEmpty {
                         Text("No activity for this opportunity yet.").foregroundStyle(.secondary)
                     } else {
-                        Text("History").font(.headline)
+                        Text("Activity").font(.headline)
                         ForEach(model.selectedActivityEvents, id: \.id) { event in
                             Text("\(event.kind.replacingOccurrences(of: "_", with: " ").capitalized) · \(event.occurredAt.formatted(date: .abbreviated, time: .shortened))")
                                 .font(.caption)

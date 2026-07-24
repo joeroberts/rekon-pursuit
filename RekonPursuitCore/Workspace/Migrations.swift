@@ -2,13 +2,14 @@ import Foundation
 import CryptoKit
 
 enum WorkspaceMigrations {
-    static let currentVersion = 9
+    static let currentVersion = 10
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
     static let versionSevenChecksum = checksum(for: "7|task_reminders.due_at nullable")
     static let versionEightChecksum = checksum(for: "8|activity_events.opportunity_id nullable")
     static let versionNineChecksum = checksum(for: "9|import_reports")
+    static let versionTenChecksum = checksum(for: "10|opportunity_stage_history")
 
     static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
@@ -116,6 +117,20 @@ enum WorkspaceMigrations {
                     try database.execute("CREATE TABLE import_reports (id TEXT PRIMARY KEY NOT NULL, imported_count INTEGER NOT NULL, skipped_count INTEGER NOT NULL, duplicate_kept_count INTEGER NOT NULL, invalid_count INTEGER NOT NULL, created_at REAL NOT NULL)")
                     try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(9), .text(versionNineChecksum)])
                     try database.execute("UPDATE schema_migrations SET version = 9")
+                }
+                database.removeMigrationSnapshot()
+            } catch {
+                throw error
+            }
+        }
+        if version < 10 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    try database.execute("CREATE TABLE opportunity_stage_history (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), from_stage TEXT, to_stage TEXT NOT NULL, occurred_at REAL NOT NULL)")
+                    try database.execute("INSERT INTO opportunity_stage_history (id, opportunity_id, from_stage, to_stage, occurred_at) SELECT lower(hex(randomblob(16))), id, NULL, stage, created_at FROM opportunities")
+                    try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(10), .text(versionTenChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 10")
                 }
                 database.removeMigrationSnapshot()
             } catch {

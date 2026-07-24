@@ -15,6 +15,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var needsAttention: [TaskReminder] = []
     @Published private(set) var opportunities: [Opportunity] = []
     @Published private(set) var activityEvents: [ActivityEvent] = []
+    @Published private(set) var selectedStageHistory: [StageHistoryEntry] = []
     @Published var opportunitySearch = ""
     @Published var stageFilter = "All stages"
     @Published var selectedTitle = ""
@@ -165,6 +166,7 @@ final class WorkspaceViewModel: ObservableObject {
     func select(_ opportunity: Opportunity) {
         selectedOpportunityID = opportunity.id
         loadSelectedOpportunity()
+        refreshStageHistory()
     }
 
     func saveSelectedOpportunity() {
@@ -315,6 +317,7 @@ final class WorkspaceViewModel: ObservableObject {
                 selectedOpportunityID = opportunities.first?.id ?? ""
             }
             loadSelectedOpportunity()
+            refreshStageHistory()
             refreshRelationshipMemory()
             contacts = try store?.contacts() ?? []
             activityCount = try store?.activityEvents().count ?? 0
@@ -352,6 +355,14 @@ final class WorkspaceViewModel: ObservableObject {
         selectedNextAction = opportunity.nextAction
         selectedHasDueDate = opportunity.dueAt != nil
         selectedDueAt = opportunity.dueAt ?? Date.now
+    }
+
+    private func refreshStageHistory() {
+        do {
+            selectedStageHistory = selectedOpportunityID.isEmpty ? [] : try store?.stageHistory(forOpportunityID: selectedOpportunityID) ?? []
+        } catch {
+            statusMessage = "The stage history could not be read."
+        }
     }
 
     private static func defaultWorkspaceRoot() -> URL {
