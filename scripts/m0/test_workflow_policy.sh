@@ -42,7 +42,9 @@ require_job_literal() {
     in_job { print }
   ' "${workflow_path}")"
 
-  if [[ -z "${job_body}" ]] || ! grep -Fq -- "${expected}" <<<"${job_body}"; then
+  if [[ -z "${job_body}" ]] \
+    || ! grep -Ev '^[[:space:]]*#' <<<"${job_body}" \
+      | grep -Fq -- "${expected}"; then
     record_failure "workflow must ${description}"
   fi
 }
@@ -69,18 +71,22 @@ if [[ ! -f "${workflow_path}" ]]; then
   exit 1
 fi
 
-require_literal \
+require_job_literal \
+  'universal-validation' \
   'runs-on: macos-15-intel' \
-  'pin universal validation to macos-15-intel'
-require_literal \
+  'pin universal-validation to macos-15-intel'
+require_job_literal \
+  'universal-validation' \
   'DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer' \
-  'select Xcode 26.3 by its exact installation path'
-require_literal \
+  'select Xcode 26.3 by its exact installation path in universal-validation'
+require_job_literal \
+  'universal-validation' \
   'XCODE_VERSION: "26.3"' \
-  'declare the exact CI Xcode version 26.3'
-require_literal \
+  'declare the exact CI Xcode version 26.3 in universal-validation'
+require_job_literal \
+  'universal-validation' \
   'XCODE_BUILD: "17C529"' \
-  'declare the exact CI Xcode build 17C529'
+  'declare the exact CI Xcode build 17C529 in universal-validation'
 require_job_literal \
   'universal-validation' \
   'printf '\''%s\n'\'' "${version_output}"' \
@@ -117,15 +123,30 @@ forbid_job_literal \
   'universal-validation' \
   '${ImageVersion:-unknown}' \
   'silently fall back to unknown ImageVersion evidence in universal-validation'
-require_literal \
+require_job_literal \
+  'universal-validation' \
   'scripts/m0/test_workflow_policy.sh .' \
-  'run this workflow-policy regression'
-require_literal \
+  'run this workflow-policy regression in universal-validation'
+require_job_literal \
+  'universal-validation' \
   'scripts/m0/validate_bootstrap.sh .' \
-  'run the complete local bootstrap validator'
-require_literal \
+  'run the complete local bootstrap validator in universal-validation'
+require_job_literal \
+  'macos-14-smoke' \
+  'needs: universal-validation' \
+  'make macos-14-smoke depend on universal-validation'
+require_job_literal \
+  'macos-14-smoke' \
   'runs-on: macos-14' \
-  'pin the baseline smoke job to macos-14'
+  'pin macos-14-smoke to macos-14'
+require_job_literal \
+  'macos-14-smoke' \
+  'scripts/m0/validate_bootstrap.sh --static-only .' \
+  'run static bootstrap validation in macos-14-smoke'
+require_job_literal \
+  'macos-14-smoke' \
+  'test "$(uname -m)" = "arm64"' \
+  'assert the macos-14-smoke runner is arm64'
 require_job_literal \
   'macos-14-smoke' \
   ': "${ImageOS:?ImageOS must be set by GitHub Actions}"' \
@@ -158,18 +179,22 @@ require_job_literal \
   'macos-14-smoke' \
   'name: m0-macos-14-runner-identity' \
   'retain macos-14 runner image identity evidence as a dedicated artifact'
-require_literal \
-  'test "$(uname -m)" = "arm64"' \
-  'assert the macos-14 runner is arm64'
-require_literal \
-  'actions/upload-artifact@' \
-  'transfer the identity-free universal archive to the smoke job'
-require_literal \
+require_job_literal \
+  'universal-validation' \
+  'name: m0-unsigned-universal-app' \
+  'upload the identity-free universal archive from universal-validation'
+require_job_literal \
+  'macos-14-smoke' \
   'actions/download-artifact@' \
-  'retrieve the identity-free universal archive in the smoke job'
-require_literal \
+  'retrieve the identity-free universal archive in macos-14-smoke'
+require_job_literal \
+  'macos-14-smoke' \
+  'shasum -a 256 -c RekonPursuit-unsigned.tar.gz.sha256' \
+  'verify the universal archive checksum in macos-14-smoke'
+require_job_literal \
+  'macos-14-smoke' \
   '"${smoke_binary}" >' \
-  'launch the archived universal app in the macos-14 smoke job'
+  'launch the archived universal app in macos-14-smoke'
 
 forbidden_pattern='macos-latest|\$\{\{[[:space:]]*secrets\.|codesign([[:space:]]|$)|security[[:space:]]+import|notarytool|stapler|productbuild|create-dmg|gh[[:space:]]+release|CODE_SIGNING_ALLOWED[[:space:]]*=[[:space:]]*YES|CODE_SIGN_IDENTITY|DEVELOPMENT_TEAM|PROVISIONING_PROFILE|GMAIL|GOOGLE_CALENDAR|OPENAI_API_KEY'
 if grep -Ein -- "${forbidden_pattern}" "${workflow_path}" >/dev/null; then

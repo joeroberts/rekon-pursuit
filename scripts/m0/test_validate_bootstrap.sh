@@ -134,6 +134,45 @@ expect_failure_containing \
   "${smoke_identity_fixture}/scripts/m0/test_workflow_policy.sh" \
   "${smoke_identity_fixture}"
 
+# Each policy requirement must belong to its intended job.  These mutations
+# preserve the required literals but move them into the other job, proving the
+# policy test cannot pass on a workflow with swapped responsibilities.
+universal_scope_fixture="${fixture_root}/misplaced-universal-requirements"
+mkdir -p "${universal_scope_fixture}/.github/workflows" "${universal_scope_fixture}/scripts/m0"
+cp "${repo_root}/.github/workflows/m0-bootstrap.yml" \
+  "${universal_scope_fixture}/.github/workflows/m0-bootstrap.yml"
+cp "${script_dir}/test_workflow_policy.sh" \
+  "${universal_scope_fixture}/scripts/m0/"
+sed -i '' \
+  '/^  universal-validation:/,/^  macos-14-smoke:/ s/runs-on: macos-15-intel/runs-on: macos-14/' \
+  "${universal_scope_fixture}/.github/workflows/m0-bootstrap.yml"
+sed -i '' \
+  '/^  macos-14-smoke:/,$ s/runs-on: macos-14/runs-on: macos-15-intel/' \
+  "${universal_scope_fixture}/.github/workflows/m0-bootstrap.yml"
+expect_failure_containing \
+  "misplaced-universal-requirements" \
+  "workflow must pin universal-validation to macos-15-intel" \
+  "${universal_scope_fixture}/scripts/m0/test_workflow_policy.sh" \
+  "${universal_scope_fixture}"
+
+smoke_scope_fixture="${fixture_root}/misplaced-smoke-requirements"
+mkdir -p "${smoke_scope_fixture}/.github/workflows" "${smoke_scope_fixture}/scripts/m0"
+cp "${repo_root}/.github/workflows/m0-bootstrap.yml" \
+  "${smoke_scope_fixture}/.github/workflows/m0-bootstrap.yml"
+cp "${script_dir}/test_workflow_policy.sh" \
+  "${smoke_scope_fixture}/scripts/m0/"
+sed -i '' \
+  '/^  universal-validation:/,/^  macos-14-smoke:/ s/name: Universal archive and local policy/name: Universal archive and local policy # needs: universal-validation/' \
+  "${smoke_scope_fixture}/.github/workflows/m0-bootstrap.yml"
+sed -i '' \
+  '/^  macos-14-smoke:/,$ { s|needs: universal-validation|needs: bootstrap-only|; s|runs-on: macos-14|runs-on: macos-15-intel|; s|test "$(uname -m)" = "arm64"|test "$(uname -m)" = "x86_64"|; s|scripts/m0/validate_bootstrap.sh --static-only \.|true # validator moved|; s|actions/download-artifact@|actions/upload-artifact@|; s|shasum -a 256 -c RekonPursuit-unsigned.tar.gz.sha256|true # checksum moved|; s|"${smoke_binary}" >|true # launch moved|; }' \
+  "${smoke_scope_fixture}/.github/workflows/m0-bootstrap.yml"
+expect_failure_containing \
+  "misplaced-smoke-requirements" \
+  "workflow must make macos-14-smoke depend on universal-validation" \
+  "${smoke_scope_fixture}/scripts/m0/test_workflow_policy.sh" \
+  "${smoke_scope_fixture}"
+
 task4_static_output="${fixture_root}/task4-static-validation.log"
 if ! "${script_dir}/validate_bootstrap.sh" --static-only "${repo_root}" \
   >"${task4_static_output}" 2>&1; then

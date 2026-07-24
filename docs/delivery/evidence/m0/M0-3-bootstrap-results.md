@@ -27,6 +27,31 @@ The policy test requires:
 - checksum-protected transfer and launch of the identity-free universal archive; and
 - absence of `macos-latest`, explicit secret access, identity-based signing, notarization, stapling, release publication, and user-data integration configuration.
 
+### Policy-scope remediation
+
+The policy test now verifies that each required control is present in its
+intended job, rather than accepting a matching literal elsewhere in the
+workflow. In particular, `universal-validation` must own the pinned
+`macos-15-intel` runner, exact Xcode path/version/build, policy regression,
+and complete validator. `macos-14-smoke` must depend on that job and own the
+`macos-14` runner, static validator, `arm64` assertion, archive download,
+checksum, and archived-app launch. Comment-only lines are not accepted as
+evidence.
+
+The deterministic wrapper adds negative fixtures that swap the two runners
+and separately move the smoke controls. Both must fail rather than passing
+because the required text still appears in the other job.
+
+| Check | Command | Exit | Output SHA-256 |
+| --- | --- | ---: | --- |
+| Job-scoped policy | `scripts/m0/test_workflow_policy.sh .` | `0` | `700c99f35deec4b4eb46a03350847190efc68c9e00dc6c68720c83e6b2734253` |
+| Full deterministic wrapper, including the two swapped-job fixtures | `scripts/m0/test_validate_bootstrap.sh` | `0` | `5c34d27363a5e58a96e0b40993a99b995cd8b5992db5cfbd3f9d92808ffd93e6` |
+| Complete local validator | `scripts/m0/validate_bootstrap.sh .` | `0` | Ephemeral raw output retained locally only; its final line was `Bootstrap local validation passed.` |
+
+The wrapper output records both `misplaced-universal-requirements` and
+`misplaced-smoke-requirements` as expected rejections. This is local evidence
+only; it does not change the remote evidence state below.
+
 The workflow uses read-only repository permission and disables persisted checkout credentials. Its cross-job artifact is the bootstrap app only, has one-day retention, contains no user data, and is not a release publication.
 
 ## Local verification
