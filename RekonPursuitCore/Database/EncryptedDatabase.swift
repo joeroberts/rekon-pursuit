@@ -17,10 +17,14 @@ enum EncryptedDatabaseError: Error, LocalizedError {
 
 nonisolated final class EncryptedDatabase {
     private var handle: OpaquePointer?
+    private let url: URL
+    private let key: Data
     private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
-    private init(handle: OpaquePointer) {
+    private init(handle: OpaquePointer, url: URL, key: Data) {
         self.handle = handle
+        self.url = url
+        self.key = key
     }
 
     deinit {
@@ -29,23 +33,24 @@ nonisolated final class EncryptedDatabase {
         }
     }
 
-    static func open(url: URL, key: Data) throws -> EncryptedDatabase {
+    static func open(url: URL, key: Data, createIfMissing: Bool = true) throws -> EncryptedDatabase {
         guard key.count == 32 else {
             throw EncryptedDatabaseError.invalidKeyLength
         }
 
         var handle: OpaquePointer?
+        let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX | (createIfMissing ? SQLITE_OPEN_CREATE : 0)
         let openResult = sqlite3_open_v2(
             url.path,
             &handle,
-            SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX,
+            flags,
             nil
         )
         guard openResult == SQLITE_OK, let handle else {
             throw sqliteError(handle: handle, code: openResult)
         }
 
-        let database = EncryptedDatabase(handle: handle)
+        let database = EncryptedDatabase(handle: handle, url: url, key: key)
         do {
             let keyResult = key.withUnsafeBytes { bytes in
                 sqlite3_key(handle, bytes.baseAddress, Int32(bytes.count))
@@ -154,10 +159,36 @@ nonisolated final class EncryptedDatabase {
         self.handle = nil
     }
 
+    var migrationSnapshotURL: URL {
+        url.appendingPathExtension("migration-snapshot")
+    }
+
+    func createVerifiedSnapshot() throws {
+        let snapshotURL = migrationSnapshotURL
+        try? FileManager.default.removeItem(at: snapshotURL)
+        let snapshot = try Self.open(url: snapshotURL, key: key, createIfMissing: true)
+        defer { try? snapshot.close() }
+        guard let handle, let snapshotHandle = snapshot.handle,
+              let backup = sqlite3_backup_init(snapshotHandle, "main", handle, "main") else {
+            throw EncryptedDatabaseError.sqlite(code: SQLITE_ERROR, message: "Could not create migration recovery snapshot.")
+        }
+        let stepResult = sqlite3_backup_step(backup, -1)
+        let finishResult = sqlite3_backup_finish(backup)
+        guard (stepResult == SQLITE_DONE || stepResult == SQLITE_OK), finishResult == SQLITE_OK else {
+            throw Self.sqliteError(handle: snapshotHandle, code: finishResult == SQLITE_OK ? stepResult : finishResult)
+        }
+        let sourceObjectCount = try scalarInt("SELECT count(*) FROM sqlite_master WHERE type IN ('table', 'index', 'trigger', 'view')")
+        let snapshotObjectCount = try snapshot.scalarInt("SELECT count(*) FROM sqlite_master WHERE type IN ('table', 'index', 'trigger', 'view')")
+        guard sourceObjectCount == snapshotObjectCount else {
+            throw EncryptedDatabaseError.sqlite(code: SQLITE_ERROR, message: "Migration recovery snapshot verification failed.")
+        }
+    }
+
     private static func sqliteError(handle: OpaquePointer?, code: Int32) -> EncryptedDatabaseError {
         let message = handle.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "Unknown SQLite error."
         return .sqlite(code: code, message: message)
     }
+
 
     private static func bind(_ values: [DatabaseValue], to statement: OpaquePointer?, handle: OpaquePointer) throws {
         for (offset, value) in values.enumerated() {

@@ -38,16 +38,26 @@ final class WorkspaceSession {
     }
 
     func create() throws -> WorkspaceStore {
+        guard !workspaceArtifactsExist() else { throw WorkspaceSessionError.workspaceAlreadyExists }
         let key = try newKey()
         guard key.count == 32 else { throw EncryptedDatabaseError.invalidKeyLength }
-        try keyStore.writeWorkspaceKey(key)
-        return try openStore(with: key)
+        let store = try openStore(with: key, createIfMissing: true)
+        do {
+            try keyStore.writeWorkspaceKey(key)
+            return store
+        } catch {
+            try? FileManager.default.removeItem(at: databaseURL)
+            try? FileManager.default.removeItem(at: databaseURL.appendingPathExtension("sqlite-wal"))
+            try? FileManager.default.removeItem(at: databaseURL.appendingPathExtension("sqlite-shm"))
+            throw error
+        }
     }
 
     func open() throws -> WorkspaceOpenState {
         do {
             guard let key = try keyStore.readWorkspaceKey() else { return .missingKey }
-            return .ready(try openStore(with: key))
+            guard FileManager.default.fileExists(atPath: databaseURL.path) else { return .unavailable }
+            return .ready(try openStore(with: key, createIfMissing: false))
         } catch let error as WorkspaceKeyStoreError {
             switch error {
             case .locked: return .locked
@@ -59,9 +69,18 @@ final class WorkspaceSession {
         }
     }
 
-    private func openStore(with key: Data) throws -> WorkspaceStore {
+    private var databaseURL: URL {
+        root.appendingPathComponent("workspace.sqlite")
+    }
+
+    private func workspaceArtifactsExist() -> Bool {
+        [databaseURL, databaseURL.appendingPathExtension("sqlite-wal"), databaseURL.appendingPathExtension("sqlite-shm")]
+            .contains { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    private func openStore(with key: Data, createIfMissing: Bool) throws -> WorkspaceStore {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let database = try EncryptedDatabase.open(url: root.appendingPathComponent("workspace.sqlite"), key: key)
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key, createIfMissing: createIfMissing)
         return try WorkspaceStore(
             database: database,
             now: now,
@@ -78,4 +97,8 @@ final class WorkspaceSession {
         guard status == errSecSuccess else { throw WorkspaceKeyStoreError.unavailable(status) }
         return key
     }
+}
+
+enum WorkspaceSessionError: Error {
+    case workspaceAlreadyExists
 }

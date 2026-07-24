@@ -23,9 +23,43 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 4)
+        XCTAssertEqual(try store.schemaVersion(), 5)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
+    }
+
+    func testVersionFourWorkspaceMigratesWithImmutableHistory() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        try database.execute("CREATE TABLE schema_migrations (version INTEGER NOT NULL)")
+        try database.execute("INSERT INTO schema_migrations (version) VALUES (4)")
+        try database.execute("CREATE TABLE opportunities (id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, company TEXT NOT NULL, created_at REAL NOT NULL, stage TEXT NOT NULL DEFAULT 'Saved', next_action TEXT NOT NULL DEFAULT '', due_at REAL)")
+        try database.execute("CREATE TABLE activity_events (id TEXT PRIMARY KEY NOT NULL, kind TEXT NOT NULL, opportunity_id TEXT NOT NULL, actor_id TEXT NOT NULL, correlation_id TEXT NOT NULL, occurred_at REAL NOT NULL)")
+        try database.execute("INSERT INTO opportunities (id, title, company, created_at, stage, next_action) VALUES ('opportunity-1', 'Product Manager', 'Rekon Labs', 1704067200, 'Saved', '')")
+
+        let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
+
+        XCTAssertEqual(try store.schemaVersion(), 5)
+        XCTAssertEqual(
+            try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
+            [
+                [.integer(4), .text(WorkspaceMigrations.baselineChecksum)],
+                [.integer(5), .text(WorkspaceMigrations.versionFiveChecksum)]
+            ]
+        )
+        XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
+    }
+
+    func testFailedVersionFiveMigrationKeepsVerifiedRecoverySnapshot() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        try database.execute("CREATE TABLE schema_migrations (version INTEGER NOT NULL)")
+        try database.execute("INSERT INTO schema_migrations (version) VALUES (4)")
+        try database.execute("CREATE TABLE opportunities (id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, company TEXT NOT NULL, created_at REAL NOT NULL, stage TEXT NOT NULL DEFAULT 'Saved', next_action TEXT NOT NULL DEFAULT '', due_at REAL)")
+        try database.execute("CREATE TABLE activity_events (id TEXT PRIMARY KEY NOT NULL, kind TEXT NOT NULL, opportunity_id TEXT NOT NULL, actor_id TEXT NOT NULL, correlation_id TEXT NOT NULL, occurred_at REAL NOT NULL)")
+
+        XCTAssertThrowsError(try WorkspaceMigrations.apply(to: database, failVersionFive: true))
+
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(4)]])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: databaseURL.appendingPathExtension("migration-snapshot").path))
     }
 
     func testCreateOpportunityAddsOneMatchingActivityEvent() throws {
