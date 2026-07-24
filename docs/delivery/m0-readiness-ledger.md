@@ -1,6 +1,6 @@
 # Rekon Pursuit — M0 Readiness and Delivery Ledger
 
-- **Status:** M0 final gate in progress — M0-1 through M0-4 are accepted. No application feature or M1 work is released.
+- **Status:** M0 accepted — M0-1 through M0-4 and `M0-GATE-01` are accepted. No application feature or M1 work is released.
 - **Last updated:** 2026-07-24
 - **Delivery Manager:** Independent Delivery Manager agent
 - **Authority:** This ledger is the durable delivery record required by [`AGENTS.md`](../../AGENTS.md). The approved [PRD](../product/prd.md), [architecture specification](../architecture/specification.md), [implementation roadmap](roadmap.md), [M0 test and fixture strategy](m0-test-fixture-strategy.md), [compatibility matrix](../architecture/macos-compatibility-matrix.md), and accepted [ADR-001](../architecture/adr/ADR-001-local-data-lifecycle.md) remain controlling artifacts.
@@ -37,7 +37,7 @@
 | `M0-QA-05` | M1 task briefs are test-first and name fixtures, seams, failure modes, and release evidence. | Accepted | Planning agent | QA/test agent; TPM | [M0/M1 task plan](m0-m1-task-plan.md) provides the dependency-safe brief set. |
 | `M0-QA-06` | Fixture security review confirms synthetic-only data and no credentials/PII/private documents. | Accepted | Security/privacy verifier | Delivery Manager | [M0-4 evidence](evidence/m0/M0-4-fixture-foundation-results.md) and tracked-secret scan were independently accepted. |
 | `M0-PLAN-01` | Granular, dependency-safe M0/M1 task plan is independently reviewed. | Accepted | Planning agent | Architect; TPM; QA/test agent; Delivery Manager | [M0/M1 task plan](m0-m1-task-plan.md) is controlling; no M1 task opens from a roadmap heading alone. |
-| `M0-GATE-01` | M0 readiness decision is recorded after all required evidence is accepted. | Ready for final independent decision | Delivery Manager | Architect; TPM; QA/test agent; Security/privacy verifier | All M0 component evidence is accepted; M1 remains blocked until this final decision. |
+| `M0-GATE-01` | M0 readiness decision is recorded after all required evidence is accepted. | Accepted | Delivery Manager | Architect; TPM; QA/test agent; Security/privacy verifier | Architect, QA/Test, Security/Privacy, TPM, and Delivery Manager independently approved the reconciled M0 record. M1 remains blocked until one named M1 task is explicitly released. |
 
 ## Controlled release queue
 
@@ -112,12 +112,13 @@ Append one row per task state transition. Store only redacted paths/identities a
 | 2026-07-24 | `M0-3` | Consolidated independent acceptance and release decision | Architect; QA/Test; Security/Privacy; TPM; Delivery Manager | **Accepted — M0-4 released** | Architect, QA/Test, Security/Privacy, and TPM approvals at `cf099bc`; Delivery Manager decision; GitHub Actions [run 30074424747](https://github.com/joeroberts/rekon-pursuit/actions/runs/30074424747) | Scope remains bootstrap-only; the build-only CI evidence covers pinned Xcode 26.3 Intel universal archive and macOS 14 arm64 archive launch. No hosted CI test suite, signing, notarization, publication, data, integration, or feature scope was added. | **Release M0-4 only.** M1 and `M0-GATE-01` remain blocked. |
 | 2026-07-24 | `M0-4` | Deterministic fixture/harness foundation completed | Implementer agent | **Ready for independent review** | [M0-4 results](evidence/m0/M0-4-fixture-foundation-results.md); `RekonPursuitTests/Fixtures/fixture-manifest.json`; `RekonPursuitTests/TestSupport.swift` | Manifest covers all 22 required M1 fixture IDs; focused local tests and secret scan pass. This is test support only, not persistence, crypto, network, Keychain, or tracker behavior. | Obtain independent QA/Test, Architect, Security/Privacy, Code Reviewer, TPM, and Delivery Manager decisions. **Do not release M1 or accept `M0-GATE-01`.** |
 | 2026-07-24 | `M0-4` | Consolidated independent acceptance and final-gate release decision | QA/Test; Code Reviewer; Security/Privacy; Architect; TPM; Delivery Manager | **Accepted — M0-GATE-01 released** | QA and Code approve strict manifest validation and 9 focused isolated tests; Security/Privacy approves synthetic/test-only posture; Architect approves callable seams; TPM approves scope/sequence; Delivery reproduces the isolated 9-test run. | **Release M0-GATE-01 only.** M1 remains blocked until the final independent gate accepts. |
+| 2026-07-24 | `M0-GATE-01` | Final independent M0 readiness decision | Architect; QA/Test; Security/Privacy; TPM; Delivery Manager | **Accepted** | Accepted ADR/lifecycle contract; accepted compatibility/toolchain record; build-only CI [run 30074424747](https://github.com/joeroberts/rekon-pursuit/actions/runs/30074424747); accepted deterministic fixture foundation; reconciled matrix and canonical ledger. | **M0 is complete.** M1 remains blocked until TPM/Delivery explicitly release one named M1 task. |
 
 ## Milestone decision log
 
 | Milestone | Decision date | Decision | Required approvers | Evidence summary | Conditions / follow-up |
 | --- | --- | --- | --- | --- | --- |
-| M0 | — | Not yet decided | Architect, TPM, QA/test agent, Delivery Manager, Security/privacy verifier | ADR-001 accepted; matrix and fixture strategy prepared | Do not open M1 until `M0-GATE-01` is accepted. |
+| M0 | 2026-07-24 | Accepted | Architect, TPM, QA/test agent, Delivery Manager, Security/privacy verifier | ADR-001, compatibility matrix, fixture strategy, M0-1 through M0-4, and `M0-GATE-01` accepted | M1 remains blocked until TPM/Delivery explicitly release one named M1 task. |
 | M1 | — | Blocked | Architect, TPM, QA/test agent, Delivery Manager | An approved M1 task plan exists, but no M1 task is released. | May be considered only after M0 passes and a specific M1 task is explicitly released. |
 
 ## Release rule
