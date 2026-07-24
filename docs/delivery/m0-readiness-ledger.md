@@ -124,13 +124,14 @@ Append one row per task state transition. Store only redacted paths/identities a
 | 2026-07-24 | `M1-C` | Independent TPM plan review | TPM agent | **Approved** | M1 completion plan; ledger; task plan; fixture strategy | Legacy recovery/export requirements are explicitly M5-L; M2/M3 are hidden/unreachable in the M1 artifact and remain unreleased. No P0/P1. |
 | 2026-07-24 | `M1-C` | Independent QA/Test and Security/Privacy plan review | QA/Test + Security/Privacy verifiers | **Approved** | M1 completion plan; lifecycle contract; current code | Focused tests cover no replacement on missing/corrupt storage, migration snapshot/relaunch, and M1 deletion/tombstone redaction. No P0/P1. |
 | 2026-07-24 | `M1-C` | Independent Delivery Manager release review | Delivery Manager | **Released for implementation** | M1 completion plan; controlling task plan; lifecycle contract; fixture strategy; recorded independent approvals | M1 evidence includes `M1-QA-01`–`M1-QA-04`, `M1-QA-07`–`M1-QA-10`; M5-L owns portable backup/restore/purge/export. M2/M3 remain frozen and hidden from the M1 artifact. |
+| 2026-07-24 | `M1-C` | Final independent implementation gate | Architect; QA/Test + Security/Privacy; Delivery Manager | **Accepted** | Implementation commits `596c12a`, `3103576`, `9bcb5fe`, `afcba3f`, `c8ba9c2`, `4750e98`; focused `RekonPursuitTests`, UI smoke, unsigned archive, entitlement allowlist, and tracked-secret scan | Local migration/open/create/deletion safety is complete at M1 scope. Architect-approved pending-key recovery makes an interrupted setup recoverable; QA/Security approved snapshot cleanup and mutation gating; Delivery confirmed runnable core tests and M2/M3 UI containment. |
 
 ## Milestone decision log
 
 | Milestone | Decision date | Decision | Required approvers | Evidence summary | Conditions / follow-up |
 | --- | --- | --- | --- | --- | --- |
 | M0 | 2026-07-24 | Accepted | Architect, TPM, QA/test agent, Delivery Manager, Security/privacy verifier | ADR-001, compatibility matrix, fixture strategy, M0-1 through M0-4, and `M0-GATE-01` accepted | M1 remains blocked until TPM/Delivery explicitly release one named M1 task. |
-| M1 | 2026-07-24 | In progress | Product Owner; independent M1-1a reviewer | M1-1a accepted; `M1-C` released. Portable backup/recovery/export is deferred to M5. | Complete only the corrected foundation plan, then conduct one independent M1 gate. |
+| M1 | 2026-07-24 | Accepted | Architect, QA/Test, Security/Privacy, Delivery Manager | `M1-C` commits through `4750e98`; focused local tests, UI smoke, unsigned archive, entitlement allowlist, and tracked-secret scan. Portable backup/recovery/export remains deferred to M5. | Release only the next approved MVP vertical slice. |
 
 ## Release rule
 
