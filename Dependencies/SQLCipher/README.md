@@ -9,7 +9,7 @@
 | Immutable Git revision | `810db22f575ee7cf94ea96a3e91622b5fcece3dc` |
 | Release tag object | `f9788efa8ac4dfed75c03e4756b1666a1d0845da` |
 | Source | <https://github.com/sqlcipher/sqlcipher> |
-| License | BSD 3-Clause; source `LICENSE.md` retained in the upstream release |
+| License | BSD 3-Clause; the exact upstream [`LICENSE.md`](LICENSE.md) is retained with this binary distribution |
 | Crypto provider | Apple CommonCrypto and Security.framework (`SQLCIPHER_CRYPTO_CC`) |
 | Entitlement effect | None. The static library uses platform frameworks only; it adds no network, helper, telemetry, or dynamic-code capability. |
 
