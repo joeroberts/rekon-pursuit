@@ -170,6 +170,16 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents().last?.kind, "opportunity_stage_changed")
     }
 
+    func testClosedOpportunityIsRemovedFromQueueAndCannotBeActioned() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", nextAction: "Follow up", dueAt: now))
+
+        try store.changeStage(opportunityID: opportunity.id, to: .closed)
+
+        XCTAssertEqual(try store.needsAttention(), [])
+        XCTAssertThrowsError(try store.completeTask(id: "fixture-id-2"))
+    }
+
     func testContactCanLinkToMultipleOpportunities() throws {
         let store = try makeStore()
         let first = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
