@@ -1,6 +1,6 @@
 # M0-3 Native Bootstrap Results
 
-**State:** Ready for independent review; remote GitHub Actions evidence is **PENDING**. This record is not M0-3 acceptance and does not release M0-4, M1, or `M0-GATE-01`.
+**State:** Ready for independent review; remote GitHub Actions evidence passed in run `30074424747`. This record is not M0-3 acceptance and does not release M0-4, M1, or `M0-GATE-01`.
 
 **Scope:** Native bootstrap, local validation, and pinned CI policy only. No tracker feature, persistence, integration, AI, network capability, user data, production credential, identity-based signing, notarization, stapling, DMG, or release publication is present.
 
