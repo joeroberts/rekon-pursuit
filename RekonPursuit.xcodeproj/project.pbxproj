@@ -16,6 +16,10 @@
 		100000000000000000000007 /* EncryptedDatabaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000011 /* EncryptedDatabaseTests.swift */; };
 		100000000000000000000008 /* EncryptedDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000012 /* EncryptedDatabase.swift */; };
 		100000000000000000000009 /* libsqlcipher.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 200000000000000000000013 /* libsqlcipher.a */; };
+		100000000000000000000010 /* WorkspaceStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000015 /* WorkspaceStoreTests.swift */; };
+		100000000000000000000011 /* WorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* WorkspaceStore.swift */; };
+		100000000000000000000012 /* WorkspaceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* WorkspaceModels.swift */; };
+		100000000000000000000013 /* Migrations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* Migrations.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -50,6 +54,10 @@
 		200000000000000000000012 /* EncryptedDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncryptedDatabase.swift; sourceTree = "<group>"; };
 		200000000000000000000013 /* libsqlcipher.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = lib/libsqlcipher.a; sourceTree = "<group>"; };
 		200000000000000000000014 /* module.modulemap */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.module-map; path = module.modulemap; sourceTree = "<group>"; };
+		200000000000000000000015 /* WorkspaceStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStoreTests.swift; sourceTree = "<group>"; };
+		200000000000000000000016 /* WorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/WorkspaceStore.swift; sourceTree = "<group>"; };
+		200000000000000000000017 /* WorkspaceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/WorkspaceModels.swift; sourceTree = "<group>"; };
+		200000000000000000000018 /* Migrations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/Migrations.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -87,6 +95,9 @@
 				700000000000000000000004 /* RekonPursuitUITests */,
 				700000000000000000000007 /* RekonPursuitCore */,
 				700000000000000000000008 /* SQLCipher */,
+				200000000000000000000016 /* WorkspaceStore.swift */,
+				200000000000000000000017 /* WorkspaceModels.swift */,
+				200000000000000000000018 /* Migrations.swift */,
 				700000000000000000000005 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -115,6 +126,7 @@
 			isa = PBXGroup;
 			children = (
 				200000000000000000000011 /* EncryptedDatabaseTests.swift */,
+				200000000000000000000015 /* WorkspaceStoreTests.swift */,
 			);
 			path = RekonPursuitCoreTests;
 			sourceTree = "<group>";
@@ -293,6 +305,9 @@
 				100000000000000000000001 /* BootstrapApp.swift in Sources */,
 				100000000000000000000002 /* ContentView.swift in Sources */,
 				100000000000000000000008 /* EncryptedDatabase.swift in Sources */,
+				100000000000000000000011 /* WorkspaceStore.swift in Sources */,
+				100000000000000000000012 /* WorkspaceModels.swift in Sources */,
+				100000000000000000000013 /* Migrations.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -303,6 +318,7 @@
 				100000000000000000000003 /* RekonPursuitTests.swift in Sources */,
 				100000000000000000000005 /* TestSupport.swift in Sources */,
 				100000000000000000000007 /* EncryptedDatabaseTests.swift in Sources */,
+				100000000000000000000010 /* WorkspaceStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
