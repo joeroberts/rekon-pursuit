@@ -60,7 +60,7 @@ For a small team, one person may hold multiple roles, but the accountability bou
 
 ### Workstream B — Opportunity workspace, pipeline, and daily loop
 
-**Objective:** Deliver the first useful daily workflow: add/import → choose stage and next action → record an interaction → clear Needs attention.
+**Objective:** Deliver the first useful daily workflow: add an opportunity → choose stage and next action → clear Needs attention.
 
 **Scope:** Opportunity create/edit/search/filter; configurable stages; board and table views; canonical opportunity record; task/reminder model; deterministic Needs attention queue; complete/snooze/reschedule/open actions; stage/status history; activity timeline.
 

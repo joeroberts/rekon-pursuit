@@ -32,12 +32,15 @@ The roadmap's milestone IDs are authoritative. The current release sequence is:
 
 M2 is the only active MVP feature milestone. Its implementation has a P1 remediation awaiting a fresh independent gate; it is not accepted. M3 and M4 code/artifacts are retained but frozen and unreleased until M2 is accepted. Do not expose, extend, or claim M3/M4 functionality as released while that dependency is open.
 
-1. **Foundation:** native SwiftUI shell, encrypted SQLite, migrations/backups, Keychain abstraction, core entities, append-only activity events, and a deterministic Needs attention query.
-2. **Local MVP tracker:** opportunity workspace, stages, tasks, pipeline/search, contact links, CSV map/validate/duplicate decisions, reversible import batches, conservative reconciliation with explicit closure confirmation, manual local DOCX/PDF attachment links with source hashes, and an empty/read-only locally searchable AI ledger. Fully offline reconciliation makes no check, preserves the prior result, and creates retry/manual-review work.
-3. **Privacy and AI foundation:** local/sanitized/full-cloud routing, sanitization/disclosure, consent/no-fallback tests, populated AI ledger/cost budgets, local runtime adapter, then cloud adapter only after consent tests pass. No AI feature ships earlier.
-4. **Connected workflow:** Gmail thread selection/matching, confidence-scored response classification with manual review for low-confidence cases, user-accepted follow-up task generation, draft/review/final-send confirmation, then Calendar availability and confirmed mutations.
-5. **Document library and research:** full document ingest/processing, immutable version links, final-file tracking, export/deletion controls, and permitted sourced research; these follow the privacy/AI and connected foundations.
-6. **Decision support:** interview prep/media, coaching, offer comparison, and negotiation.
+1. **Foundation (M1):** native SwiftUI shell, encrypted SQLite, migrations, Keychain abstraction, core entities, and append-only activity events.
+2. **Daily tracker (M2, released for remediation and fresh gate only):** the offline opportunity workspace, stages, tasks, pipeline/search, and deterministic Needs attention loop. M2 is not accepted yet.
+3. **Relationship memory (M3, frozen/unreleased):** contact links and interaction history. It may not be exposed or extended until M2 is accepted and M3 is explicitly released.
+4. **Safe bulk capture (M4, frozen/unreleased):** local CSV map/validate/duplicate decisions, import report, and batch traceability. It may not be exposed or extended until M2 and M3 are accepted and M4 is explicitly released.
+5. **Reconciliation and hardening (M5):** conservative posting reconciliation with explicit closure confirmation; manual local DOCX/PDF attachment links with source hashes; the empty/read-only local AI ledger; lifecycle/export work; and release readiness. Fully offline reconciliation makes no check, preserves the prior result, and creates retry/manual-review work. Signing, notarization, and DMG distribution remain M5 release work.
+6. **Privacy and AI foundation (M6):** local/sanitized/full-cloud routing, sanitization/disclosure, consent/no-fallback tests, populated AI ledger/cost budgets, local runtime adapter, then cloud adapter only after consent tests pass. No AI feature ships earlier.
+7. **Connected workflow (M7):** Gmail thread selection/matching, confidence-scored response classification with manual review for low-confidence cases, user-accepted follow-up task generation, draft/review/final-send confirmation, then Calendar availability and confirmed mutations.
+8. **Document library and research (M8):** full document ingest/processing, immutable version links, final-file tracking, export/deletion controls, and permitted sourced research; these follow the privacy/AI and connected foundations.
+9. **Decision support (M9):** interview prep/media, coaching, offer comparison, and negotiation.
 
 ## Non-negotiable implementation invariants
 

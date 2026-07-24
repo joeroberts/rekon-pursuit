@@ -2,7 +2,7 @@
 
 > **For agentic workers:** Use `superpowers:executing-plans` task-by-task. This is the approved correction to the earlier M1-1a/M1-1b split.
 
-**Goal:** Complete the smallest trustworthy local-data foundation before any already-committed M2/M3 work is released.
+**Goal:** Complete the smallest trustworthy local-data foundation before any already-committed M2/M3/M4 work is released.
 
 **Architecture:** The existing encrypted SQLCipher workspace remains the only source of job data. A final schema migration adds durable migration records and logical deletion; SwiftUI presents a local activity timeline and safe read-only/corrupt guidance. It does not add recovery-key backup, restore, purge, actual export, or new tracker features.
 
@@ -12,7 +12,7 @@
 
 - M1 includes: migration history/checksums with a verified temporary rollback snapshot, safe corrupt/open guidance, a visible redacted activity timeline, logical opportunity deletion that suppresses queued work, and the visible MVP export limitation.
 - M5 includes: recovery-key enrollment, portable encrypted backup/restore, retention/purge, encrypted export, and the warning/confirmation required for an unencrypted export. Do not ship a fake export action before then.
-- Existing commits for pipeline/tasks, contacts, CSV, and interactions are retained as **unreleased M2/M3 work**. Hide their UI and prevent their commands from being reachable in the M1 archive; do not revert or extend them before M1 is independently accepted.
+- Existing commits for pipeline/tasks (M2), contacts/interactions (M3), and CSV import (M4) are retained as **unreleased candidate work**. Hide their UI and prevent their commands from being reachable in the M1 archive; do not revert or extend them before M1 is independently accepted.
 - No network, AI, Gmail, Calendar, research, signing, notarization, or distribution work.
 
 ### Task 1: Make schema migration auditable and fail safely
@@ -66,7 +66,7 @@
 - Modify: `docs/delivery/roadmap.md`
 - Modify: `docs/implementation-handoff.md`
 
-- [ ] Record this user-approved M1 scope correction, including the M5 lifecycle deferrals and the frozen/unreleased M2/M3 commits.
+- [ ] Record this user-approved M1 scope correction, including the M5 lifecycle deferrals and the frozen/unreleased M2/M3/M4 candidate work under the canonical milestone mapping.
 - [ ] Ask independent Architect, TPM, QA/Test, Security/Privacy, Code Review, and Delivery roles to review the completed M1 evidence once. Fix only P0/P1 issues found.
 - [ ] Record the resulting M1 decision and release only the next eligible MVP slice.
 

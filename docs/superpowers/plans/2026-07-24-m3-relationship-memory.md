@@ -1,6 +1,8 @@
 # M3 — Relationship Memory MVP Brief
 
-**Released scope:** Local contact creation, local opportunity/contact links, and concise interaction notes associated with an opportunity. The UI must show linked contacts and interaction summaries on the selected opportunity record.
+**State:** Frozen and unreleased. This candidate M3 scope may be released only after M2 is accepted and the TPM/Delivery Manager records an explicit M3 release decision.
+
+**Candidate scope when released:** Local contact creation, local opportunity/contact links, and concise interaction notes associated with an opportunity. The UI must show linked contacts and interaction summaries on the selected opportunity record.
 
 **Excluded:** CSV import, external people research, Gmail/Calendar, AI, documents, employer research, backup/restore, and export.
 
