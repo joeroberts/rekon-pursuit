@@ -120,7 +120,7 @@ Normalize searchable values (`normalized_employer_name`, normalized title and ca
 - A domain mutation, its `activity_events` row, related timeline projection, and outbox enqueue (if any) commit in one SQLite transaction.
 - Network calls occur outside the transaction. Persist `provider_operations.state = queued` first; after execution, persist response/result and resulting domain mutation in a second transaction.
 - The writer serializes operations. Reads use read-only connections; long export/report reads use a SQLite snapshot to avoid blocking changes.
-- Every schema migration runs in an exclusive transaction, records its SHA-256/checksum in `migration_history`, and is idempotent. Migrations only move forward. A release must include a pre-migration verified backup and a migration smoke test against the prior supported schema.
+- Every schema migration runs in an exclusive transaction, records its SHA-256/checksum in `migration_history`, and is idempotent. Migrations only move forward. A release must include a pre-migration **verified rollback snapshot** and a migration smoke test against the prior supported schema. The snapshot is the M0-2 contract's ephemeral transaction-scoped protection, not a retained/recoverable user backup: it is never independently restored/exported, is deleted after successful migration, and remains only long enough to preserve the recovery path after a failed migration.
 
 ### Backup, restore, and deletion
 
