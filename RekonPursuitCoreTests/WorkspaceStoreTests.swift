@@ -93,6 +93,16 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents().last?.kind, "task_rescheduled")
     }
 
+    func testStageChangePersistsAndWritesActivity() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+
+        try store.changeStage(opportunityID: opportunity.id, to: .screening)
+
+        XCTAssertEqual(try store.opportunities().first?.stage, .screening)
+        XCTAssertEqual(try store.activityEvents().last?.kind, "opportunity_stage_changed")
+    }
+
     private func makeStore(failBeforeActivityInsert: Bool = false) throws -> WorkspaceStore {
         let database = try EncryptedDatabase.open(url: databaseURL, key: key)
         var identifier = 0

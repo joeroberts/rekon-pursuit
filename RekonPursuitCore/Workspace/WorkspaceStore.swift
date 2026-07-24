@@ -99,6 +99,17 @@ final class WorkspaceStore {
         }
     }
 
+    func changeStage(opportunityID: String, to stage: PipelineStage) throws {
+        try synchronized {
+            guard case .text? = try database.rows("SELECT id FROM opportunities WHERE id = ?", values: [.text(opportunityID)]).first?.first else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+            let event = ActivityEvent(id: nextIdentifier(), kind: "opportunity_stage_changed", opportunityID: opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: now)
+            try database.transaction {
+                try database.execute("UPDATE opportunities SET stage = ? WHERE id = ?", values: [.text(stage.rawValue), .text(opportunityID)])
+                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), .text(event.opportunityID), .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
+            }
+        }
+    }
+
     func activityEvents() throws -> [ActivityEvent] {
         try synchronized {
             try database.rows("SELECT id, kind, opportunity_id, actor_id, correlation_id, occurred_at FROM activity_events ORDER BY occurred_at, id").map(activityEvent(from:))

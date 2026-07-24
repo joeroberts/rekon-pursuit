@@ -12,6 +12,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var activityCount = 0
     @Published private(set) var needsAttentionCount = 0
     @Published private(set) var needsAttention: [TaskReminder] = []
+    @Published private(set) var opportunities: [Opportunity] = []
     @Published private(set) var statusMessage = "Opening local workspace…"
     @Published private(set) var canCreateWorkspace = false
 
@@ -90,6 +91,16 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
+    func changeStage(_ opportunity: Opportunity, to stage: PipelineStage) {
+        do {
+            try store?.changeStage(opportunityID: opportunity.id, to: stage)
+            refreshCounts()
+            statusMessage = "Stage updated locally."
+        } catch {
+            statusMessage = "The stage could not be updated."
+        }
+    }
+
     private func apply(_ state: WorkspaceOpenState) {
         switch state {
         case let .ready(store):
@@ -115,6 +126,7 @@ final class WorkspaceViewModel: ObservableObject {
     private func refreshCounts() {
         do {
             opportunityCount = try store?.opportunities().count ?? 0
+            opportunities = try store?.opportunities() ?? []
             activityCount = try store?.activityEvents().count ?? 0
             needsAttention = try store?.needsAttention() ?? []
             needsAttentionCount = needsAttention.count

@@ -63,6 +63,29 @@ struct ContentView: View {
                 }
             }
 
+            GroupBox("Pipeline") {
+                if model.opportunities.isEmpty {
+                    Text("No opportunities yet.").foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.opportunities, id: \.id) { opportunity in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(opportunity.title)
+                                Text(opportunity.company).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Picker("Stage for \(opportunity.title)", selection: Binding(
+                                get: { opportunity.stage },
+                                set: { model.changeStage(opportunity, to: $0) }
+                            )) {
+                                ForEach(PipelineStage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                            }
+                            .labelsHidden()
+                        }
+                    }
+                }
+            }
+
             Text("\(model.opportunityCount) opportunities · \(model.needsAttentionCount) needs attention · \(model.activityCount) activity events")
                 .foregroundStyle(.secondary)
             Text(model.statusMessage)
