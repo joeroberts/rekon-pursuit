@@ -136,15 +136,17 @@ struct ContentView: View {
                     .disabled(!model.workspaceReady)
                 if let preview = model.csvPreview {
                     Text("\(preview.rows.count) valid rows · \(preview.invalidRowCount) invalid rows")
-                    ForEach(model.csvImportPlan.filter(\.isDuplicate)) { planRow in
+                    ForEach(model.csvImportPlan) { planRow in
                         HStack {
                             Text("Row \(planRow.row.id): \(planRow.row.opportunity.title) · \(planRow.row.opportunity.company)")
-                            Picker("Decision", selection: Binding(
-                                get: { planRow.decision ?? .skip },
-                                set: { model.setCSVDecision($0, for: planRow.id) }
-                            )) {
-                                Text("Skip").tag(CSVDuplicateDecision.skip)
-                                Text("Keep separate").tag(CSVDuplicateDecision.keepSeparate)
+                            if planRow.isDuplicate {
+                                Picker("Decision", selection: Binding(
+                                    get: { planRow.decision ?? .skip },
+                                    set: { model.setCSVDecision($0, for: planRow.id) }
+                                )) {
+                                    Text("Skip").tag(CSVDuplicateDecision.skip)
+                                    Text("Keep separate").tag(CSVDuplicateDecision.keepSeparate)
+                                }
                             }
                         }
                     }
