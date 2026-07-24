@@ -61,6 +61,12 @@ universal archive, and the macOS 14 archive-launch smoke. Focused tests remain
 local and do not create a hosted-CI coverage gate. A fresh remote run is
 required before acceptance.
 
+The macOS 14 runtime runner uses Xcode 15.4, which cannot open the
+Xcode-26-authored project format. Project/entitlement configuration is therefore
+validated on the pinned build runner; the macOS 14 runner validates its actual
+compatibility responsibility by downloading and launching the built universal
+archive.
+
 ## Local verification
 
 Local verification ran from the staged Task 4 tree so the tracked-secret scan included the proposed workflow and policy test.

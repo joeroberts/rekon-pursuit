@@ -103,12 +103,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Verify baseline runner and static policy
+      - name: Verify baseline arm64 runner
         shell: bash
         run: |
           set -euo pipefail
           test "$(uname -m)" = "arm64"
-          scripts/m0/validate_bootstrap.sh --static-only .
 
       - name: Capture baseline runner identity
         shell: bash

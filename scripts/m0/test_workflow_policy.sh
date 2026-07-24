@@ -184,10 +184,6 @@ require_job_literal \
   'pin macos-14-smoke to macos-14'
 require_job_literal \
   'macos-14-smoke' \
-  'scripts/m0/validate_bootstrap.sh --static-only .' \
-  'run static bootstrap validation in macos-14-smoke'
-require_job_literal \
-  'macos-14-smoke' \
   'test "$(uname -m)" = "arm64"' \
   'assert the macos-14-smoke runner is arm64'
 require_job_literal \
