@@ -43,7 +43,7 @@ The local-data lifecycle gate is **resolved** by [ADR-001](architecture/adr/ADR-
 
 | Gate | Resolve before | Decision |
 | --- | --- | --- |
-| Local data lifecycle | Resolved for M0/M1 foundation | ADR-001 plus M0-2 lifecycle contract: recovery-key strategy, authenticated backup envelope, restore/re-wrap, retention, logical deletion, purge, and export |
+| Local data lifecycle | Resolved for M1 foundation and M5 lifecycle | ADR-001 plus M0-2 lifecycle contract: M1 migration snapshot/safe-open/logical deletion; M5 recovery-key strategy, authenticated backup envelope, restore/re-wrap, retention, purge, and export |
 | Tracker semantics | Daily tracker | Initial stages, queue ordering, archive/delete rules |
 | Import policy | CSV completion | Duplicate signals, allowed update fields, undo scope |
 | Reconciliation policy | Posting checks | Approved methods/providers, thresholds, retry cadence |

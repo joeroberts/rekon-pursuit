@@ -2,7 +2,7 @@
 
 ## Purpose and authority
 
-This is the independent QA strategy for M0 readiness and M1 (Local record spine). It defines deterministic test data, controllable runtime seams, and evidence required before application implementation begins. It implements the verification requirements in the [architecture specification](../architecture/specification.md), [roadmap](roadmap.md), and [implementation handoff](../implementation-handoff.md); it does not choose a persistence or crypto library.
+This is the independent QA strategy for M0 readiness, M1 (Local record spine), and later lifecycle work. It defines deterministic test data, controllable runtime seams, and evidence required before application implementation begins. It implements the verification requirements in the [architecture specification](../architecture/specification.md), [roadmap](roadmap.md), and [implementation handoff](../implementation-handoff.md); it does not choose a persistence or crypto library. The 2026-07-24 MVP correction assigns recovery enrollment, portable backup/restore, retention/purge, and export fixtures to M5-L; their catalog entries remain stable but are not M1 acceptance gates.
 
 The strategy is deliberately **local-only**. No test may require a live Google account, cloud-model account, provider API, network connection, real user workspace, or production Keychain item. Later milestones must extend this catalog rather than replace its fixtures or bypass its seams.
 
@@ -12,18 +12,18 @@ The MVP uses a **rough 50% automated-coverage planning target**, not a blanket c
 
 ## Approved lifecycle policy under test
 
-The following decisions are testable acceptance constraints for M0/M1:
+The following decisions are testable acceptance constraints for M1 and M5:
 
 | Policy | Required observable behavior |
 | --- | --- |
 | Retention | Workspace data remains until the user deletes it; no age-based deletion job runs by default. |
 | Deletion | A delete command hides content from normal views and search immediately, writes a tombstone/activity event, and retains only the recovery data permitted by backup/export policy. |
-| Backup retention | Opt-in recoverable backups retain deleted content for 30 days by default. The app shows each backup's expiry. |
-| Backup purge | `Purge deleted data from retained backups` is a deliberate destructive command with a warning and explicit confirmation; it removes eligible deleted content from retained backup copies. |
-| Export | The user may create an unencrypted export only after a warning that it is outside app encryption and deletion controls, plus a destination/filename review. |
-| Recovery authority | User-held recovery material has no support/reset bypass. A missing recovery secret produces recovery guidance, never an empty replacement workspace. |
+| Backup retention (M5) | Opt-in recoverable backups retain deleted content for 30 days by default. The app shows each backup's expiry. |
+| Backup purge (M5) | `Purge deleted data from retained backups` is a deliberate destructive command with a warning and explicit confirmation; it removes eligible deleted content from retained backup copies. |
+| Export (M5) | The user may create an unencrypted export only after a warning that it is outside app encryption and deletion controls, plus a destination/filename review. |
+| Recovery authority (M5) | User-held recovery material has no support/reset bypass. A missing recovery secret produces recovery guidance, never an empty replacement workspace. |
 
-Exact backup envelope, recovery-key, secure-delete, and clean-Mac restore contracts remain architecture-owned ADR subjects. This strategy requires fixtures and assertions for their chosen contract before M1 is released.
+Exact backup envelope, recovery-key, secure-delete, and clean-Mac restore contracts remain architecture-owned ADR subjects. This strategy requires fixtures and assertions for their chosen contract before M5-L is released.
 
 ## Test harness rules
 
@@ -67,7 +67,7 @@ Fixture IDs are stable references for task briefs, automated tests, and release 
 | `WS-READONLY-001` | Valid workspace opened with a mutation-blocking storage/key state. | Read-only recovery UI; mutations are blocked without silently creating a new workspace. |
 | `MIGRATE-NMINUS1-001` | Last supported schema fixture with core records and activity history. | Forward migration preserves IDs, timestamps, links, and events. |
 | `MIGRATE-FAIL-001` | Pre-migration workspace plus injected transaction failure, disk interruption, relaunch/retry, and corrupt-rollback-snapshot variants at named steps. | Rollback and retained pre-migration recovery path through the ephemeral verified rollback snapshot; no independently restorable backup or empty replacement; actionable version/error state. |
-| `DB-CORRUPT-001` | Workspace with an intentionally invalid database/page or manifest checksum. | Recovery mode, diagnostic guidance, verified restore/export offer; never automatic empty replacement. |
+| `DB-CORRUPT-001` | Workspace with an intentionally invalid database/page or manifest checksum. | M1 non-destructive read-only/corrupt guidance: no mutation, replacement, restore, or export offer. M5-L adds portable recovery offers only after its recovery capability is implemented. |
 
 The architect must add one migration fixture for **every** supported prior schema before that migration is eligible for release. A fixture is immutable once released; a corrected historical fixture gets a new ID.
 
@@ -160,9 +160,10 @@ M1 is acceptable only when the local record spine passes the following independe
 | `M1-QA-01` | `WS-EMPTY-001`, `WS-CORE-001` | Fresh workspace opens offline; create minimal opportunity; quit/relaunch; same stable ID, timestamps, links, and activity event are observable. | Implementer / QA verifier |
 | `M1-QA-02` | `WS-CORE-001`, injected write failure | Opportunity mutation and required activity event commit in one transaction; failure leaves neither partial record nor orphan event. | Implementer / QA verifier |
 | `M1-QA-03` | `MIGRATE-NMINUS1-001`, `MIGRATE-FAIL-001` | Every supported migration preserves data; injected failure rolls back and retains pre-migration recovery path. | Implementer / QA verifier |
-| `M1-QA-04` | `WS-READONLY-001`, `DB-CORRUPT-001`, `RECOVERY-ENROLL-001`, `RECOVERY-MISSING-001` | Read-only/corrupt/key-unavailable states block mutations, show recovery guidance, and never replace the workspace with a blank one. | Implementer / QA verifier + Security/privacy verifier |
-| `M1-QA-05` | `BACKUP-VALID-001`, `BACKUP-CORRUPT-001`, `BACKUP-SWAP-001`, `RESTORE-KEYCHAIN-001`, `RESTORE-CLEANMAC-001` | Chosen lifecycle ADR is exercised end-to-end: successful verified backup/restore, tamper/swap rejection, both approved recovery paths, and no partial overwrite. | Implementer / QA verifier + Security/privacy verifier |
-| `M1-QA-06` | `DELETE-LOGICAL-001`, `DELETE-QUEUED-WORK-001`, `BACKUP-RETENTION-001`, `BACKUP-PURGE-001`, `EXPORT-ENCRYPTED-001`, `EXPORT-UNENCRYPTED-001`, `EXPORT-CANCELLED-001`, `LIFECYCLE-REDACTION-001` | Approved deletion, retention, purge, redaction, encrypted-default export, and unencrypted-export warning semantics are exact and deterministic. | Implementer / QA verifier + Security/privacy verifier |
+| `M1-QA-04` | `WS-READONLY-001`, `DB-CORRUPT-001` | Read-only/corrupt/key-unavailable states block mutations, show recovery guidance, and never replace the workspace with a blank one. | Implementer / QA verifier + Security/privacy verifier |
+| `M1-QA-10` | `DELETE-LOGICAL-001`, `DELETE-QUEUED-WORK-001` | Local logical deletion hides the source from normal/active projections, cancels local queued work, and emits the exact opaque tombstone/activity metadata without deleted title, company, or user-entered content. | Implementer / QA verifier + Security/privacy verifier |
+| `M5-L-QA-01` | `BACKUP-VALID-001`, `BACKUP-CORRUPT-001`, `BACKUP-SWAP-001`, `RESTORE-KEYCHAIN-001`, `RESTORE-CLEANMAC-001`, `RECOVERY-ENROLL-001`, `RECOVERY-MISSING-001` | Chosen lifecycle ADR is exercised end-to-end: successful verified backup/restore, tamper/swap rejection, both approved recovery paths, and no partial overwrite. | Implementer / QA verifier + Security/privacy verifier |
+| `M5-L-QA-02` | `BACKUP-RETENTION-001`, `BACKUP-PURGE-001`, `EXPORT-ENCRYPTED-001`, `EXPORT-UNENCRYPTED-001`, `EXPORT-CANCELLED-001`, `LIFECYCLE-REDACTION-001` | Retention, purge, redaction, encrypted-default export, and unencrypted-export warning semantics are exact and deterministic. | Implementer / QA verifier + Security/privacy verifier |
 | `M1-QA-07` | `RECON-OFFLINE-001` | Default offline setup records zero transport requests. This guards the local-first boundary before reconciliation is implemented. | Implementer / QA verifier |
 | `M1-QA-08` | Synthetic clean workspace | Accessibility smoke: keyboard reaches visible create/validation/recovery actions; status is not color-only; identifiers support later UI automation. | Implementer / QA verifier |
 | `M1-QA-09` | Full M1 suite | Formatter/linter, unit/database/contract tests, migration compatibility, dependency scan, and clean-macOS unsigned-build/launch smoke pass; results and environment versions are attached to the ledger. Developer ID signing, notarization, and DMG smoke are M5 evidence only. | TPM / QA verifier |
