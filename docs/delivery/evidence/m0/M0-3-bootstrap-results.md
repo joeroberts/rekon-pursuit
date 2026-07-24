@@ -19,7 +19,8 @@ The policy test requires:
 
 - `macos-15-intel` for universal validation;
 - `/Applications/Xcode_26.3.app/Contents/Developer`, Xcode `26.3`, and build `17C529`;
-- the complete local bootstrap validator;
+- the CI bootstrap validator, which runs the unit-level bootstrap test plus the
+  build/archive checks; the cosmetic UI assertion remains a local check;
 - `macos-14` with an explicit `arm64` assertion;
 - a separate retained `m0-macos-14-runner-identity` artifact, created by the
   `macos-14-smoke` job itself, with its `ImageOS`, `ImageVersion`, OS, and
@@ -53,6 +54,12 @@ The wrapper output records both `misplaced-universal-requirements` and
 only; it does not change the remote evidence state below.
 
 The workflow uses read-only repository permission and disables persisted checkout credentials. Its cross-job artifact is the bootstrap app only, has one-day retention, contains no user data, and is not a release publication.
+
+The first remote run was cancelled during the hosted UI-test path after it
+exceeded the MVP-appropriate CI budget. The replacement CI mode runs the
+unit-level bootstrap test and retains the universal archive/macOS 14 smoke
+evidence; it does not reduce the deployment, entitlement, signing-boundary,
+archive, or smoke checks. A fresh remote run is required before acceptance.
 
 ## Local verification
 

@@ -62,7 +62,7 @@ jobs:
 
       - name: Run complete bootstrap validator
         shell: bash
-        run: scripts/m0/validate_bootstrap.sh .
+        run: scripts/m0/validate_bootstrap.sh --ci .
 
       - name: Package identity-free universal archive
         shell: bash

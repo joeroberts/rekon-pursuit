@@ -172,8 +172,8 @@ require_job_literal \
   'run this workflow-policy regression in universal-validation'
 require_job_literal \
   'universal-validation' \
-  'scripts/m0/validate_bootstrap.sh .' \
-  'run the complete local bootstrap validator in universal-validation'
+  'scripts/m0/validate_bootstrap.sh --ci .' \
+  'run the CI bootstrap validator in universal-validation'
 require_job_literal \
   'macos-14-smoke' \
   'needs: universal-validation' \

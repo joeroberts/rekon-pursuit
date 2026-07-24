@@ -6,6 +6,10 @@ This is the independent QA strategy for M0 readiness and M1 (Local record spine)
 
 The strategy is deliberately **local-only**. No test may require a live Google account, cloud-model account, provider API, network connection, real user workspace, or production Keychain item. Later milestones must extend this catalog rather than replace its fixtures or bypass its seams.
 
+## MVP test-investment policy
+
+The MVP uses a **rough 50% automated-coverage planning target**, not a blanket coverage gate or a reason to write tests merely to raise a percentage. Incidental coverage above that target is acceptable; the team must not expand scope or delay delivery to pursue it. Each shipped slice still requires focused, deterministic tests for its primary flow and its material failure, privacy, data-loss, or irreversible-effect boundaries. This policy does not waive any named release evidence in the architecture specification, lifecycle ADR, compatibility matrix, or task brief.
+
 ## Approved lifecycle policy under test
 
 The following decisions are testable acceptance constraints for M0/M1:
