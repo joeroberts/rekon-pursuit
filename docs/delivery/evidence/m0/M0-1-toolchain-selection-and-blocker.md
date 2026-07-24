@@ -114,6 +114,6 @@ This evidence is reproducible with the commands listed in the task plan. The `sw
 
 ## Blocker, completion condition, and follow-up
 
-**Open evidence limitations:** no baseline Git commit exists, so this record has no commit SHA. The owner has not yet confirmed the proposed bundle identifier under an Apple Developer team. CI-runner image version/Xcode build output is selected for capture but cannot exist until M0-3 creates the permitted CI workflow. Neither limitation authorizes an M0-1 scope expansion.
+**Open evidence limitations:** baseline repository commit is `ebe521237813fe94df4c38b643de052bd308c799`; all later evidence and reviews must identify their commit SHA relative to this baseline. The owner has not yet confirmed the proposed bundle identifier under an Apple Developer team. CI-runner image version/Xcode build output is selected for capture but cannot exist until M0-3 creates the permitted CI workflow. Neither limitation authorizes an M0-1 scope expansion.
 
 **M0-1 completion condition:** independent Architect, QA/Test, Security/Privacy, TPM, and Delivery Manager reviewers must accept this updated evidence record and selected policy. M0-2 may be considered only after that acceptance. Do not create an Xcode project, CI workflow, or application code as part of M0-1; those are M0-3 work.
