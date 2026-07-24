@@ -198,7 +198,8 @@ Interview preparation, transcript/recording coaching, offer comparison, negotiat
 
 ## Open PM decisions
 
-- Default local data-retention policy, OpenAI processing terms, deletion, and export expectations.
+- **Resolved local-data policy:** [ADR-001](../architecture/adr/ADR-001-local-data-lifecycle.md) and the [M0-2 lifecycle contract](../architecture/local-data-lifecycle-contract.md) govern indefinite active-data retention, immediate logical deletion, opt-in recoverable backups expiring 30 days after creation, explicit backup purge, encrypted-default export, and warned/reviewed unencrypted export. These are implementation requirements, not open PM decisions.
+- OpenAI processing terms.
 - Gmail scope: selected job correspondence vs. broader mailbox search.
 - Google Calendar initial scope, reminders, and conflict-resolution behavior.
 - User-configured score weights and rubrics for offers, interview feedback, and employer risk.

@@ -39,11 +39,11 @@ Implement vertical slices, not disconnected layers or screens. Each slice must p
 
 ## Decision gates that remain intentionally open
 
-The local-data lifecycle decision is a prerequisite for the foundation and must pass before M0/M1. All other decisions are not implementation blockers for the local tracker foundation, but must be resolved before enabling their dependent capability.
+The local-data lifecycle gate is **resolved** by [ADR-001](architecture/adr/ADR-001-local-data-lifecycle.md) and the [M0-2 lifecycle contract](architecture/local-data-lifecycle-contract.md): its retention, deletion, backup/recovery, purge, and export rules are implementation requirements. All other decisions below are not implementation blockers for the local tracker foundation, but must be resolved before enabling their dependent capability.
 
 | Gate | Resolve before | Decision |
 | --- | --- | --- |
-| Local data lifecycle | M0/M1 foundation | Recovery-key strategy, authenticated backup envelope, restore/re-wrap, retention, secure delete, backup/export |
+| Local data lifecycle | Resolved for M0/M1 foundation | ADR-001 plus M0-2 lifecycle contract: recovery-key strategy, authenticated backup envelope, restore/re-wrap, retention, logical deletion, purge, and export |
 | Tracker semantics | Daily tracker | Initial stages, queue ordering, archive/delete rules |
 | Import policy | CSV completion | Duplicate signals, allowed update fields, undo scope |
 | Reconciliation policy | Posting checks | Approved methods/providers, thresholds, retry cadence |
