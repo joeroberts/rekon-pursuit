@@ -43,6 +43,29 @@ copy_static_fixture() {
   git -C "${destination}" add .
 }
 
+secret_fixture="${fixture_root}/tracked-secret"
+mkdir -p "${secret_fixture}"
+git -C "${secret_fixture}" init -q
+synthetic_secret="sk-REKON_""PURSUIT_SYNTHETIC_TOKEN_1234567890"
+printf '%s\n' "${synthetic_secret}" >"${secret_fixture}/fixture.txt"
+git -C "${secret_fixture}" add fixture.txt
+secret_output="${fixture_root}/tracked-secret.log"
+if "${script_dir}/check_tracked_secrets.sh" "${secret_fixture}" \
+  >"${secret_output}" 2>&1; then
+  printf 'FAIL: tracked-secret scanner unexpectedly passed a synthetic secret\n' >&2
+  failures=$((failures + 1))
+elif grep -Fq -- "${synthetic_secret}" "${secret_output}"; then
+  printf 'FAIL: tracked-secret scanner leaked synthetic secret content\n' >&2
+  failures=$((failures + 1))
+elif ! grep -Fq \
+  'ERROR: probable credential material (rule=credential-pattern): fixture.txt:1' \
+  "${secret_output}"; then
+  printf 'FAIL: tracked-secret scanner did not report safe match metadata\n' >&2
+  failures=$((failures + 1))
+else
+  printf 'PASS: tracked-secret scanner reports only safe match metadata\n'
+fi
+
 unsupported_target_fixture="${fixture_root}/unsupported-target"
 copy_static_fixture "${unsupported_target_fixture}"
 sed -i '' \
