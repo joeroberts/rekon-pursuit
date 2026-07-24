@@ -1,8 +1,15 @@
 import Foundation
 
 struct CSVImportPreview: Equatable {
-    let validRows: [CreateOpportunity]
+    let rows: [CSVImportRow]
     let invalidRowCount: Int
+
+    var validRows: [CreateOpportunity] { rows.map(\.opportunity) }
+}
+
+struct CSVImportRow: Equatable, Identifiable {
+    let id: Int
+    let opportunity: CreateOpportunity
 }
 
 enum CSVOpportunityImporter {
@@ -12,16 +19,16 @@ enum CSVOpportunityImporter {
         guard let headerLine = lines.first else { throw CSVImportError.missingRequiredColumns }
         let headers = parseLine(headerLine).map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
         guard let titleIndex = headers.firstIndex(of: "title"), let companyIndex = headers.firstIndex(of: "company") else { throw CSVImportError.missingRequiredColumns }
-        var validRows: [CreateOpportunity] = []
+        var rows: [CSVImportRow] = []
         var invalidRowCount = 0
-        for line in lines.dropFirst() {
+        for (offset, line) in lines.dropFirst().enumerated() {
             let fields = parseLine(line)
             let title = fields.indices.contains(titleIndex) ? fields[titleIndex] : ""
             let company = fields.indices.contains(companyIndex) ? fields[companyIndex] : ""
             guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !company.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { invalidRowCount += 1; continue }
-            validRows.append(CreateOpportunity(title: title, company: company))
+            rows.append(CSVImportRow(id: offset + 2, opportunity: CreateOpportunity(title: title, company: company)))
         }
-        return CSVImportPreview(validRows: validRows, invalidRowCount: invalidRowCount)
+        return CSVImportPreview(rows: rows, invalidRowCount: invalidRowCount)
     }
 
     private static func parseLine(_ line: String) -> [String] {

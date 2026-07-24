@@ -199,7 +199,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testCSVPreviewMapsTitleAndCompanyAndRejectsIncompleteRows() throws {
         let preview = try CSVOpportunityImporter.preview(data: Data("title,company\nProduct Manager,Rekon Labs\n,Missing Co\n".utf8))
 
-        XCTAssertEqual(preview.validRows, [CreateOpportunity(title: "Product Manager", company: "Rekon Labs")])
+        XCTAssertEqual(preview.rows, [CSVImportRow(id: 2, opportunity: CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))])
         XCTAssertEqual(preview.invalidRowCount, 1)
     }
 
