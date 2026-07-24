@@ -58,7 +58,8 @@ fi
 for required_script in \
   build_unsigned_archive.sh \
   check_entitlements.sh \
-  check_tracked_secrets.sh; do
+  check_tracked_secrets.sh \
+  test_workflow_policy.sh; do
   if [[ ! -x "${script_dir}/${required_script}" ]]; then
     record_missing "executable validation script: scripts/m0/${required_script}"
   fi
@@ -157,6 +158,14 @@ fi
 
 if [[ -x "${script_dir}/check_tracked_secrets.sh" ]]; then
   if ! "${script_dir}/check_tracked_secrets.sh" "${repo_root}"; then
+    failures=1
+  fi
+fi
+
+if [[ "${local_only}" -eq 0 \
+  && -f "${repo_root}/.github/workflows/m0-bootstrap.yml" \
+  && -x "${script_dir}/test_workflow_policy.sh" ]]; then
+  if ! "${script_dir}/test_workflow_policy.sh" "${repo_root}"; then
     failures=1
   fi
 fi

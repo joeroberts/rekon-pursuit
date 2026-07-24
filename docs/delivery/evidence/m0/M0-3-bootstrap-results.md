@@ -1,0 +1,103 @@
+# M0-3 Native Bootstrap Results
+
+**State:** Ready for independent review; remote GitHub Actions evidence is **PENDING**. This record is not M0-3 acceptance and does not release M0-4, M1, or `M0-GATE-01`.
+
+**Scope:** Native bootstrap, local validation, and pinned CI policy only. No tracker feature, persistence, integration, AI, network capability, user data, production credential, identity-based signing, notarization, stapling, DMG, or release publication is present.
+
+**Evidence baseline:** `76a7a127fc8e9706bdf4f0832a7f10bb8be62c41` (`fix: redact tracked-secret diagnostics`). The Task 4 evidence commit is the commit containing this file and can be resolved with `git log -1 --format=%H -- docs/delivery/evidence/m0/M0-3-bootstrap-results.md`.
+
+## Test-first workflow-policy evidence
+
+The workflow-policy test was created and executed before the workflow existed.
+
+| Phase | Command | Exit | Redacted result | SHA-256 |
+| --- | --- | ---: | --- | --- |
+| RED | `scripts/m0/test_workflow_policy.sh .` | `1` | `MISSING: workflow policy target: .github/workflows/m0-bootstrap.yml` | Command `747b84670d6483eee1810340589d6897fecd0a0f1c25921f99d5073ffed46739`; output `ebb3baf487b618c977d1871cca01671e5904abbb8623970c1b58f06d6dbd06c1` |
+| GREEN | `scripts/m0/test_workflow_policy.sh .` | `0` | `M0 bootstrap workflow policy passed.` | Command `747b84670d6483eee1810340589d6897fecd0a0f1c25921f99d5073ffed46739`; output `700c99f35deec4b4eb46a03350847190efc68c9e00dc6c68720c83e6b2734253` |
+
+The policy test requires:
+
+- `macos-15-intel` for universal validation;
+- `/Applications/Xcode_26.3.app/Contents/Developer`, Xcode `26.3`, and build `17C529`;
+- the complete local bootstrap validator;
+- `macos-14` with an explicit `arm64` assertion;
+- checksum-protected transfer and launch of the identity-free universal archive; and
+- absence of `macos-latest`, explicit secret access, identity-based signing, notarization, stapling, release publication, and user-data integration configuration.
+
+The workflow uses read-only repository permission and disables persisted checkout credentials. Its cross-job artifact is the bootstrap app only, has one-day retention, contains no user data, and is not a release publication.
+
+## Local verification
+
+Local verification ran from the staged Task 4 tree so the tracked-secret scan included the proposed workflow and policy test.
+
+### Toolchain
+
+Command output SHA-256: `107efc1aff1211e6ea3fb0299dce377ab9d32c23027c2956ae1b0b310643abd9`
+
+```text
+Xcode 26.6
+Build version 17F113
+SDK 26.5
+Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)
+Target: arm64-apple-macosx26.0
+```
+
+This identifies the local host toolchain. The project and archive checks independently enforce a macOS `14.0` minimum and both `arm64` and `x86_64` slices; the host target shown by `swift --version` is not used as deployment-target evidence.
+
+### Complete validator
+
+- Command: `scripts/m0/validate_bootstrap.sh .`
+- Command SHA-256: `64f37c5d21f55f2f8354e3226f4462334af8e22b6caed9d83fcff2620e7e229d`
+- Exit: `0`
+- Redacted output SHA-256: `cfb577e3b847e5d47d3e89c8f2cce71d8c40edfbcd1ff4daffd84eecfb4e0773`
+
+```text
+Entitlement allowlist and runtime checks passed.
+Tracked-secret scan passed.
+M0 bootstrap workflow policy passed.
+Entitlement allowlist and runtime checks passed.
+Identity-free archive created outside the repository with Xcode signing disabled.
+ARCHIVE_APP=<ephemeral-output-outside-repository>
+Bootstrap local validation passed.
+```
+
+The redaction removed only ephemeral local paths, host identifiers, timestamps, and Xcode diagnostic timing. The underlying command also passed unit/UI tests, Release build, App Sandbox/Hardened Runtime inspection, the entitlement denylist, dependency and tracked-secret scans, identity-free archive checks, `arm64`/`x86_64` slice inspection, per-slice macOS `14.0` minimum inspection, and non-system dynamic-dependency rejection.
+
+### Negative and regression wrapper
+
+- Command: `scripts/m0/test_validate_bootstrap.sh`
+- Command SHA-256: `3d6f7f7b81e7e4730a4db3916222e1273a219aeeae153d8de8b31488efc7bc01`
+- Exit: `0`
+- Output SHA-256: `d93084560ab8f4d91b6c1d87cc8f46ec8dd19bb1c39b84c8aa3e869913a75617`
+
+```text
+PASS: tracked-secret scanner reports only safe match metadata
+PASS: unsupported-target rejected with the expected diagnostic
+PASS: network-entitlement rejected with the expected diagnostic
+PASS: Task-4 workflow policy passed
+PASS: real-tree static validation passed after Task 4
+PASS: real-tree local validation passed
+M0 bootstrap validation tests passed.
+```
+
+## Remote GitHub Actions evidence
+
+The workflow exists, but no remote result is claimed until GitHub executes the committed workflow.
+
+| Required remote evidence | State |
+| --- | --- |
+| Workflow run URL and run ID | **PENDING** |
+| `macos-15-intel` image identity | **PENDING** |
+| Exact CI `xcodebuild -version` output: Xcode `26.3` / `17C529` | **PENDING** |
+| Clean universal validator result and archive checksum | **PENDING** |
+| `macos-14` image identity and explicit `arm64` assertion | **PENDING** |
+| Downloaded archive checksum, universal slices, and launch smoke | **PENDING** |
+
+The local Xcode `26.6` / CI Xcode `26.3` minor-version skew and the actual macOS 14 archived-app launch remain open until those remote rows have evidence. A missing or mismatched runner image/toolchain is a failed gate, not permission to float to `macos-latest` or change the macOS `14.0` deployment target.
+
+## Boundaries and next gate
+
+- Developer ID signing, notarization, stapling, DMG construction, and distribution remain M5-only.
+- No signing certificate, provisioning profile, private key, secret expression, recovery material, or personal content is referenced by the workflow.
+- Independent Code Review, QA/Test, Architect, Security/Privacy, TPM, and Delivery Manager decisions are still required.
+- M0-3 remains unaccepted; M0-4, M1, and `M0-GATE-01` remain blocked.

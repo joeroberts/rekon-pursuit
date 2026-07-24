@@ -88,30 +88,24 @@ expect_failure_containing \
   "${network_entitlement_fixture}/scripts/m0/validate_bootstrap.sh" \
   --static-only "${network_entitlement_fixture}"
 
-task4_output="${fixture_root}/task4-workflow-gate.log"
-if "${script_dir}/validate_bootstrap.sh" --static-only "${repo_root}" \
+task4_output="${fixture_root}/task4-workflow-policy.log"
+if ! "${script_dir}/test_workflow_policy.sh" "${repo_root}" \
   >"${task4_output}" 2>&1; then
-  printf 'FAIL: the unreleased Task-4 workflow gate unexpectedly passed\n' >&2
-  failures=$((failures + 1))
-elif ! grep -Fq \
-  "MISSING: CI workflow: .github/workflows/m0-bootstrap.yml" \
-  "${task4_output}"; then
-  printf 'FAIL: Task-4 gate did not report the missing workflow\n' >&2
+  printf 'FAIL: Task-4 workflow policy failed\n' >&2
   sed -n '1,120p' "${task4_output}" >&2
   failures=$((failures + 1))
 else
-  unexpected_task4_failures="$(
-    grep -E '^(ERROR|MISSING):' "${task4_output}" \
-      | grep -Fv 'MISSING: CI workflow: .github/workflows/m0-bootstrap.yml' \
-      || true
-  )"
-  if [[ -n "${unexpected_task4_failures}" ]]; then
-    printf 'FAIL: Task-4 gate has unexpected failures:\n%s\n' \
-      "${unexpected_task4_failures}" >&2
-    failures=$((failures + 1))
-  else
-    printf 'PASS: Task-4 workflow remains the only static readiness gate\n'
-  fi
+  printf 'PASS: Task-4 workflow policy passed\n'
+fi
+
+task4_static_output="${fixture_root}/task4-static-validation.log"
+if ! "${script_dir}/validate_bootstrap.sh" --static-only "${repo_root}" \
+  >"${task4_static_output}" 2>&1; then
+  printf 'FAIL: real-tree static validation failed after Task 4\n' >&2
+  sed -n '1,120p' "${task4_static_output}" >&2
+  failures=$((failures + 1))
+else
+  printf 'PASS: real-tree static validation passed after Task 4\n'
 fi
 
 local_output="${fixture_root}/local-validation.log"

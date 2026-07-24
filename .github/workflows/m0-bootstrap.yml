@@ -1,0 +1,122 @@
+name: M0 bootstrap validation
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m0-bootstrap-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  universal-validation:
+    name: Universal archive and local policy
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      XCODE_VERSION: "26.3"
+      XCODE_BUILD: "17C529"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Verify pinned Xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "${DEVELOPER_DIR}"
+          version_output="$(xcodebuild -version)"
+          grep -Fxq "Xcode ${XCODE_VERSION}" <<<"${version_output}"
+          grep -Fxq "Build version ${XCODE_BUILD}" <<<"${version_output}"
+
+      - name: Verify workflow policy
+        shell: bash
+        run: scripts/m0/test_workflow_policy.sh .
+
+      - name: Run complete bootstrap validator
+        shell: bash
+        run: scripts/m0/validate_bootstrap.sh .
+
+      - name: Package identity-free universal archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive_root="${RUNNER_TEMP}/m0-archive"
+          scripts/m0/build_unsigned_archive.sh . "${archive_root}"
+          app_parent="${archive_root}/RekonPursuit.xcarchive/Products/Applications"
+          (
+            cd "${app_parent}"
+            tar -czf "${RUNNER_TEMP}/RekonPursuit-unsigned.tar.gz" \
+              RekonPursuit.app
+          )
+          (
+            cd "${RUNNER_TEMP}"
+            shasum -a 256 RekonPursuit-unsigned.tar.gz \
+              > RekonPursuit-unsigned.tar.gz.sha256
+          )
+
+      - name: Transfer archive to baseline smoke
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: m0-unsigned-universal-app
+          path: |
+            ${{ runner.temp }}/RekonPursuit-unsigned.tar.gz
+            ${{ runner.temp }}/RekonPursuit-unsigned.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 1
+
+  macos-14-smoke:
+    name: macOS 14 arm64 archived-app smoke
+    needs: universal-validation
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Verify baseline runner and static policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "arm64"
+          scripts/m0/validate_bootstrap.sh --static-only .
+
+      - name: Retrieve identity-free archive
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: m0-unsigned-universal-app
+          path: ${{ runner.temp }}/m0-smoke
+
+      - name: Verify and launch archived universal app
+        shell: bash
+        run: |
+          set -euo pipefail
+          smoke_root="${RUNNER_TEMP}/m0-smoke"
+          (
+            cd "${smoke_root}"
+            shasum -a 256 -c RekonPursuit-unsigned.tar.gz.sha256
+            tar -xzf RekonPursuit-unsigned.tar.gz
+          )
+          smoke_binary="${smoke_root}/RekonPursuit.app/Contents/MacOS/RekonPursuit"
+          archive_archs="$(lipo -archs "${smoke_binary}")"
+          [[ " ${archive_archs} " == *" arm64 "* ]]
+          [[ " ${archive_archs} " == *" x86_64 "* ]]
+          "${smoke_binary}" >"${RUNNER_TEMP}/m0-smoke.log" 2>&1 &
+          smoke_pid=$!
+          trap 'kill "${smoke_pid}" 2>/dev/null || true' EXIT
+          sleep 3
+          if ! kill -0 "${smoke_pid}" 2>/dev/null; then
+            sed -n '1,120p' "${RUNNER_TEMP}/m0-smoke.log" >&2
+            exit 1
+          fi
