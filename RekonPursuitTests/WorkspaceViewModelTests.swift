@@ -38,6 +38,15 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertTrue(model.canCreateWorkspace)
     }
 
+    func testCorruptWorkspaceDoesNotOfferReplacement() {
+        let model = WorkspaceViewModel(openWorkspace: { .corrupt }, createWorkspace: { throw WorkspaceStoreError.injectedFailure })
+
+        model.start()
+
+        XCTAssertEqual(model.statusMessage, "The local workspace is unreadable. It has not been replaced; keep its files intact.")
+        XCTAssertFalse(model.canCreateWorkspace)
+    }
+
     private func makeStore() throws -> WorkspaceStore {
         let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent("rekon-view-model-\(UUID().uuidString).sqlite")
         let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 5, count: 32))

@@ -6,11 +6,12 @@ enum WorkspaceOpenState: Equatable {
     case missingKey
     case locked
     case denied
+    case corrupt
     case unavailable
 
     static func == (lhs: WorkspaceOpenState, rhs: WorkspaceOpenState) -> Bool {
         switch (lhs, rhs) {
-        case (.ready, .ready), (.missingKey, .missingKey), (.locked, .locked), (.denied, .denied), (.unavailable, .unavailable):
+        case (.ready, .ready), (.missingKey, .missingKey), (.locked, .locked), (.denied, .denied), (.corrupt, .corrupt), (.unavailable, .unavailable):
             true
         default:
             false
@@ -64,6 +65,8 @@ final class WorkspaceSession {
             case .denied: return .denied
             case .unavailable: return .unavailable
             }
+        } catch is EncryptedDatabaseError {
+            return .corrupt
         } catch {
             return .unavailable
         }

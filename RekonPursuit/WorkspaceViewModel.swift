@@ -164,6 +164,9 @@ final class WorkspaceViewModel: ObservableObject {
         case .denied:
             statusMessage = "Keychain access was denied. Allow access to reopen the local workspace."
             canCreateWorkspace = false
+        case .corrupt:
+            statusMessage = "The local workspace is unreadable. It has not been replaced; keep its files intact."
+            canCreateWorkspace = false
         case .unavailable:
             statusMessage = "The local workspace could not be opened."
             canCreateWorkspace = false
