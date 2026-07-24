@@ -98,6 +98,24 @@ else
   printf 'PASS: Task-4 workflow policy passed\n'
 fi
 
+# The macOS 14 smoke runner is a distinct evidence environment.  Its runner
+# image identity must be retained by that job, rather than being satisfied by
+# the universal-validation job's artifact.
+smoke_identity_fixture="${fixture_root}/missing-smoke-runner-identity"
+mkdir -p "${smoke_identity_fixture}/.github/workflows" "${smoke_identity_fixture}/scripts/m0"
+cp "${repo_root}/.github/workflows/m0-bootstrap.yml" \
+  "${smoke_identity_fixture}/.github/workflows/m0-bootstrap.yml"
+cp "${script_dir}/test_workflow_policy.sh" \
+  "${smoke_identity_fixture}/scripts/m0/"
+sed -i '' \
+  '/^  macos-14-smoke:/,$ { /ImageOS=/d; /ImageVersion=/d; /m0-macos-14-runner-identity/d; }' \
+  "${smoke_identity_fixture}/.github/workflows/m0-bootstrap.yml"
+expect_failure_containing \
+  "missing-smoke-runner-identity" \
+  "workflow must retain macos-14 runner image identity evidence" \
+  "${smoke_identity_fixture}/scripts/m0/test_workflow_policy.sh" \
+  "${smoke_identity_fixture}"
+
 task4_static_output="${fixture_root}/task4-static-validation.log"
 if ! "${script_dir}/validate_bootstrap.sh" --static-only "${repo_root}" \
   >"${task4_static_output}" 2>&1; then

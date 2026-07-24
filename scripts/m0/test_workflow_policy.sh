@@ -30,6 +30,23 @@ require_literal() {
   fi
 }
 
+require_job_literal() {
+  local job_name="$1"
+  local expected="$2"
+  local description="$3"
+  local job_body
+
+  job_body="$(awk -v job="${job_name}" '
+    $0 == "  " job ":" { in_job = 1; next }
+    in_job && /^  [[:alnum:]_-]+:$/ { exit }
+    in_job { print }
+  ' "${workflow_path}")"
+
+  if [[ -z "${job_body}" ]] || ! grep -Fq -- "${expected}" <<<"${job_body}"; then
+    record_failure "workflow must ${description}"
+  fi
+}
+
 if [[ ! -f "${workflow_path}" ]]; then
   printf 'MISSING: workflow policy target: .github/workflows/m0-bootstrap.yml\n' >&2
   exit 1
@@ -71,6 +88,22 @@ require_literal \
 require_literal \
   'runs-on: macos-14' \
   'pin the baseline smoke job to macos-14'
+require_job_literal \
+  'macos-14-smoke' \
+  'ImageOS=' \
+  'retain macos-14 runner image identity evidence'
+require_job_literal \
+  'macos-14-smoke' \
+  'ImageVersion=' \
+  'retain macos-14 runner image version evidence'
+require_job_literal \
+  'macos-14-smoke' \
+  'm0-macos-14-runner-identity.txt' \
+  'write macos-14 runner identity evidence to a dedicated artifact file'
+require_job_literal \
+  'macos-14-smoke' \
+  'name: m0-macos-14-runner-identity' \
+  'retain macos-14 runner image identity evidence as a dedicated artifact'
 require_literal \
   'test "$(uname -m)" = "arm64"' \
   'assert the macos-14 runner is arm64'

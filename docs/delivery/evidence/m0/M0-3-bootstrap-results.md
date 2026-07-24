@@ -21,6 +21,9 @@ The policy test requires:
 - `/Applications/Xcode_26.3.app/Contents/Developer`, Xcode `26.3`, and build `17C529`;
 - the complete local bootstrap validator;
 - `macos-14` with an explicit `arm64` assertion;
+- a separate retained `m0-macos-14-runner-identity` artifact, created by the
+  `macos-14-smoke` job itself, with its `ImageOS`, `ImageVersion`, OS, and
+  architecture identity; and
 - checksum-protected transfer and launch of the identity-free universal archive; and
 - absence of `macos-latest`, explicit secret access, identity-based signing, notarization, stapling, release publication, and user-data integration configuration.
 
@@ -90,7 +93,7 @@ The workflow exists, but no remote result is claimed until GitHub executes the c
 | `macos-15-intel` image identity | **PENDING** |
 | Exact CI `xcodebuild -version` output: Xcode `26.3` / `17C529` | **PENDING** |
 | Clean universal validator result and archive checksum | **PENDING** |
-| `macos-14` image identity and explicit `arm64` assertion | **PENDING** |
+| `macos-14` job-specific `ImageOS` / `ImageVersion` artifact and explicit `arm64` assertion | **PENDING** |
 | Downloaded archive checksum, universal slices, and launch smoke | **PENDING** |
 
 The local Xcode `26.6` / CI Xcode `26.3` minor-version skew and the actual macOS 14 archived-app launch remain open until those remote rows have evidence. A missing or mismatched runner image/toolchain is a failed gate, not permission to float to `macos-latest` or change the macOS `14.0` deployment target.
