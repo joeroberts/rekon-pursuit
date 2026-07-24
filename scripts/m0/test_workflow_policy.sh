@@ -47,6 +47,23 @@ require_job_literal() {
   fi
 }
 
+forbid_job_literal() {
+  local job_name="$1"
+  local forbidden="$2"
+  local description="$3"
+  local job_body
+
+  job_body="$(awk -v job="${job_name}" '
+    $0 == "  " job ":" { in_job = 1; next }
+    in_job && /^  [[:alnum:]_-]+:$/ { exit }
+    in_job { print }
+  ' "${workflow_path}")"
+
+  if grep -Fq -- "${forbidden}" <<<"${job_body}"; then
+    record_failure "workflow must not ${description}"
+  fi
+}
+
 if [[ ! -f "${workflow_path}" ]]; then
   printf 'MISSING: workflow policy target: .github/workflows/m0-bootstrap.yml\n' >&2
   exit 1
@@ -64,21 +81,42 @@ require_literal \
 require_literal \
   'XCODE_BUILD: "17C529"' \
   'declare the exact CI Xcode build 17C529'
-require_literal \
+require_job_literal \
+  'universal-validation' \
   'printf '\''%s\n'\'' "${version_output}"' \
-  'emit the exact xcodebuild version output to the CI log'
-require_literal \
+  'emit the exact xcodebuild version output from universal-validation to the CI log'
+require_job_literal \
+  'universal-validation' \
   'tee "${RUNNER_TEMP}/m0-runner-toolchain-identity.txt"' \
-  'write a redacted runner and toolchain identity evidence artifact'
-require_literal \
+  'write universal-validation runner and toolchain identity evidence'
+require_job_literal \
+  'universal-validation' \
   'name: m0-runner-toolchain-identity' \
-  'retain the runner and toolchain identity evidence artifact'
-require_literal \
-  'ImageOS=' \
-  'record the GitHub runner image operating-system identity'
-require_literal \
-  'ImageVersion=' \
-  'record the GitHub runner image version identity'
+  'retain universal-validation runner and toolchain identity evidence'
+require_job_literal \
+  'universal-validation' \
+  ': "${ImageOS:?ImageOS must be set by GitHub Actions}"' \
+  'require universal-validation ImageOS to be non-empty'
+require_job_literal \
+  'universal-validation' \
+  ': "${ImageVersion:?ImageVersion must be set by GitHub Actions}"' \
+  'require universal-validation ImageVersion to be non-empty'
+require_job_literal \
+  'universal-validation' \
+  'printf '\''ImageOS=%s\n'\'' "${ImageOS}"' \
+  'record universal-validation ImageOS evidence'
+require_job_literal \
+  'universal-validation' \
+  'printf '\''ImageVersion=%s\n'\'' "${ImageVersion}"' \
+  'record universal-validation ImageVersion evidence'
+forbid_job_literal \
+  'universal-validation' \
+  '${ImageOS:-unknown}' \
+  'silently fall back to unknown ImageOS evidence in universal-validation'
+forbid_job_literal \
+  'universal-validation' \
+  '${ImageVersion:-unknown}' \
+  'silently fall back to unknown ImageVersion evidence in universal-validation'
 require_literal \
   'scripts/m0/test_workflow_policy.sh .' \
   'run this workflow-policy regression'
@@ -90,12 +128,28 @@ require_literal \
   'pin the baseline smoke job to macos-14'
 require_job_literal \
   'macos-14-smoke' \
-  'ImageOS=' \
-  'retain macos-14 runner image identity evidence'
+  ': "${ImageOS:?ImageOS must be set by GitHub Actions}"' \
+  'require macos-14-smoke ImageOS to be non-empty'
 require_job_literal \
   'macos-14-smoke' \
-  'ImageVersion=' \
-  'retain macos-14 runner image version evidence'
+  ': "${ImageVersion:?ImageVersion must be set by GitHub Actions}"' \
+  'require macos-14-smoke ImageVersion to be non-empty'
+require_job_literal \
+  'macos-14-smoke' \
+  'printf '\''ImageOS=%s\n'\'' "${ImageOS}"' \
+  'record macos-14 runner image identity evidence'
+require_job_literal \
+  'macos-14-smoke' \
+  'printf '\''ImageVersion=%s\n'\'' "${ImageVersion}"' \
+  'record macos-14 runner image version evidence'
+forbid_job_literal \
+  'macos-14-smoke' \
+  '${ImageOS:-unknown}' \
+  'silently fall back to unknown ImageOS evidence in macos-14-smoke'
+forbid_job_literal \
+  'macos-14-smoke' \
+  '${ImageVersion:-unknown}' \
+  'silently fall back to unknown ImageVersion evidence in macos-14-smoke'
 require_job_literal \
   'macos-14-smoke' \
   'm0-macos-14-runner-identity.txt' \

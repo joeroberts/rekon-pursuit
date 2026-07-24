@@ -34,13 +34,15 @@ jobs:
         run: |
           set -euo pipefail
           test -d "${DEVELOPER_DIR}"
+          : "${ImageOS:?ImageOS must be set by GitHub Actions}"
+          : "${ImageVersion:?ImageVersion must be set by GitHub Actions}"
           version_output="$(xcodebuild -version)"
           grep -Fxq "Xcode ${XCODE_VERSION}" <<<"${version_output}"
           grep -Fxq "Build version ${XCODE_BUILD}" <<<"${version_output}"
           {
             printf '%s\n' "${version_output}"
-            printf 'ImageOS=%s\n' "${ImageOS:-unknown}"
-            printf 'ImageVersion=%s\n' "${ImageVersion:-unknown}"
+            printf 'ImageOS=%s\n' "${ImageOS}"
+            printf 'ImageVersion=%s\n' "${ImageVersion}"
             printf 'RUNNER_OS=%s\n' "${RUNNER_OS}"
             printf 'RUNNER_ARCH=%s\n' "${RUNNER_ARCH}"
             printf 'uname_machine=%s\n' "$(uname -m)"
@@ -112,9 +114,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          : "${ImageOS:?ImageOS must be set by GitHub Actions}"
+          : "${ImageVersion:?ImageVersion must be set by GitHub Actions}"
           {
-            printf 'ImageOS=%s\n' "${ImageOS:-unknown}"
-            printf 'ImageVersion=%s\n' "${ImageVersion:-unknown}"
+            printf 'ImageOS=%s\n' "${ImageOS}"
+            printf 'ImageVersion=%s\n' "${ImageVersion}"
             printf 'RUNNER_OS=%s\n' "${RUNNER_OS}"
             printf 'RUNNER_ARCH=%s\n' "${RUNNER_ARCH}"
             printf 'uname_machine=%s\n' "$(uname -m)"

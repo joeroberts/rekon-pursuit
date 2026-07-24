@@ -98,6 +98,24 @@ else
   printf 'PASS: Task-4 workflow policy passed\n'
 fi
 
+# The universal-validation runner supplies the archive and its own identity
+# evidence.  It cannot rely on the macOS 14 smoke job's capture, nor may an
+# absent GitHub image value be silently written as "unknown".
+universal_identity_fixture="${fixture_root}/missing-universal-runner-identity"
+mkdir -p "${universal_identity_fixture}/.github/workflows" "${universal_identity_fixture}/scripts/m0"
+cp "${repo_root}/.github/workflows/m0-bootstrap.yml" \
+  "${universal_identity_fixture}/.github/workflows/m0-bootstrap.yml"
+cp "${script_dir}/test_workflow_policy.sh" \
+  "${universal_identity_fixture}/scripts/m0/"
+sed -i '' \
+  '/^  universal-validation:/,/^  macos-14-smoke:/ { s/: "${ImageOS:?ImageOS must be set by GitHub Actions}"/: # ImageOS check removed/; s/: "${ImageVersion:?ImageVersion must be set by GitHub Actions}"/: # ImageVersion check removed/; }' \
+  "${universal_identity_fixture}/.github/workflows/m0-bootstrap.yml"
+expect_failure_containing \
+  "missing-universal-runner-identity" \
+  "workflow must require universal-validation ImageOS to be non-empty" \
+  "${universal_identity_fixture}/scripts/m0/test_workflow_policy.sh" \
+  "${universal_identity_fixture}"
+
 # The macOS 14 smoke runner is a distinct evidence environment.  Its runner
 # image identity must be retained by that job, rather than being satisfied by
 # the universal-validation job's artifact.
