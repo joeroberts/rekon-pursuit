@@ -33,13 +33,12 @@ The following paths are implementation outputs, not files created by this planni
 ## Dependency graph and release rule
 
 ```text
-M0-1 Compatibility/toolchain evidence ─┐
-                                       ├─> M0 gate review ─> M1-1 Encrypted local record spine
-M0-2 Lifecycle-policy integration ─────┤                         ▲
-                                       │                         │
-M0-3 SwiftUI/Xcode bootstrap + CI ─────┤                         │
-                                       │                         │
-M0-4 Fixture/harness foundation ───────┘─────────────────────────┘
+M0-1 Compatibility/toolchain evidence
+  → M0-2 Lifecycle-policy integration
+  → M0-3 SwiftUI/Xcode bootstrap + CI
+  → M0-4 Fixture/harness foundation
+  → M0 gate review
+  → M1-1 Encrypted local record spine
 ```
 
 M0 tasks are released serially: M0-1, then M0-2, then M0-3, then M0-4. This ordering keeps one durable evidence path, prevents project-generated proof from being claimed before a project exists, and avoids shared configuration conflicts. M1-1 starts only after all four M0 tasks and the formal M0 gate are accepted.
@@ -211,7 +210,7 @@ For every task below:
 - [ ] Write failing transaction tests before persistence code: inject a write failure after domain mutation/before event append and after event staging/before commit; both must leave neither a partial opportunity nor orphan activity event. Prove the writer serializes mutations and UI/database reads use the approved boundary.
 - [ ] Write failing encrypted-storage tests before the selected encryption integration: correct key opens; wrong/missing key rejects; closed database cannot be read with stock SQLite; keys/SQLCipher parameters never appear in logs; Keychain locked/denied/missing states show recovery guidance and never create plaintext or blank replacement workspaces.
 - [ ] Write failing migration tests with `MIGRATE-NMINUS1-001` and `MIGRATE-FAIL-001`: forward migration preserves IDs/timestamps/links/events; injected failure rolls back and retains the pre-migration recovery path; migrations are forward-only, exclusive, checksummed, idempotent, and recorded in `migration_history`.
-- [ ] Write failing lifecycle/recovery tests with `WS-READONLY-001`, `DB-CORRUPT-001`, `RECOVERY-ENROLL-001`, `RECOVERY-MISSING-001`, `BACKUP-VALID-001`, `BACKUP-CORRUPT-001`, `BACKUP-SWAP-001`, `RESTORE-KEYCHAIN-001`, `RESTORE-CLEANMAC-001`, `DELETE-LOGICAL-001`, `DELETE-QUEUED-WORK-001`, `BACKUP-RETENTION-001`, `BACKUP-PURGE-001`, `EXPORT-UNENCRYPTED-001`, `EXPORT-CANCELLED-001`, and `LIFECYCLE-REDACTION-001`. Tests must reflect the M0-2 contract exactly, including restore to a new workspace and no partial overwrite.
+- [ ] Write failing lifecycle/recovery tests with `WS-READONLY-001`, `DB-CORRUPT-001`, `RECOVERY-ENROLL-001`, `RECOVERY-MISSING-001`, `BACKUP-VALID-001`, `BACKUP-CORRUPT-001`, `BACKUP-SWAP-001`, `RESTORE-KEYCHAIN-001`, `RESTORE-CLEANMAC-001`, `DELETE-LOGICAL-001`, `DELETE-QUEUED-WORK-001`, `BACKUP-RETENTION-001`, `BACKUP-PURGE-001`, `EXPORT-ENCRYPTED-001`, `EXPORT-UNENCRYPTED-001`, `EXPORT-CANCELLED-001`, and `LIFECYCLE-REDACTION-001`. Tests must reflect the M0-2 contract exactly, including encrypted-default export, restore to a new workspace, and no partial overwrite.
 - [ ] Write failing local-boundary/accessibility tests: `RECON-OFFLINE-001` proves zero transport requests; keyboard reaches visible create, validation, and recovery actions; status is not color-only; no test requires live Keychain/network.
 - [ ] Implement the minimal code necessary to pass the preceding tests, then run the full deterministic M1 suite, clean checkout build, architecture/entitlement inspection, dependency/secret scan, and macOS-14.0 clean-device smoke.
 

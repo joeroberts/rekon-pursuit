@@ -1,6 +1,6 @@
 # Rekon Pursuit — M0 Readiness and Delivery Ledger
 
-- **Status:** M0 in progress — M0-1 evidence-only task is ready for independent acceptance after full-Xcode selection evidence; no application feature, native-project, or CI-bootstrap work released
+- **Status:** M0 in progress — M0-1 is accepted; M0-2 lifecycle-policy integration is released and awaiting independent acceptance. No application feature, native-project, or CI-bootstrap work is released.
 - **Last updated:** 2026-07-24
 - **Delivery Manager:** Independent Delivery Manager agent
 - **Authority:** This ledger is the durable delivery record required by [`AGENTS.md`](../../AGENTS.md). The approved [PRD](../product/prd.md), [architecture specification](../architecture/specification.md), [implementation roadmap](roadmap.md), [M0 test and fixture strategy](m0-test-fixture-strategy.md), [compatibility matrix](../architecture/macos-compatibility-matrix.md), and accepted [ADR-001](../architecture/adr/ADR-001-local-data-lifecycle.md) remain controlling artifacts.
