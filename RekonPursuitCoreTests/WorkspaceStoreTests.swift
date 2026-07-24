@@ -116,6 +116,13 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.contacts(forOpportunityID: second.id), [contact])
     }
 
+    func testCSVPreviewMapsTitleAndCompanyAndRejectsIncompleteRows() throws {
+        let preview = try CSVOpportunityImporter.preview(data: Data("title,company\nProduct Manager,Rekon Labs\n,Missing Co\n".utf8))
+
+        XCTAssertEqual(preview.validRows, [CreateOpportunity(title: "Product Manager", company: "Rekon Labs")])
+        XCTAssertEqual(preview.invalidRowCount, 1)
+    }
+
     private func makeStore(failBeforeActivityInsert: Bool = false) throws -> WorkspaceStore {
         let database = try EncryptedDatabase.open(url: databaseURL, key: key)
         var identifier = 0

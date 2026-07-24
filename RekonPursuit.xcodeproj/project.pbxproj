@@ -25,6 +25,7 @@
 		100000000000000000000016 /* WorkspaceOpenState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000021 /* WorkspaceOpenState.swift */; };
 		100000000000000000000017 /* WorkspaceViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000022 /* WorkspaceViewModelTests.swift */; };
 		100000000000000000000018 /* WorkspaceViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000023 /* WorkspaceViewModel.swift */; };
+		100000000000000000000019 /* CSVOpportunityImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000024 /* CSVOpportunityImporter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -68,6 +69,7 @@
 		200000000000000000000021 /* WorkspaceOpenState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/WorkspaceOpenState.swift; sourceTree = "<group>"; };
 		200000000000000000000022 /* WorkspaceViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceViewModelTests.swift; sourceTree = "<group>"; };
 		200000000000000000000023 /* WorkspaceViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceViewModel.swift; sourceTree = "<group>"; };
+		200000000000000000000024 /* CSVOpportunityImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Import/CSVOpportunityImporter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -110,6 +112,7 @@
 				200000000000000000000018 /* Migrations.swift */,
 				200000000000000000000020 /* WorkspaceKeyStore.swift */,
 				200000000000000000000021 /* WorkspaceOpenState.swift */,
+				200000000000000000000024 /* CSVOpportunityImporter.swift */,
 				700000000000000000000005 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -326,6 +329,7 @@
 				100000000000000000000015 /* WorkspaceKeyStore.swift in Sources */,
 				100000000000000000000016 /* WorkspaceOpenState.swift in Sources */,
 				100000000000000000000018 /* WorkspaceViewModel.swift in Sources */,
+				100000000000000000000019 /* CSVOpportunityImporter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -57,7 +57,7 @@ struct ActivityEvent: Equatable {
     let occurredAt: Date
 }
 
-struct CreateOpportunity {
+struct CreateOpportunity: Equatable {
     let title: String
     let company: String
     let stage: PipelineStage
