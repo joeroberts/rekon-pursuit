@@ -68,20 +68,21 @@ final class WorkspaceSession {
     private let root: URL
     private let keyStore: WorkspaceKeyStore
     private let newKey: @MainActor () throws -> Data
-    private let now: Date
+    private let clock: () -> Date
     private let creationFault: WorkspaceCreationFault?
 
     init(
         root: URL,
         keyStore: WorkspaceKeyStore = KeychainWorkspaceKeyStore(),
         newKey: @MainActor @escaping () throws -> Data = WorkspaceSession.generateKey,
-        now: Date = .now,
+        now: Date? = nil,
+        clock: @escaping () -> Date = { .now },
         creationFault: WorkspaceCreationFault? = nil
     ) {
         self.root = root
         self.keyStore = keyStore
         self.newKey = newKey
-        self.now = now
+        self.clock = now.map { fixedNow in { fixedNow } } ?? clock
         self.creationFault = creationFault
     }
 
@@ -242,7 +243,7 @@ final class WorkspaceSession {
             try? database.close()
             throw WorkspaceCreationFault.finalReopen
         }
-        return try WorkspaceStore(database: database, now: now, actorID: "local-user", correlationID: UUID().uuidString)
+        return try WorkspaceStore(database: database, clock: clock, actorID: "local-user", correlationID: UUID().uuidString)
     }
 
     private static func generateKey() throws -> Data {
