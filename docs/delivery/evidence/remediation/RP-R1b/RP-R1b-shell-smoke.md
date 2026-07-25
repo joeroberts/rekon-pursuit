@@ -1,7 +1,7 @@
 # RP-R1b reactive shell — implementer evidence
 
-**State:** Implementation verification complete; independent review and the
-required operator-facing smoke remain pending.
+**State:** Implementation verification complete; independent review remains
+pending.
 
 ## Scope delivered
 
@@ -23,10 +23,10 @@ required operator-facing smoke remain pending.
 | UI navigation checks | `xcodebuild test -quiet -project RekonPursuit.xcodeproj -scheme RekonPursuit -destination 'platform=macOS' -only-testing:RekonPursuitUITests` | Passed: default Needs Attention/sidebar/workspace-gate state and Contacts navigation. The test asserts the gate's visible `workspace-gate-status` static text; SwiftUI does not expose the `GroupBox` wrapper as the `Other` element previously queried. |
 | Isolated harness preflight | `scripts/remediation/run_r1a_isolated_smoke.sh .` | Passed: temporary sandboxed app namespace and container were created. |
 
-## Pending acceptance smoke
+## 900 × 640 manual smoke
 
-At a 900 × 640 window, an independent operator must still record the required
-manual sequence in the temporary app: create workspace, create and edit one
-synthetic opportunity, select Pipeline and Activity & AI, then select Import
-CSV and preview the synthetic fixture in the native chooser. This document
-does not claim that manual sequence was automated.
+**Result: Completed by direct user observation on 2026-07-25.** In the
+temporary app at 900 × 640, the user completed the required sequence: create
+workspace, create and edit one synthetic opportunity, select Pipeline and
+Activity & AI, then select Import CSV and preview the synthetic fixture in the
+native chooser. This is manual evidence, not an automation claim.

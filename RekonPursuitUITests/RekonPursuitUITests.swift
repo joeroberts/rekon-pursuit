@@ -18,6 +18,6 @@ final class RekonPursuitUITests: XCTestCase {
 
         app.staticTexts["sidebar-contacts"].click()
 
-        XCTAssertTrue(app.staticTexts["New contact"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["contact-name"].waitForExistence(timeout: 5))
     }
 }
