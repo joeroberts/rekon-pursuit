@@ -68,6 +68,8 @@ struct ContentView: View {
                 TextField("Company", text: $model.company)
                     .accessibilityIdentifier("opportunity-company")
                 TextField("Job URL (optional)", text: $model.jobURL)
+                TextField("Job description (optional)", text: $model.jobDescription, axis: .vertical)
+                TextField("Notes (optional)", text: $model.notes, axis: .vertical)
                 Picker("Stage", selection: $model.stage) {
                     ForEach(PipelineStage.allCases, id: \.self) { stage in
                         Text(stage.rawValue).tag(stage)
@@ -216,6 +218,8 @@ struct ContentView: View {
                             .accessibilityIdentifier("selected-opportunity-title")
                         TextField("Company", text: $model.selectedCompany)
                         TextField("Job URL (optional)", text: $model.selectedJobURL)
+                        TextField("Job description (optional)", text: $model.selectedJobDescription, axis: .vertical)
+                        TextField("Notes (optional)", text: $model.selectedNotes, axis: .vertical)
                         Picker("Stage", selection: $model.selectedStage) {
                             ForEach(PipelineStage.allCases, id: \.self) { stage in
                                 Text(stage.rawValue).tag(stage)

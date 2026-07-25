@@ -24,7 +24,11 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var selectedTitle = ""
     @Published var selectedCompany = ""
     @Published var jobURL = ""
+    @Published var jobDescription = ""
+    @Published var notes = ""
     @Published var selectedJobURL = ""
+    @Published var selectedJobDescription = ""
+    @Published var selectedNotes = ""
     @Published var selectedStage: PipelineStage = .saved
     @Published var selectedNextAction = ""
     @Published var selectedDueAt = Date.now
@@ -109,10 +113,12 @@ final class WorkspaceViewModel: ObservableObject {
             return
         }
         do {
-            _ = try store.create(CreateOpportunity(title: title, company: company, stage: stage, nextAction: nextAction, dueAt: nextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !hasDueDate ? nil : dueAt, jobURL: jobURL))
+            _ = try store.create(CreateOpportunity(title: title, company: company, stage: stage, nextAction: nextAction, dueAt: nextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !hasDueDate ? nil : dueAt, jobURL: jobURL, jobDescription: jobDescription, notes: notes))
             title = ""
             company = ""
             jobURL = ""
+            jobDescription = ""
+            notes = ""
             nextAction = ""
             hasDueDate = false
             refreshCounts()
@@ -247,7 +253,9 @@ final class WorkspaceViewModel: ObservableObject {
                 stage: selectedStage,
                 nextAction: selectedNextAction,
                 dueAt: selectedNextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedHasDueDate ? nil : selectedDueAt,
-                jobURL: selectedJobURL
+                jobURL: selectedJobURL,
+                jobDescription: selectedJobDescription,
+                notes: selectedNotes
             )
             refreshCounts()
             statusMessage = "Opportunity updated locally."
@@ -609,6 +617,8 @@ final class WorkspaceViewModel: ObservableObject {
             selectedTitle = ""
             selectedCompany = ""
             selectedJobURL = ""
+            selectedJobDescription = ""
+            selectedNotes = ""
             selectedStage = .saved
             selectedNextAction = ""
             selectedHasDueDate = false
@@ -618,6 +628,8 @@ final class WorkspaceViewModel: ObservableObject {
         selectedTitle = opportunity.title
         selectedCompany = opportunity.company
         selectedJobURL = opportunity.jobURL
+        selectedJobDescription = opportunity.jobDescription
+        selectedNotes = opportunity.notes
         selectedStage = opportunity.stage
         selectedNextAction = opportunity.nextAction
         selectedHasDueDate = opportunity.dueAt != nil

@@ -29,6 +29,21 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.statusMessage, "Saved locally.")
     }
 
+    func testCreatePersistsJobDescriptionAndNotes() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        model.start()
+        model.title = "Product Manager"
+        model.company = "Rekon Labs"
+        model.jobDescription = "Own the roadmap"
+        model.notes = "Referral from Morgan"
+
+        model.createOpportunity()
+
+        XCTAssertEqual(model.opportunities.first?.jobDescription, "Own the roadmap")
+        XCTAssertEqual(model.opportunities.first?.notes, "Referral from Morgan")
+    }
+
     func testMissingKeyShowsRecoveryMessage() {
         let model = WorkspaceViewModel(openWorkspace: { .missingKey }, createWorkspace: { throw WorkspaceStoreError.injectedFailure })
 

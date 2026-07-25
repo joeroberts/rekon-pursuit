@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 14)
+        XCTAssertEqual(try store.schemaVersion(), 15)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -39,7 +39,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 14)
+        XCTAssertEqual(try store.schemaVersion(), 15)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -53,7 +53,8 @@ final class WorkspaceStoreTests: XCTestCase {
                 [.integer(11), .text(WorkspaceMigrations.versionElevenChecksum)],
                 [.integer(12), .text(WorkspaceMigrations.versionTwelveChecksum)],
                 [.integer(13), .text(WorkspaceMigrations.versionThirteenChecksum)],
-                [.integer(14), .text(WorkspaceMigrations.versionFourteenChecksum)]
+                [.integer(14), .text(WorkspaceMigrations.versionFourteenChecksum)],
+                [.integer(15), .text(WorkspaceMigrations.versionFifteenChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
@@ -74,7 +75,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 14)
+        XCTAssertEqual(try store.schemaVersion(), 15)
         XCTAssertEqual(try database.rows("SELECT id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at FROM interactions"), [[.text("interaction-1"), .null, .text("opportunity-1"), .text("Note"), .text("Legacy note"), .real(1_704_067_200), .null]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }

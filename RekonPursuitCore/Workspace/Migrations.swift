@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 enum WorkspaceMigrations {
-    static let currentVersion = 14
+    static let currentVersion = 15
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
@@ -14,6 +14,7 @@ enum WorkspaceMigrations {
     static let versionTwelveChecksum = checksum(for: "12|interactions.contact_id.optional_opportunity.kind.next_touch")
     static let versionThirteenChecksum = checksum(for: "13|opportunities.job_url|posting_checks")
     static let versionFourteenChecksum = checksum(for: "14|document_references.source_hash.final_sent_at")
+    static let versionFifteenChecksum = checksum(for: "15|opportunities.job_description.notes")
 
     static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
@@ -210,6 +211,20 @@ enum WorkspaceMigrations {
                     try database.execute("CREATE INDEX document_references_opportunity_attached_at ON document_references(opportunity_id, attached_at, id)")
                     try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(14), .text(versionFourteenChecksum)])
                     try database.execute("UPDATE schema_migrations SET version = 14")
+                }
+                database.removeMigrationSnapshot()
+            } catch {
+                throw error
+            }
+        }
+        if version < 15 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    try database.execute("ALTER TABLE opportunities ADD COLUMN job_description TEXT NOT NULL DEFAULT ''")
+                    try database.execute("ALTER TABLE opportunities ADD COLUMN notes TEXT NOT NULL DEFAULT ''")
+                    try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(15), .text(versionFifteenChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 15")
                 }
                 database.removeMigrationSnapshot()
             } catch {

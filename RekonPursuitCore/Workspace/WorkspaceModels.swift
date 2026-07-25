@@ -9,8 +9,10 @@ struct Opportunity: Equatable {
     let nextAction: String
     let dueAt: Date?
     let jobURL: String
+    let jobDescription: String
+    let notes: String
 
-    init(id: String, title: String, company: String, createdAt: Date, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil, jobURL: String = "") {
+    init(id: String, title: String, company: String, createdAt: Date, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil, jobURL: String = "", jobDescription: String = "", notes: String = "") {
         self.id = id
         self.title = title
         self.company = company
@@ -19,6 +21,8 @@ struct Opportunity: Equatable {
         self.nextAction = nextAction
         self.dueAt = dueAt
         self.jobURL = jobURL
+        self.jobDescription = jobDescription
+        self.notes = notes
     }
 }
 
@@ -213,14 +217,18 @@ struct CreateOpportunity: Equatable {
     let nextAction: String
     let dueAt: Date?
     let jobURL: String
+    let jobDescription: String
+    let notes: String
 
-    init(title: String, company: String, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil, jobURL: String = "") {
+    init(title: String, company: String, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil, jobURL: String = "", jobDescription: String = "", notes: String = "") {
         self.title = title
         self.company = company
         self.stage = stage
         self.nextAction = nextAction
         self.dueAt = dueAt
         self.jobURL = jobURL
+        self.jobDescription = jobDescription
+        self.notes = notes
     }
 }
 
