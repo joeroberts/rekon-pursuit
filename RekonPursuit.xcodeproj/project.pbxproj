@@ -26,6 +26,7 @@
 		100000000000000000000017 /* WorkspaceViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000022 /* WorkspaceViewModelTests.swift */; };
 		100000000000000000000018 /* WorkspaceViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000023 /* WorkspaceViewModel.swift */; };
 		100000000000000000000019 /* CSVOpportunityImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000024 /* CSVOpportunityImporter.swift */; };
+		100000000000000000000020 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000025 /* AppShellView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,6 +71,7 @@
 		200000000000000000000022 /* WorkspaceViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceViewModelTests.swift; sourceTree = "<group>"; };
 		200000000000000000000023 /* WorkspaceViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceViewModel.swift; sourceTree = "<group>"; };
 		200000000000000000000024 /* CSVOpportunityImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Import/CSVOpportunityImporter.swift; sourceTree = "<group>"; };
+		200000000000000000000025 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -121,6 +123,7 @@
 			isa = PBXGroup;
 			children = (
 				200000000000000000000001 /* BootstrapApp.swift */,
+				200000000000000000000025 /* AppShellView.swift */,
 				200000000000000000000002 /* ContentView.swift */,
 				200000000000000000000003 /* RekonPursuit.entitlements */,
 				200000000000000000000023 /* WorkspaceViewModel.swift */,
@@ -330,6 +333,7 @@
 				100000000000000000000016 /* WorkspaceOpenState.swift in Sources */,
 				100000000000000000000018 /* WorkspaceViewModel.swift in Sources */,
 				100000000000000000000019 /* CSVOpportunityImporter.swift in Sources */,
+				100000000000000000000020 /* AppShellView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
