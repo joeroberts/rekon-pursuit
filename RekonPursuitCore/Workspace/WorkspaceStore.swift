@@ -430,6 +430,39 @@ final class WorkspaceStore {
         }
     }
 
+    func recordDocumentReference(_ command: RecordDocumentReference) throws -> DocumentReference {
+        let filename = command.filename.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sourceHash = command.sourceHash.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !filename.isEmpty, !sourceHash.isEmpty, command.byteCount >= 0 else { throw WorkspaceStoreError.invalidDocumentReference }
+        return try synchronized {
+            guard try isActiveOpportunity(command.opportunityID) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+            let reference = DocumentReference(id: nextIdentifier(), opportunityID: command.opportunityID, kind: command.kind, filename: filename, contentType: command.contentType, sourceHash: sourceHash, byteCount: command.byteCount, attachedAt: now, finalSentAt: nil)
+            try database.transaction {
+                try database.execute("INSERT INTO document_references (id, opportunity_id, kind, filename, content_type, source_hash, byte_count, attached_at, final_sent_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)", values: [.text(reference.id), .text(reference.opportunityID), .text(reference.kind.rawValue), .text(reference.filename), .text(reference.contentType), .text(reference.sourceHash), .integer(Int64(reference.byteCount)), .real(reference.attachedAt.timeIntervalSince1970)])
+                try appendActivity(kind: "document_reference_linked", opportunityID: reference.opportunityID)
+            }
+            return reference
+        }
+    }
+
+    func markDocumentReferenceFinalSent(id: String) throws {
+        try synchronized {
+            let rows = try database.rows("SELECT opportunity_id FROM document_references WHERE id = ? AND final_sent_at IS NULL", values: [.text(id)])
+            guard let row = rows.first, case let .text(opportunityID) = row.first else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+            try database.transaction {
+                try database.execute("UPDATE document_references SET final_sent_at = ? WHERE id = ?", values: [.real(now.timeIntervalSince1970), .text(id)])
+                try appendActivity(kind: "document_reference_marked_final", opportunityID: opportunityID)
+            }
+        }
+    }
+
+    func documentReferences(forOpportunityID opportunityID: String) throws -> [DocumentReference] {
+        try synchronized {
+            guard try isActiveOpportunity(opportunityID) else { return [] }
+            return try database.rows("SELECT id, opportunity_id, kind, filename, content_type, source_hash, byte_count, attached_at, final_sent_at FROM document_references WHERE opportunity_id = ? ORDER BY attached_at DESC, id DESC", values: [.text(opportunityID)]).map(documentReference(from:))
+        }
+    }
+
     func lastTouch(forContactID contactID: String) throws -> Date? {
         try contactInteractions(forContactID: contactID).map(\.occurredAt).max()
     }
@@ -586,6 +619,18 @@ final class WorkspaceStore {
               let status = PostingStatus(rawValue: statusValue), case let .text(evidence) = row[4],
               case let .real(checkedAt) = row[5] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
         return PostingCheck(id: id, opportunityID: opportunityID, url: url, status: status, evidence: evidence, checkedAt: Date(timeIntervalSince1970: checkedAt))
+    }
+
+    private func documentReference(from row: [DatabaseValue]) throws -> DocumentReference {
+        guard row.count == 9,
+              case let .text(id) = row[0], case let .text(opportunityID) = row[1],
+              case let .text(kindValue) = row[2], let kind = DocumentReferenceKind(rawValue: kindValue),
+              case let .text(filename) = row[3], case let .text(contentType) = row[4],
+              case let .text(sourceHash) = row[5], case let .integer(byteCount) = row[6],
+              case let .real(attachedAt) = row[7] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+        let finalSentAt: Date?
+        if case let .real(value) = row[8] { finalSentAt = Date(timeIntervalSince1970: value) } else { finalSentAt = nil }
+        return DocumentReference(id: id, opportunityID: opportunityID, kind: kind, filename: filename, contentType: contentType, sourceHash: sourceHash, byteCount: Int(byteCount), attachedAt: Date(timeIntervalSince1970: attachedAt), finalSentAt: finalSentAt)
     }
 
     private func activityEvent(from row: [DatabaseValue]) throws -> ActivityEvent {

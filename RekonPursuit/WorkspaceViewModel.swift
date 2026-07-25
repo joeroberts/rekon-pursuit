@@ -1,4 +1,5 @@
 import Combine
+import CryptoKit
 import Foundation
 
 @MainActor
@@ -56,6 +57,8 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var postingStatus: PostingStatus = .stillOpen
     @Published var postingEvidence = ""
     @Published private(set) var selectedPostingChecks: [PostingCheck] = []
+    @Published var documentReferenceKind: DocumentReferenceKind = .resume
+    @Published private(set) var selectedDocumentReferences: [DocumentReference] = []
     @Published private(set) var csvPreview: CSVImportPreview?
     @Published private(set) var csvImportPlan: [CSVImportPlanRow] = []
     @Published private(set) var csvImportReport: CSVImportReport?
@@ -378,6 +381,44 @@ final class WorkspaceViewModel: ObservableObject {
         statusMessage = "Unencrypted CSV export saved."
     }
 
+    func attachDocumentReference(at url: URL) {
+        guard let store, !selectedOpportunityID.isEmpty else {
+            statusMessage = "Select an opportunity before attaching a document reference."
+            return
+        }
+        let extensionValue = url.pathExtension.lowercased()
+        guard extensionValue == "pdf" || extensionValue == "docx" else {
+            statusMessage = "Choose a PDF or DOCX file."
+            return
+        }
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let data = try Data(contentsOf: url, options: .mappedIfSafe)
+            guard data.count <= 25_000_000 else {
+                statusMessage = "Choose a PDF or DOCX smaller than 25 MB."
+                return
+            }
+            let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+            let contentType = extensionValue == "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            _ = try store.recordDocumentReference(RecordDocumentReference(opportunityID: selectedOpportunityID, kind: documentReferenceKind, filename: url.lastPathComponent, contentType: contentType, sourceHash: hash, byteCount: data.count))
+            refreshCounts()
+            statusMessage = "Document reference saved locally. The file was not copied, edited, or uploaded."
+        } catch {
+            statusMessage = "The document reference could not be attached."
+        }
+    }
+
+    func markDocumentReferenceFinalSent(_ reference: DocumentReference) {
+        do {
+            try store?.markDocumentReferenceFinalSent(id: reference.id)
+            refreshCounts()
+            statusMessage = "Final-sent metadata saved locally."
+        } catch {
+            statusMessage = "The document reference could not be marked final."
+        }
+    }
+
     func recordSelectedContactInteraction() {
         guard let store, !selectedContactID.isEmpty else { return }
         do {
@@ -478,6 +519,7 @@ final class WorkspaceViewModel: ObservableObject {
             refreshSelectedTask()
             refreshRelationshipMemory()
             refreshSelectedPostingChecks()
+            refreshSelectedDocumentReferences()
             contacts = try store?.contacts() ?? []
             refreshSelectedContactInteraction()
             activityCount = try store?.activityEvents().count ?? 0
@@ -505,6 +547,14 @@ final class WorkspaceViewModel: ObservableObject {
             selectedPostingChecks = selectedOpportunityID.isEmpty ? [] : try store?.postingChecks(forOpportunityID: selectedOpportunityID) ?? []
         } catch {
             statusMessage = "The reconciliation history could not be read."
+        }
+    }
+
+    private func refreshSelectedDocumentReferences() {
+        do {
+            selectedDocumentReferences = selectedOpportunityID.isEmpty ? [] : try store?.documentReferences(forOpportunityID: selectedOpportunityID) ?? []
+        } catch {
+            statusMessage = "The document references could not be read."
         }
     }
 

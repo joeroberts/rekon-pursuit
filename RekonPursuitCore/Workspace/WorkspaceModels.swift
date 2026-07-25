@@ -45,6 +45,32 @@ struct RecordPostingCheck {
     let evidence: String
 }
 
+enum DocumentReferenceKind: String, CaseIterable, Equatable {
+    case resume = "Résumé"
+    case coverLetter = "Cover letter"
+}
+
+struct DocumentReference: Equatable {
+    let id: String
+    let opportunityID: String
+    let kind: DocumentReferenceKind
+    let filename: String
+    let contentType: String
+    let sourceHash: String
+    let byteCount: Int
+    let attachedAt: Date
+    let finalSentAt: Date?
+}
+
+struct RecordDocumentReference {
+    let opportunityID: String
+    let kind: DocumentReferenceKind
+    let filename: String
+    let contentType: String
+    let sourceHash: String
+    let byteCount: Int
+}
+
 enum PipelineStage: String, CaseIterable, Equatable {
     case saved = "Saved"
     case applied = "Applied"
@@ -227,6 +253,7 @@ enum WorkspaceStoreError: Error, LocalizedError {
     case invalidContact
     case invalidInteraction
     case invalidPostingCheck
+    case invalidDocumentReference
 
     var errorDescription: String? {
         switch self {
@@ -244,6 +271,8 @@ enum WorkspaceStoreError: Error, LocalizedError {
             return "Enter an interaction summary and choose a valid linked opportunity."
         case .invalidPostingCheck:
             return "Enter the posting URL and the evidence you reviewed."
+        case .invalidDocumentReference:
+            return "Choose a PDF or DOCX file to attach as a local reference."
         }
     }
 }

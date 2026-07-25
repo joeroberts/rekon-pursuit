@@ -40,6 +40,7 @@ struct ContentView: View {
     @State private var rescheduledDueAt = Date.now
     @State private var showsPipelineBoard = false
     @State private var showsCSVImporter = false
+    @State private var showsDocumentReferenceImporter = false
     @State private var showsUnencryptedExportWarning = false
     @State private var showsCSVExporter = false
     @State private var exportDocument: CSVExportDocument?
@@ -344,6 +345,46 @@ struct ContentView: View {
                             }
                         }
                     }
+                    GroupBox("Résumé and cover-letter references") {
+                        Text("Choose a local PDF or DOCX. Rekon Pursuit stores its filename, size, and SHA-256 hash only; it does not copy, edit, or upload the file.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        HStack {
+                            Picker("Reference type", selection: $model.documentReferenceKind) {
+                                ForEach(DocumentReferenceKind.allCases, id: \.self) { kind in
+                                    Text(kind.rawValue).tag(kind)
+                                }
+                            }
+                            Button("Choose PDF or DOCX…") { showsDocumentReferenceImporter = true }
+                                .disabled(!model.workspaceReady)
+                                .accessibilityIdentifier("choose-document-reference")
+                        }
+                        if model.selectedDocumentReferences.isEmpty {
+                            Text("No document references attached.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(model.selectedDocumentReferences, id: \.id) { reference in
+                                HStack(alignment: .firstTextBaseline) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("\(reference.kind.rawValue) · \(reference.filename)")
+                                        Text("SHA-256 \(reference.sourceHash.prefix(12))… · \(reference.byteCount.formatted()) bytes")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        if let finalSentAt = reference.finalSentAt {
+                                            Text("Final sent: \(finalSentAt.formatted(date: .abbreviated, time: .shortened))")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    Spacer()
+                                    if reference.finalSentAt == nil {
+                                        Button("Mark final sent") { model.markDocumentReferenceFinalSent(reference) }
+                                    }
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                    }
                 }
             }
             }
@@ -593,6 +634,15 @@ struct ContentView: View {
         ) { result in
             if case let .success(urls) = result, let url = urls.first {
                 model.previewCSV(at: url)
+            }
+        }
+        .fileImporter(
+            isPresented: $showsDocumentReferenceImporter,
+            allowedContentTypes: [.pdf, UTType(filenameExtension: "docx") ?? .data],
+            allowsMultipleSelection: false
+        ) { result in
+            if case let .success(urls) = result, let url = urls.first {
+                model.attachDocumentReference(at: url)
             }
         }
         .fileExporter(

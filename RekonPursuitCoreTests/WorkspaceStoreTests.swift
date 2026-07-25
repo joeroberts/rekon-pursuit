@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 13)
+        XCTAssertEqual(try store.schemaVersion(), 14)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -39,7 +39,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 13)
+        XCTAssertEqual(try store.schemaVersion(), 14)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -52,7 +52,8 @@ final class WorkspaceStoreTests: XCTestCase {
                 [.integer(10), .text(WorkspaceMigrations.versionTenChecksum)],
                 [.integer(11), .text(WorkspaceMigrations.versionElevenChecksum)],
                 [.integer(12), .text(WorkspaceMigrations.versionTwelveChecksum)],
-                [.integer(13), .text(WorkspaceMigrations.versionThirteenChecksum)]
+                [.integer(13), .text(WorkspaceMigrations.versionThirteenChecksum)],
+                [.integer(14), .text(WorkspaceMigrations.versionFourteenChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
@@ -73,7 +74,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 13)
+        XCTAssertEqual(try store.schemaVersion(), 14)
         XCTAssertEqual(try database.rows("SELECT id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at FROM interactions"), [[.text("interaction-1"), .null, .text("opportunity-1"), .text("Note"), .text("Legacy note"), .real(1_704_067_200), .null]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
@@ -526,6 +527,21 @@ final class WorkspaceStoreTests: XCTestCase {
             "\"title\",\"company\",\"stage\",\"next_action\",\"due_at\",\"job_url\"\n\"Product, Manager\",\"Rekon \"\"Labs\"\"\",\"Applied\",\"Send notes\",\"2024-01-01T00:00:00Z\",\"https://jobs.example.com/123\"\n"
         )
         XCTAssertEqual(try store.activityEvents().last?.kind, "opportunities_exported")
+    }
+
+    func testDocumentReferencePersistsHashAndFinalSentMetadata() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let reference = try store.recordDocumentReference(RecordDocumentReference(opportunityID: opportunity.id, kind: .resume, filename: "resume.pdf", contentType: "application/pdf", sourceHash: String(repeating: "a", count: 64), byteCount: 1_024))
+
+        try store.markDocumentReferenceFinalSent(id: reference.id)
+
+        let saved = try XCTUnwrap(store.documentReferences(forOpportunityID: opportunity.id).first)
+        XCTAssertEqual(saved.filename, "resume.pdf")
+        XCTAssertEqual(saved.sourceHash, String(repeating: "a", count: 64))
+        XCTAssertEqual(saved.byteCount, 1_024)
+        XCTAssertEqual(saved.finalSentAt, now)
+        XCTAssertEqual(try store.activityEvents().suffix(2).map(\.kind), ["document_reference_linked", "document_reference_marked_final"])
     }
 
     func testDeletingOpportunityHidesItAndLeavesOnlyRedactedAuditEvidence() throws {
