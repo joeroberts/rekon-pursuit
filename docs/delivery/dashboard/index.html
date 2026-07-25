@@ -20,13 +20,13 @@
   <main>
     <header><div class="eyebrow">Rekon Pursuit</div><h1>Delivery dashboard</h1><p class="subhead">Local operational view. This page refreshes every 30 seconds.</p></header>
     <section class="summary" aria-label="Delivery summary">
-      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">RP-R2 — Corrective pass / verification required</span></div>
+      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">RP-R3 — CSV mapping and atomic import</span></div>
       <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">RP-R3 — CSV mapping and atomic import</span></div>
-      <div class="summary-item"><span class="summary-label">Accepted</span><span class="summary-value">3</span></div>
+      <div class="summary-item"><span class="summary-label">Accepted</span><span class="summary-value">4</span></div>
       <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">8</span></div>
       <div class="summary-item"><span class="summary-label">Blocked</span><span class="summary-value">0</span></div>
     </section>
-    <section class="attention" aria-label="Attention queue"><h2>Attention queue</h2><ul><li><strong>RP-R2:</strong> Hands-on verification is required before RP-R2 can be accepted.</li></ul></section>
+    <section class="attention" aria-label="Attention queue"><h2>Attention queue</h2><p class="attention-empty">Nothing needs your attention.</p></section>
     <section class="board" aria-label="Delivery status board"><section class="lane lane-backlog"><header><h2>Backlog</h2><span class="lane-count">8</span></header>
       <article class="task-card status-backlog">
         <div class="card-heading"><span class="task-id">RP-R4</span><span class="status-pill">Backlog</span></div>
@@ -119,22 +119,12 @@
         <div class="card-heading"><span class="task-id">RP-R3</span><span class="status-pill">Next up</span></div>
         <h3>CSV mapping and atomic import</h3>
         <dl>
-          <div><dt>Release condition</dt><dd>Eligible only after RP-R2 is accepted.</dd></div>
-          <div><dt>Latest transition</dt><dd>Queued as the next eligible corrective task.</dd></div>
+          <div><dt>Release condition</dt><dd>The R3 amended plan is accepted; it is the next eligible remediation task.</dd></div>
+          <div><dt>Latest transition</dt><dd>Product owner restored the evidence-backed R2 acceptance; R3 is next up.</dd></div>
         </dl>
         <p class="action">No action needed</p>
         <a class="evidence" href="../task-briefs/RP-R3-csv-mapping-and-import.md">R3 task brief</a>
-      </article></section><section class="lane lane-in_progress"><header><h2>In progress</h2><span class="lane-count">1</span></header>
-      <article class="task-card status-in_progress">
-        <div class="card-heading"><span class="task-id">RP-R2</span><span class="status-pill">In progress</span></div>
-        <h3>Corrective pass / verification required</h3>
-        <dl>
-          <div><dt>Release condition</dt><dd>Complete the corrective pass and record hands-on verification before acceptance.</dd></div>
-          <div><dt>Latest transition</dt><dd>Corrective pass entered verification.</dd></div>
-        </dl>
-        <p class="action required">Action needed: Hands-on verification is required before RP-R2 can be accepted.</p>
-        <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
-      </article></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">3</span></header>
+      </article></section><section class="lane lane-in_progress"><header><h2>In progress</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">4</span></header>
       <article class="task-card status-accepted">
         <div class="card-heading"><span class="task-id">RP-R0</span><span class="status-pill">Accepted</span></div>
         <h3>Evidence-only remediation baseline</h3>
@@ -163,6 +153,17 @@
         <dl>
           <div><dt>Release condition</dt><dd>Reactive desktop shell gate accepted.</dd></div>
           <div><dt>Latest transition</dt><dd>Accepted after independent review and compact-window verification.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
+      </article>
+
+      <article class="task-card status-accepted">
+        <div class="card-heading"><span class="task-id">RP-R2</span><span class="status-pill">Accepted</span></div>
+        <h3>Opportunity fields and safe migration</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Accepted; RP-R3 is the only eligible successor.</dd></div>
+          <div><dt>Latest transition</dt><dd>Accepted after independent review and passed isolated product-owner smoke.</dd></div>
         </dl>
         <p class="action">No action needed</p>
         <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>

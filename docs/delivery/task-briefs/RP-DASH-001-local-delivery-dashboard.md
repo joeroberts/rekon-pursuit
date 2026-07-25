@@ -30,12 +30,11 @@ of the SwiftUI/macOS application.
   or prose in another document.
 - The Delivery Manager records the product-owner-directed **dashboard
   operational baseline** in the ledger before the first generated dashboard.
-  It makes the dashboard JSON the current operational view while preserving
-  prior acceptance/release rows as historical evidence. The baseline is:
-  `RP-R0`, `RP-R1a`, and `RP-R1b` Accepted; `RP-R2` In progress with title
-  **Corrective pass / verification required**; `RP-R3` Next up; `RP-R4`
-  through `RP-R10` Backlog; and an empty Blocked lane unless a genuine
-  material impediment subsequently appears. From that baseline forward,
+  The original seed was superseded by a same-day product-owner correction:
+  accepted R2 evidence must not be represented as pending verification.
+  The current operational state is `RP-R0`, `RP-R1a`, `RP-R1b`, and `RP-R2`
+  Accepted; `RP-R3` Next up; `RP-R4` through `RP-R10` Backlog; and an empty
+  Blocked lane unless a genuine material impediment subsequently appears.
   `dashboard-status.json` controls current task transitions and the ledger
   records their detailed audit/evidence; neither may be updated alone.
 

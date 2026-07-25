@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "RP-R2",
+  "activeTaskId": "RP-R3",
   "nextEligibleTaskId": "RP-R3",
   "tasks": [
     {
@@ -41,23 +41,22 @@
     },
     {
       "id": "RP-R2",
-      "title": "Corrective pass / verification required",
-      "status": "in_progress",
-      "releaseCondition": "Complete the corrective pass and record hands-on verification before acceptance.",
-      "latestTransition": "Corrective pass entered verification.",
+      "title": "Opportunity fields and safe migration",
+      "status": "accepted",
+      "releaseCondition": "Accepted; RP-R3 is the only eligible successor.",
+      "latestTransition": "Accepted after independent review and passed isolated product-owner smoke.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
       },
-      "needsUserAction": true,
-      "userActionDetail": "Hands-on verification is required before RP-R2 can be accepted."
+      "needsUserAction": false
     },
     {
       "id": "RP-R3",
       "title": "CSV mapping and atomic import",
       "status": "next_up",
-      "releaseCondition": "Eligible only after RP-R2 is accepted.",
-      "latestTransition": "Queued as the next eligible corrective task.",
+      "releaseCondition": "The R3 amended plan is accepted; it is the next eligible remediation task.",
+      "latestTransition": "Product owner restored the evidence-backed R2 acceptance; R3 is next up.",
       "evidence": {
         "label": "R3 task brief",
         "href": "../task-briefs/RP-R3-csv-mapping-and-import.md"

@@ -1,10 +1,9 @@
 # Rekon Pursuit — MVP remediation ledger
 
-**Status:** The current product-owner-directed operational baseline is:
-`RP-R0`, `RP-R1a`, and `RP-R1b` Accepted; `RP-R2` In progress — Corrective
-pass / verification required; `RP-R3` Next up; `RP-R4`–`RP-R10` Backlog; and
-no task Blocked. Earlier acceptance/release rows below are retained as
-historical evidence, not the current active queue.
+**Status:** The current evidence-backed operational state is: `RP-R0`,
+`RP-R1a`, `RP-R1b`, and `RP-R2` Accepted; `RP-R3` Next up; `RP-R4`–`RP-R10`
+Backlog; and no task Blocked. There is no active implementation task until
+the next R3 delivery transition.
 
 **Authority:** [dashboard-status.json](dashboard-status.json) is the canonical
 machine-readable operational view for the current remediation queue. This
@@ -20,15 +19,15 @@ controlling requirements.
 
 **Decision owner:** Product owner, recorded by Delivery Manager
 
-**Decision:** Establish the status sequence above as the current operational
-queue used by the repository-local delivery dashboard. This is an intentional
-operational reset for remediation management: it does not erase or revise the
-historical R2 acceptance, R3 release, or prior review evidence below. From
-this decision forward, `dashboard-status.json` governs each current task
-status; this ledger records the reason, evidence, and release condition for
-the same transition. The only normal path is Backlog → Next up → In progress
-→ Accepted. Blocked is reserved for a genuine material impediment requiring
-intervention, not ordinary sequencing.
+**Decision:** The initial dashboard seed was superseded by the product owner
+on 2026-07-25 because it incorrectly placed accepted R2 back into hands-on
+verification. The current status sequence above restores the accepted R2
+evidence and makes R3 the next eligible remediation task. From this decision
+forward, `dashboard-status.json` governs each current task status; this ledger
+records the reason, evidence, and release condition for the same transition.
+The only normal path is Backlog → Next up → In progress → Accepted. Blocked
+is reserved for a genuine material impediment requiring intervention, not
+ordinary sequencing.
 
 ### RP-DASH-001 — Local delivery dashboard
 
@@ -40,6 +39,7 @@ intervention, not ordinary sequencing.
 | QA | Approved | Focused checks cover the source contract, deterministic generated page, 30-second refresh marker, required lanes/counts/cards, attention semantics, and local evidence links. |
 | Code Reviewer | Approved after P1 remediation | URL-encoded traversal, separators, and control characters are rejected before local-link resolution; generated attention items use valid list markup. |
 | Delivery Manager | **Accepted — RP-DASH-001 complete** | Independent plan, implementation, and QA gates approved. The local dashboard is generated from `dashboard-status.json`; this ledger remains the detailed evidence record. The seeded operational queue is verified, and future meaningful transitions update JSON, ledger, and generated HTML together. |
+| Product owner | **Corrected operational state** | The initial dashboard seed incorrectly retriggered R2 verification despite accepted evidence. R2 remains Accepted; R3 is Next up; the attention queue is empty. |
 
 ## Verified gaps
 

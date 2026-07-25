@@ -37,7 +37,7 @@
 
 - [ ] **Step 1: Define the failing operational source contract**
 
-Create the JSON source using the approved baseline: R0/R1a/R1b accepted; R2 in progress with the exact title `Corrective pass / verification required`; R3 next up; R4–R10 backlog; no blocked tasks. Include every card’s mandatory `needsUserAction` boolean, material detail for R2 verification, current release condition, latest meaningful transition, and repository-local ledger evidence links.
+Create the JSON source using the approved evidence-backed state: R0/R1a/R1b/R2 accepted; R3 next up; R4–R10 backlog; no blocked tasks. Include every card’s mandatory `needsUserAction` boolean, current release condition, latest meaningful transition, and repository-local ledger evidence links.
 
 - [ ] **Step 2: Run the renderer before it exists**
 
