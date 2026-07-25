@@ -1,6 +1,8 @@
-# Rekon Pursuit MVP release handoff
+# Rekon Pursuit MVP candidate handoff
 
-## What works
+> **Status as of 2026-07-25: superseded as a release-acceptance handoff.** This records what the unsigned candidate contains; it does not establish MVP completion. The [MVP remediation ledger](delivery/remediation-ledger.md) is the current source of truth.
+
+## Candidate capabilities
 
 - Native local macOS tracker: opportunities, fixed pipeline stages, descriptions, notes, tasks, Needs Attention, and local activity.
 - Contacts, linked opportunities, interaction history, and follow-up tracking.
@@ -10,9 +12,9 @@
 - Encrypted local workspace, same-Mac encrypted backup and confirmed restore.
 - Local Settings, including the persisted closed-opportunity visibility preference.
 
-## Deliberately deferred
+## Deferred capabilities
 
-No portable/cross-Mac recovery, purge, Gmail, Calendar, AI/local-model execution, AI cost usage, document generation/editing, employer research, interviews, offer comparison, signing, notarization, or DMG distribution.
+Gmail, Calendar, AI/local-model execution, AI cost usage, document generation/editing, employer research, interviews, offer comparison, signing, notarization, and DMG distribution remain deferred. Portable/cross-Mac recovery, purge, encrypted-default export, real reconciliation, a searchable empty AI ledger, and usable document references are remediation requirements, not deferred MVP scope.
 
 ## Data and recovery
 

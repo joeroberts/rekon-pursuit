@@ -8,13 +8,13 @@ The delivery principle is **vertical slices over isolated screens**: each slice 
 
 ## Current release status — source of truth
 
-**Rekon Pursuit MVP is shipped as an unsigned local macOS app.** This section is the current status tracker. The detailed workstreams and M0–M9 sequence below are retained as original planning context; they are not the release-status authority.
+> **Superseded for MVP-completion reporting on 2026-07-25.** The unsigned candidate app exists, but independent remediation review found required MVP behavior missing and first-run use blocked. The controlling current record is the [MVP remediation ledger](remediation-ledger.md). The detailed workstreams and M0–M9 sequence below are historical planning context, not evidence that the MVP is complete.
 
 | Release area | Current status |
 | --- | --- |
-| Local MVP tracker | **Shipped** — encrypted local workspace; opportunities, pipeline, next actions, Needs Attention, stage history, descriptions, notes, contacts, interactions, relationship history, local activity, CSV import/export, manual posting reconciliation, PDF/DOCX reference metadata, same-Mac encrypted backup/restore, and Settings. |
-| Package and automation | **Shipped** — unsigned `.app` package and build/archive/macOS smoke workflow. Developer ID signing, notarization, and DMG distribution are intentionally deferred. |
-| MVP stabilization | **Current work** — fix user-reported issues in the shipped app. Do not expand MVP scope while stabilization is active. |
+| MVP candidate | **Remediation in progress** — an unsigned app candidate contains partial local tracker functionality, but it cannot be represented as a complete MVP. See the remediation ledger for verified gaps and release state. |
+| Package and automation | **Candidate exists** — unsigned `.app` package and build/archive/macOS smoke workflow. Developer ID signing, notarization, and DMG distribution are intentionally deferred. |
+| MVP remediation | **Current work** — resolve required MVP gaps and first-run blockers under the remediation task briefs and independent gates. |
 | Phase 2a — privacy and AI foundation | **Not started** — local-model runtime, cloud routing/sanitization/consent, populated AI ledger, budgets, and costs. |
 | Phase 2b — Gmail and Google Calendar | **Not started** — follows the privacy/AI foundation. |
 | Phase 2c — documents and research | **Not started** — full document processing/versioning and sourced employer research. |
