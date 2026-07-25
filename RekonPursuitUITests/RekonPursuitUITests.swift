@@ -2,13 +2,13 @@ import XCTest
 
 final class RekonPursuitUITests: XCTestCase {
     @MainActor
-    func testNeedsAttentionAndWorkspaceGateAreVisibleOnLaunch() {
+    func testNeedsAttentionAndWorkspaceStatusAreVisibleOnLaunch() {
         let app = XCUIApplication()
         app.launch()
 
         XCTAssertTrue(app.staticTexts["sidebar-needs-attention"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["needs-attention-home"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.otherElements["workspace-gate"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["workspace-status"].waitForExistence(timeout: 5))
     }
 
     @MainActor
