@@ -29,6 +29,7 @@ private enum TrackerPage: String, CaseIterable {
     case add = "Add opportunity"
     case csvImport = "Import CSV"
     case contacts = "Contacts"
+    case ledger = "Activity & AI"
 }
 
 struct ContentView: View {
@@ -513,6 +514,42 @@ struct ContentView: View {
                                 .accessibilityIdentifier("save-contact-interaction")
                         }
                     }
+                }
+            }
+
+            if page == .ledger {
+                GroupBox("Local activity ledger") {
+                    Text("A read-only record of actions completed in this workspace. Activity stays on this Mac.")
+                        .foregroundStyle(.secondary)
+                    TextField("Search activity", text: $model.activitySearch)
+                        .accessibilityIdentifier("activity-search")
+                    if model.filteredActivityEvents.isEmpty {
+                        Text(model.activityEvents.isEmpty ? "No local activity yet." : "No activity matches that search.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(model.filteredActivityEvents, id: \.id) { event in
+                            HStack(alignment: .firstTextBaseline) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(event.kind.replacingOccurrences(of: "_", with: " ").capitalized)
+                                    Text(event.occurredAt.formatted(date: .abbreviated, time: .shortened))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if let opportunity = model.opportunities.first(where: { $0.id == event.opportunityID }) {
+                                    Text("\(opportunity.title) · \(opportunity.company)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+
+                GroupBox("AI usage and cost") {
+                    Text("No AI requests have been made. Cloud AI, local-model execution, and cost tracking are intentionally unavailable in this MVP.")
+                        .foregroundStyle(.secondary)
                 }
             }
 

@@ -15,6 +15,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var needsAttention: [TaskReminder] = []
     @Published private(set) var opportunities: [Opportunity] = []
     @Published private(set) var activityEvents: [ActivityEvent] = []
+    @Published var activitySearch = ""
     @Published private(set) var selectedStageHistory: [StageHistoryEntry] = []
     @Published private(set) var selectedTask: TaskReminder?
     @Published var opportunitySearch = ""
@@ -185,6 +186,15 @@ final class WorkspaceViewModel: ObservableObject {
 
     var selectedActivityEvents: [ActivityEvent] {
         activityEvents.filter { $0.opportunityID == selectedOpportunityID }
+    }
+
+    var filteredActivityEvents: [ActivityEvent] {
+        let query = activitySearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return activityEvents }
+        return activityEvents.filter { event in
+            event.kind.localizedCaseInsensitiveContains(query) ||
+            opportunities.first(where: { $0.id == event.opportunityID }).map { $0.title.localizedCaseInsensitiveContains(query) || $0.company.localizedCaseInsensitiveContains(query) } == true
+        }
     }
 
     var filteredContacts: [Contact] {

@@ -99,6 +99,19 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.statusMessage, "Unencrypted CSV export is ready. Save it only where you trust the storage.")
     }
 
+    func testActivitySearchMatchesLocalActionAndRelatedOpportunity() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        model.start()
+        model.title = "Product Manager"
+        model.company = "Rekon Labs"
+        model.createOpportunity()
+
+        model.activitySearch = "rekon"
+
+        XCTAssertEqual(model.filteredActivityEvents.map(\.kind), ["opportunity_created"])
+    }
+
     func testSavingSelectedOpportunityUpdatesItsVisibleRecord() throws {
         let store = try makeStore()
         let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
