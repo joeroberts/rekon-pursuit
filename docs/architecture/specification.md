@@ -309,7 +309,7 @@ Use deterministic clocks, random seeds, fixture provider responses, and an injec
 ## 13. Initial implementation slices
 
 1. Workspace bootstrap: encrypted SQLite, migration/backup framework, Keychain abstraction, event ledger, core opportunity/contact/task schema, and Needs attention query.
-2. Local tracker: working record, stage/task/activity commands, search, CSV decision workflow, reversible batch behavior, and conservative reconciliation evidence/closure confirmation.
+2. Local tracker: working record, stage/task/activity commands, search, CSV decision workflow; reversible import behavior is deferred to `RP-R3a`; and conservative reconciliation evidence/closure confirmation.
 3. Privacy/AI foundation: settings, model router, sanitizer/disclosure/ledger/budget state machines, local runtime adapter, then cloud adapter only after consent tests pass.
 4. Connections: independent OAuth lifecycle, selected Gmail matching/drafts/send confirmation, then Calendar availability/mutation confirmation. Gmail response classification/draft generation remains unavailable until slice 3's AI foundation gate is complete. This slice uses the already-required encrypted generic blob/attachment storage and canonical-payload artifacts; it does not depend on DOCX/PDF conversion, document versioning, or the full document library.
 5. Document library: manual immutable ingest/blob handling, document links/versions, XPC-isolated DOCX/PDF safe pipeline, final-file tracking, export and deletion controls. This deliberately follows Connections to match the delivery roadmap; no technical blocker requires manual document processing before Gmail/Calendar. Any AI suggestion capability remains gated by slice 3.

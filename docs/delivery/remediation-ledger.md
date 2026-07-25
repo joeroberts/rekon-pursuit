@@ -1,6 +1,6 @@
 # Rekon Pursuit — MVP remediation ledger
 
-**Status:** `RP-R0`, `RP-R1a`, `RP-R1b`, and `RP-R2` are accepted. `RP-R3` is proposed pending its amended core-flow plan gate. `RP-R3a` and `RP-R4`–`RP-R10` remain blocked or deferred by their stated dependencies and gates.
+**Status:** `RP-R0`, `RP-R1a`, `RP-R1b`, and `RP-R2` are accepted. `RP-R3` is the sole released remediation task. `RP-R3a` and `RP-R4`–`RP-R10` remain blocked or deferred by their stated dependencies and gates.
 
 **Authority:** This is the canonical status record for the current MVP remediation. It supersedes “MVP shipped” language in the roadmap and candidate handoff. The PRD, architecture specification, ADR-001, and approved mockups remain controlling requirements.
 
@@ -27,7 +27,7 @@
 | `RP-R1a` | Typed workspace gate: visible create/open/recover/retry states for database artifacts × no key, primary only, pending only, and both keys. Ambiguous combinations are recovery-required: no overwrite, promotion, ignored key, or automatic key deletion. A non-secret durable creation journal records staging/pending-written/database-promoted/primary-promoted/cleanup-pending phases. Creation never deletes a committed database on an open error. | `RP-R0` | **Accepted** | State/failure tests, a macOS build, an isolated temporary-app smoke, and direct user observation of create workspace → native CSV dialog → fixture preview. The smoke record is manual UI evidence, not an automation claim. | All independent roles approved. The residual native-dialog observation risk is explicitly manual/user-observed. Release `RP-R1b` only. |
 | `RP-R1b` | Reactive `NavigationSplitView` shell aligned with approved mockup structure and usable in a small window. | `RP-R1a` | **Accepted** | Debug build, focused navigation tests, isolated sandbox smoke, direct user 900×640 smoke, and all required independent approvals are recorded. | Delivery accepted R1b. Release `RP-R2` only. |
 | `RP-R2` | Migration plus editable compensation, location, response state/history, and application/status dates. | `RP-R1b` | **Accepted** | Existing-workspace migration and create/edit/relaunch activity evidence, plus the corrective clock/date, real-v15-fixture, atomic-rollback, and deterministic-history evidence. | Corrective pass accepted at `c205e76` after independent review and a passed product-owner isolated smoke. Release `RP-R3` only. |
-| `RP-R3` | Core CSV workflow: map → validate → row decision → atomic import report; field-selected update-existing with no silent overwrite. | `RP-R2` | **Proposed — plan gate pending** | Standard-header, nonstandard-header, invalid-row, duplicate, reimport, and prior-report rollback workflows. | Product owner chose the streamlined core flow. Implement only after Architect, QA, TPM, and Delivery approve the amended R3 brief. |
+| `RP-R3` | Core CSV workflow: map → validate → row decision → atomic import report; field-selected update-existing with no silent overwrite. | `RP-R2` | **Released for implementation** | Standard-header, nonstandard-header, invalid-row, duplicate, reimport, and prior-report rollback workflows. | Amended brief approved by Architect, QA, TPM, and Delivery. Release `RP-R3` only; `RP-R3a` and `RP-R4`–`RP-R10` remain blocked or deferred. |
 | `RP-R3a` | Resumable in-progress batch and bounded Undo Import. | `RP-R3` | Deferred by product owner | Separate recovery/history design and evidence. | Explicitly deferred to keep R3 focused; not released. |
 | `RP-R4` | Reconciliation contract and local workflow states only: safe URL validation, classifications, evidence/error, confidence, retry de-duplication, closure confirmation; no request yet. | `RP-R1b` | Blocked | Deterministic fixtures and approved network/privacy contract. | Architect + Security/Privacy approval required. |
 | `RP-R5` | User-initiated public-URL check: direct GET only, bounded/no-auth/no-script request, offline/manual-review handling, retry task, no auto-close. | `RP-R2`, `RP-R4` | Blocked | Online/offline/blocked/changed/failure/explicit-closure workflow evidence. | Architect + Security/Privacy approval of `RP-R4`. |
@@ -123,6 +123,15 @@
 | Product owner | Passed isolated smoke | In the generated sandboxed app, the required synthetic create/edit/reset/clear/relaunch flow passed and Pipeline/Needs Attention refreshed normally. |
 | Delivery Manager | Accepted — R2 accepted | The corrective evidence, independent approvals, and product-owner smoke are complete. Release `RP-R3` only; keep `RP-R4`–`RP-R10` blocked. |
 
+### RP-R3 amended-plan approval record
+
+| Role | Decision | Evidence |
+| --- | --- | --- |
+| Architect | Approved | The core local mapping/validation/explicit-decision/atomic-report contract preserves selected-field and task/due-date integrity; no ADR is required. |
+| QA | Approved | Focused evidence covers standard/nonstandard headers, invalid rows, explicit selected-field updates, duplicate/reimport behavior, atomic rollback preserving prior report/data, and report reopen; no CI or coverage expansion. |
+| TPM | Approved | `RP-R3` is the sole dependency-safe successor. `RP-R3a` is explicitly deferred; all other tasks remain blocked. |
+| Delivery Manager | Approved — released for implementation | Product-owner scope decision and all amended plan approvals are recorded. Release `RP-R3` only. |
+
 ## Release log
 
 | Date | Task | Delivery decision | Scope boundary |
@@ -139,6 +148,7 @@
 | 2026-07-25 | `RP-R2` | **Corrective implementation released** | Delivery approved only the bounded R2 correction. R2 is not accepted; no successor is released. |
 | 2026-07-25 | `RP-R2` | **Accepted — `RP-R3` eligible for amended plan gate** | Corrective evidence, independent Code Review/QA/Architect/TPM decisions, and product-owner isolated smoke are complete. `RP-R3` requires its own amended plan gate; `RP-R3a` and `RP-R4`–`RP-R10` remain blocked or deferred. |
 | 2026-07-25 | `RP-R3` | **Scope decision — core flow first** | Product owner approved core mapping/validation/explicit decisions/selected-field update/report now. Resumable raw-file drafts and Undo Import are deferred to `RP-R3a`; no implementation begins until the amended R3 plan gate accepts. |
+| 2026-07-25 | `RP-R3` | **Released for implementation** | Implement only map → validate → decide → atomic import → durable report. Do not retain raw CSV/resumable drafts; do not add Undo Import, contacts, reconciliation, lifecycle, or any successor. |
 
 ## Risks and decisions
 

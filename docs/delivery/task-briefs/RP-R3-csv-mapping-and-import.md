@@ -1,6 +1,6 @@
 # RP-R3 — CSV mapping and decision-safe import
 
-**State:** Proposed — not released  
+**State:** Released for implementation
 **Depends on:** `RP-R2` accepted  
 **Blocks:** No task is released by this brief.
 
@@ -192,8 +192,8 @@ is explicitly deferred to `RP-R3a`.
 - Exact field-update behavior is the material data-loss risk. Code Reviewer,
   QA, Architect, TPM, and Delivery Manager must approve the brief before
   release, with QA/Code Review/Architect rechecking the completed slice.
-- `RP-R3` remains proposed until the R2 acceptance record is completed. This
-  brief does not release itself or any downstream remediation task.
+- `RP-R3` is the sole released remediation task. This brief does not release
+  `RP-R3a` or any downstream remediation task.
 - Product owner decision, 2026-07-25: ship the core CSV workflow before
   resumable raw-file drafts or executable Undo Import. Those recovery/history
   behaviors are a separately planned `RP-R3a`, not R3 acceptance work.
