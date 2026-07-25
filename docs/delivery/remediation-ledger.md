@@ -24,7 +24,7 @@
 | ID | Scope | Dependencies | State | Required evidence | Gate decision |
 | --- | --- | --- | --- | --- | --- |
 | `RP-R0` | Evidence-only baseline in a dedicated disposable test workspace/app-data location: first launch, default-page workspace access, pre-workspace CSV availability/explanation, page-state refresh, and mockup divergence. No behavior changes or modification of the user’s workspace/Keychain data. | None | **Accepted** | Redacted reproduction notes/screenshots, exact state transitions, build/OS/window details, and committed evidence path. | Amended boundary accepted. The evidence establishes the first-run/default-page, pre-workspace CSV guidance, page-refresh, and shell defects. Runtime create → CSV-preview/refresh is owned by `RP-R1a`. |
-| `RP-R1a` | Typed workspace gate: visible create/open/recover/retry states for database artifacts × no key, primary only, pending only, and both keys. Ambiguous combinations are recovery-required: no overwrite, promotion, ignored key, or automatic key deletion. A non-secret durable creation journal records staging/pending-written/database-promoted/primary-promoted/cleanup-pending phases. Creation never deletes a committed database on an open error. | `RP-R0` | **Released — active; plan amendment review required** | Focused failure injection covers staging close, pending write, database promotion, primary promotion, pending cleanup, and reopen; every ambiguous state preserves artifacts. Fresh-launch runtime smoke records only a temporary namespace ID and redacted before/after unchanged assertions; it never persists absolute paths, Keychain item/account metadata, keys, or fixture content. This task does not accept visual shell alignment. | Security/Privacy evidence-redaction P1 requires final approval; no successor is released. |
+| `RP-R1a` | Typed workspace gate: visible create/open/recover/retry states for database artifacts × no key, primary only, pending only, and both keys. Ambiguous combinations are recovery-required: no overwrite, promotion, ignored key, or automatic key deletion. A non-secret durable creation journal records staging/pending-written/database-promoted/primary-promoted/cleanup-pending phases. Creation never deletes a committed database on an open error. | `RP-R0` | **Ready for Delivery release** | Focused failure injection covers staging close, pending write, database promotion, primary promotion, pending cleanup, and reopen; every ambiguous state preserves artifacts. Fresh-launch runtime smoke records only a temporary namespace ID and redacted before/after unchanged assertions; it never persists absolute paths, Keychain item/account metadata, keys, or fixture content. This task does not accept visual shell alignment. | Planning, Architect, QA, and Security/Privacy approved the amended brief. Await TPM and Delivery release decision; no successor is released. |
 | `RP-R1b` | Reactive `NavigationSplitView` shell aligned with approved mockup structure and usable in a small window. | `RP-R1a` | Blocked | Before/after mockup comparison at the recorded window size plus manual create/edit/navigation refresh smoke. | Pending `RP-R1a`. |
 | `RP-R2` | Migration plus editable compensation, location, response state/history, and application/status dates. | `RP-R1b` | Blocked | Existing-workspace migration and create/edit/relaunch activity evidence. | Pending `RP-R1b`. |
 | `RP-R3` | Map → validate → row decision → import report; field-selected update-existing with no silent overwrite. | `RP-R2` | Blocked | Standard-header, nonstandard-header, invalid-row, duplicate, and reimport workflows. | Pending `RP-R2`; allowed-field policy in brief. |
@@ -46,6 +46,17 @@
 | QA | Approved `RP-R0` release | Confirmed reproducible first-run/CSV/reactivity/layout evidence requirements without a coverage or CI expansion. |
 | TPM | Approved `RP-R0` release | Confirmed no Phase 2 scope and no remaining product decision. |
 | Delivery Manager | Approved `RP-R0` release | Confirmed this ledger/brief are canonical and only `RP-R0` may proceed. |
+
+### RP-R1a amended-brief review record
+
+| Role | Decision | Evidence |
+| --- | --- | --- |
+| Planning | Approved | The non-destructive workspace-state and phase boundaries are dependency-safe; recovery copy must not promise recovery without a database. |
+| Architect | Approved | The complete database/key matrix, durable non-secret journal, recovery-required handling, and injected-failure boundaries resolve the interrupted-creation ambiguity. |
+| QA | Approved | Focused local state fixtures and one isolated runtime smoke cover preservation without a coverage/CI expansion. |
+| Security/Privacy | Approved | The compiled immutable Keychain namespace, non-destructive key handling, and redacted evidence rules prohibit paths, Keychain metadata, keys, and fixture content. |
+| TPM | Pending final release review | Review must follow this recorded approval set. |
+| Delivery Manager | Pending final release decision | Review must follow TPM approval. |
 
 ## Release log
 
