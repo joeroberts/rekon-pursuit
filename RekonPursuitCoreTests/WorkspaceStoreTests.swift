@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 17)
+        XCTAssertEqual(try store.schemaVersion(), 18)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -39,7 +39,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 17)
+        XCTAssertEqual(try store.schemaVersion(), 18)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -84,7 +84,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 17)
+        XCTAssertEqual(try store.schemaVersion(), 18)
         XCTAssertEqual(try database.rows("SELECT id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at FROM interactions"), [[.text("interaction-1"), .null, .text("opportunity-1"), .text("Note"), .text("Legacy note"), .real(1_704_067_200), .null]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
@@ -156,7 +156,7 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try database.rows("SELECT id FROM import_reports"), [[.text("prior")]])
         XCTAssertTrue(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
         try WorkspaceMigrations.apply(to: database)
-        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(17)]])
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(18)]])
         XCTAssertEqual(try database.rows("SELECT updated_count, source_basename FROM import_reports"), [[.integer(0), .text("")]])
     }
 
@@ -608,6 +608,11 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(preview.mapping[.company], 1)
         XCTAssertEqual(preview.rows.first?.opportunity?.title, "Product, Platform")
         XCTAssertEqual(preview.rows.last?.reasons, ["Due date requires a Next action."])
+    }
+
+    func testCSVDateValidationRejectsNonCanonicalAndImpossibleGregorianDates() throws {
+        let preview = try CSVOpportunityImporter.preview(data: Data("title,company,applied date\nA,Rekon,2026-2-1\nB,Rekon,2026-02-30\n".utf8))
+        XCTAssertEqual(preview.invalidRowCount, 2)
     }
 
     func testCSVImportRequiresDuplicateDecisionAndPersistsReport() throws {

@@ -664,7 +664,8 @@ final class WorkspaceStore {
     }
 
     private func insertImportReportRow(reportID: String, planRow: CSVImportPlanRow, outcome: String, opportunityID: String?) throws {
-        try database.execute("INSERT INTO import_report_rows (id, report_id, source_row, outcome, reason, duplicate_rationale, opportunity_id) VALUES (?, ?, ?, ?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(reportID), .integer(Int64(planRow.row.sourceRow)), .text(outcome), .text(planRow.row.reasons.joined(separator: " ")), .text(planRow.duplicateRationale ?? ""), opportunityID.map(DatabaseValue.text) ?? .null])
+        let detail = planRow.selectedFields.isEmpty ? planRow.row.reasons.joined(separator: " ") : "Selected fields: " + planRow.selectedFields.map(\.label).sorted().joined(separator: ", ")
+        try database.execute("INSERT INTO import_report_rows (id, report_id, source_row, outcome, reason, duplicate_rationale, opportunity_id) VALUES (?, ?, ?, ?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(reportID), .integer(Int64(planRow.row.sourceRow)), .text(outcome), .text(detail), .text(planRow.duplicateRationale ?? ""), opportunityID.map(DatabaseValue.text) ?? .null])
     }
 
     private func selectedFieldsAreCoupled(_ fields: Set<CSVImportField>) -> Bool {
