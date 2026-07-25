@@ -167,7 +167,13 @@ struct ContentView: View {
                                 Text("Row \(row.sourceRow): \(row.outcome)")
                                 if !row.reason.isEmpty { Text(row.reason).font(.caption).foregroundStyle(.secondary) }
                                 if !row.duplicateRationale.isEmpty { Text(row.duplicateRationale).font(.caption).foregroundStyle(.secondary) }
-                                if let opportunityID = row.opportunityID { Button("Open resulting opportunity") { model.openImportedOpportunity(opportunityID) }.font(.caption) }
+                                if let opportunityID = row.opportunityID {
+                                    Button("Open resulting opportunity") {
+                                        model.openImportedOpportunity(opportunityID)
+                                        page = .pipeline
+                                    }
+                                    .font(.caption)
+                                }
                             }
                         }
                     }
