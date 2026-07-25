@@ -389,6 +389,18 @@ final class WorkspaceViewModel: ObservableObject {
         statusMessage = "Unencrypted CSV export saved."
     }
 
+    func createEncryptedBackup(at url: URL) {
+        do {
+            try store?.createEncryptedBackup(at: url)
+            refreshCounts()
+            statusMessage = "Encrypted same-Mac backup saved locally. Keep it with access to this Mac's Keychain."
+        } catch let error as LocalizedError {
+            statusMessage = error.errorDescription ?? "The encrypted backup could not be created."
+        } catch {
+            statusMessage = "The encrypted backup could not be created."
+        }
+    }
+
     func attachDocumentReference(at url: URL) {
         guard let store, !selectedOpportunityID.isEmpty else {
             statusMessage = "Select an opportunity before attaching a document reference."

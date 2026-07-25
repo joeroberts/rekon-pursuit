@@ -198,6 +198,34 @@ nonisolated final class EncryptedDatabase {
         try snapshot.checkpointAndClose()
     }
 
+    func createEncryptedBackup(at destinationURL: URL) throws {
+        guard !FileManager.default.fileExists(atPath: destinationURL.path) else {
+            throw EncryptedDatabaseError.sqlite(code: SQLITE_CANTOPEN, message: "Choose a new backup file name; Rekon Pursuit will not overwrite an existing backup.")
+        }
+        let backupDatabase = try Self.open(url: destinationURL, key: key, createIfMissing: true)
+        do {
+            guard let handle, let backupHandle = backupDatabase.handle,
+                  let backup = sqlite3_backup_init(backupHandle, "main", handle, "main") else {
+                throw EncryptedDatabaseError.sqlite(code: SQLITE_ERROR, message: "Could not create the encrypted backup.")
+            }
+            let stepResult = sqlite3_backup_step(backup, -1)
+            let finishResult = sqlite3_backup_finish(backup)
+            guard (stepResult == SQLITE_DONE || stepResult == SQLITE_OK), finishResult == SQLITE_OK else {
+                throw Self.sqliteError(handle: backupHandle, code: finishResult == SQLITE_OK ? stepResult : finishResult)
+            }
+            let sourceObjectCount = try scalarInt("SELECT count(*) FROM sqlite_master WHERE type IN ('table', 'index', 'trigger', 'view')")
+            let backupObjectCount = try backupDatabase.scalarInt("SELECT count(*) FROM sqlite_master WHERE type IN ('table', 'index', 'trigger', 'view')")
+            guard sourceObjectCount == backupObjectCount else {
+                throw EncryptedDatabaseError.sqlite(code: SQLITE_ERROR, message: "Encrypted backup verification failed.")
+            }
+            try backupDatabase.checkpointAndClose()
+        } catch {
+            try? backupDatabase.close()
+            try? FileManager.default.removeItem(at: destinationURL)
+            throw error
+        }
+    }
+
     private static func sqliteError(handle: OpaquePointer?, code: Int32) -> EncryptedDatabaseError {
         let message = handle.flatMap { String(cString: sqlite3_errmsg($0)) } ?? "Unknown SQLite error."
         return .sqlite(code: code, message: message)

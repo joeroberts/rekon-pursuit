@@ -432,6 +432,15 @@ final class WorkspaceStore {
         }
     }
 
+    func createEncryptedBackup(at destinationURL: URL) throws {
+        try synchronized {
+            try database.createEncryptedBackup(at: destinationURL)
+            try database.transaction {
+                try appendActivity(kind: "workspace_backed_up", opportunityID: nil)
+            }
+        }
+    }
+
     func recordDocumentReference(_ command: RecordDocumentReference) throws -> DocumentReference {
         let filename = command.filename.trimmingCharacters(in: .whitespacesAndNewlines)
         let sourceHash = command.sourceHash.trimmingCharacters(in: .whitespacesAndNewlines)

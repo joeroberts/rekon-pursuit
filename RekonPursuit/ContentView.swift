@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -616,9 +617,24 @@ struct ContentView: View {
                     .disabled(!model.workspaceReady || model.opportunities.isEmpty)
                     .accessibilityIdentifier("export-opportunities-csv")
             }
+
+            GroupBox("Encrypted workspace backup") {
+                Text("Create an encrypted copy of this workspace. This first MVP backup can be reopened only on this Mac, because its key remains in your Mac Keychain.")
+                    .foregroundStyle(.secondary)
+                Button("Create encrypted backup…") {
+                    let panel = NSSavePanel()
+                    panel.nameFieldStringValue = "rekon-pursuit-backup.rekonbackup"
+                    panel.canCreateDirectories = true
+                    if panel.runModal() == .OK, let url = panel.url {
+                        model.createEncryptedBackup(at: url)
+                    }
+                }
+                .disabled(!model.workspaceReady)
+                .accessibilityIdentifier("create-encrypted-backup")
+            }
             }
 
-            Text("This MVP keeps data on this Mac. CSV exports are unencrypted; backup and restore are not available yet.")
+            Text("This MVP keeps data on this Mac. CSV exports are unencrypted; encrypted backup restore and portable recovery are not available yet.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

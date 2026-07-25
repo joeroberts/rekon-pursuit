@@ -545,6 +545,20 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents().suffix(2).map(\.kind), ["document_reference_linked", "document_reference_marked_final"])
     }
 
+    func testEncryptedBackupCreatesReadableWorkspaceAndRecordsActivity() throws {
+        let store = try makeStore()
+        _ = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let backupURL = FileManager.default.temporaryDirectory.appendingPathComponent("rekon-backup-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: backupURL) }
+
+        try store.createEncryptedBackup(at: backupURL)
+        let backup = try EncryptedDatabase.open(url: backupURL, key: key, createIfMissing: false)
+        defer { try? backup.close() }
+
+        XCTAssertEqual(try backup.rows("SELECT title, company FROM opportunities"), [[.text("Product Manager"), .text("Rekon Labs")]])
+        XCTAssertEqual(try store.activityEvents().last?.kind, "workspace_backed_up")
+    }
+
     func testDeletingOpportunityHidesItAndLeavesOnlyRedactedAuditEvidence() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(
