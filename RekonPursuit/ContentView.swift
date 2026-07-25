@@ -44,6 +44,7 @@ struct ContentView: View {
                     .accessibilityIdentifier("opportunity-title")
                 TextField("Company", text: $model.company)
                     .accessibilityIdentifier("opportunity-company")
+                TextField("Job URL (optional)", text: $model.jobURL)
                 Picker("Stage", selection: $model.stage) {
                     ForEach(PipelineStage.allCases, id: \.self) { stage in
                         Text(stage.rawValue).tag(stage)
@@ -191,6 +192,7 @@ struct ContentView: View {
                         TextField("Job title", text: $model.selectedTitle)
                             .accessibilityIdentifier("selected-opportunity-title")
                         TextField("Company", text: $model.selectedCompany)
+                        TextField("Job URL (optional)", text: $model.selectedJobURL)
                         Picker("Stage", selection: $model.selectedStage) {
                             ForEach(PipelineStage.allCases, id: \.self) { stage in
                                 Text(stage.rawValue).tag(stage)
@@ -279,6 +281,42 @@ struct ContentView: View {
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                    }
+                    GroupBox("Reconcile opening") {
+                        Text("Review the posting yourself, then save the outcome and evidence. This app does not check the web or change the opportunity stage automatically.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if let url = URL(string: model.selectedJobURL), !model.selectedJobURL.isEmpty {
+                            Link("Open job posting", destination: url)
+                        } else {
+                            Text("Add a job URL to review this opening.")
+                                .foregroundStyle(.secondary)
+                        }
+                        Form {
+                            Picker("Outcome", selection: $model.postingStatus) {
+                                ForEach(PostingStatus.allCases, id: \.self) { status in
+                                    Text(status.rawValue).tag(status)
+                                }
+                            }
+                            TextField("Evidence or error reviewed", text: $model.postingEvidence, axis: .vertical)
+                            Button("Save reconciliation locally") { model.recordPostingCheck() }
+                                .disabled(!model.workspaceReady || model.selectedJobURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.postingEvidence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                        if model.selectedPostingChecks.isEmpty {
+                            Text("No reconciliation recorded yet.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("History").font(.headline)
+                            ForEach(model.selectedPostingChecks, id: \.id) { check in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(check.status.rawValue) · \(check.checkedAt.formatted(date: .abbreviated, time: .shortened))")
+                                        .font(.caption.bold())
+                                    Text(check.evidence)
+                                        .font(.caption)
                                 }
                                 .padding(.vertical, 2)
                             }

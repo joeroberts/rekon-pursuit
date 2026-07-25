@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 12)
+        XCTAssertEqual(try store.schemaVersion(), 13)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -39,7 +39,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 12)
+        XCTAssertEqual(try store.schemaVersion(), 13)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -51,7 +51,8 @@ final class WorkspaceStoreTests: XCTestCase {
                 [.integer(9), .text(WorkspaceMigrations.versionNineChecksum)],
                 [.integer(10), .text(WorkspaceMigrations.versionTenChecksum)],
                 [.integer(11), .text(WorkspaceMigrations.versionElevenChecksum)],
-                [.integer(12), .text(WorkspaceMigrations.versionTwelveChecksum)]
+                [.integer(12), .text(WorkspaceMigrations.versionTwelveChecksum)],
+                [.integer(13), .text(WorkspaceMigrations.versionThirteenChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
@@ -72,7 +73,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 12)
+        XCTAssertEqual(try store.schemaVersion(), 13)
         XCTAssertEqual(try database.rows("SELECT id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at FROM interactions"), [[.text("interaction-1"), .null, .text("opportunity-1"), .text("Note"), .text("Legacy note"), .real(1_704_067_200), .null]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
@@ -501,6 +502,17 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(history.map(\.contactName), [nil])
         XCTAssertEqual(history.map(\.kind), [.note])
         XCTAssertEqual(history.map(\.summary), ["Prior note"])
+    }
+
+    func testPostingCheckPersistsEvidenceWithoutChangingOpportunityStage() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", stage: .applied, jobURL: "https://jobs.example.com/123"))
+
+        let check = try store.recordPostingCheck(RecordPostingCheck(opportunityID: opportunity.id, url: opportunity.jobURL, status: .closed, evidence: "Posting returned a closed notice."))
+
+        XCTAssertEqual(try store.postingChecks(forOpportunityID: opportunity.id), [check])
+        XCTAssertEqual(try store.opportunities().first?.stage, .applied)
+        XCTAssertEqual(try store.activityEvents().last?.kind, "posting_checked")
     }
 
     func testDeletingOpportunityHidesItAndLeavesOnlyRedactedAuditEvidence() throws {

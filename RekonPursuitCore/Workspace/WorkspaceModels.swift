@@ -8,8 +8,9 @@ struct Opportunity: Equatable {
     let stage: PipelineStage
     let nextAction: String
     let dueAt: Date?
+    let jobURL: String
 
-    init(id: String, title: String, company: String, createdAt: Date, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil) {
+    init(id: String, title: String, company: String, createdAt: Date, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil, jobURL: String = "") {
         self.id = id
         self.title = title
         self.company = company
@@ -17,7 +18,31 @@ struct Opportunity: Equatable {
         self.stage = stage
         self.nextAction = nextAction
         self.dueAt = dueAt
+        self.jobURL = jobURL
     }
+}
+
+enum PostingStatus: String, CaseIterable, Equatable {
+    case stillOpen = "Still open"
+    case possiblyClosed = "Possibly closed"
+    case closed = "Closed"
+    case manualReview = "Needs manual review"
+}
+
+struct PostingCheck: Equatable {
+    let id: String
+    let opportunityID: String
+    let url: String
+    let status: PostingStatus
+    let evidence: String
+    let checkedAt: Date
+}
+
+struct RecordPostingCheck {
+    let opportunityID: String
+    let url: String
+    let status: PostingStatus
+    let evidence: String
 }
 
 enum PipelineStage: String, CaseIterable, Equatable {
@@ -161,13 +186,15 @@ struct CreateOpportunity: Equatable {
     let stage: PipelineStage
     let nextAction: String
     let dueAt: Date?
+    let jobURL: String
 
-    init(title: String, company: String, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil) {
+    init(title: String, company: String, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil, jobURL: String = "") {
         self.title = title
         self.company = company
         self.stage = stage
         self.nextAction = nextAction
         self.dueAt = dueAt
+        self.jobURL = jobURL
     }
 }
 
@@ -178,6 +205,7 @@ enum WorkspaceStoreError: Error, LocalizedError {
     case unresolvedImportDecision
     case invalidContact
     case invalidInteraction
+    case invalidPostingCheck
 
     var errorDescription: String? {
         switch self {
@@ -193,6 +221,8 @@ enum WorkspaceStoreError: Error, LocalizedError {
             return "Enter a contact name."
         case .invalidInteraction:
             return "Enter an interaction summary and choose a valid linked opportunity."
+        case .invalidPostingCheck:
+            return "Enter the posting URL and the evidence you reviewed."
         }
     }
 }

@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 enum WorkspaceMigrations {
-    static let currentVersion = 12
+    static let currentVersion = 13
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
@@ -12,6 +12,7 @@ enum WorkspaceMigrations {
     static let versionTenChecksum = checksum(for: "10|opportunity_stage_history")
     static let versionElevenChecksum = checksum(for: "11|contacts.details.deleted_at|activity_events.contact_id")
     static let versionTwelveChecksum = checksum(for: "12|interactions.contact_id.optional_opportunity.kind.next_touch")
+    static let versionThirteenChecksum = checksum(for: "13|opportunities.job_url|posting_checks")
 
     static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
@@ -171,6 +172,7 @@ enum WorkspaceMigrations {
             try database.createVerifiedSnapshot()
             do {
                 try database.transaction {
+                    try database.execute("CREATE TABLE IF NOT EXISTS interactions (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), summary TEXT NOT NULL, occurred_at REAL NOT NULL)")
                     try database.execute("ALTER TABLE interactions RENAME TO interactions_v11")
                     try database.execute("CREATE TABLE interactions (id TEXT PRIMARY KEY NOT NULL, contact_id TEXT REFERENCES contacts(id), opportunity_id TEXT REFERENCES opportunities(id), kind TEXT NOT NULL, summary TEXT NOT NULL, occurred_at REAL NOT NULL, next_touch_at REAL)")
                     try database.execute("INSERT INTO interactions (id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at) SELECT id, NULL, opportunity_id, 'Note', summary, occurred_at, NULL FROM interactions_v11")
@@ -178,6 +180,21 @@ enum WorkspaceMigrations {
                     try database.execute("CREATE INDEX interactions_contact_occurred_at ON interactions(contact_id, occurred_at, id)")
                     try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(12), .text(versionTwelveChecksum)])
                     try database.execute("UPDATE schema_migrations SET version = 12")
+                }
+                database.removeMigrationSnapshot()
+            } catch {
+                throw error
+            }
+        }
+        if version < 13 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    try database.execute("ALTER TABLE opportunities ADD COLUMN job_url TEXT NOT NULL DEFAULT ''")
+                    try database.execute("CREATE TABLE posting_checks (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), url TEXT NOT NULL, status TEXT NOT NULL, evidence TEXT NOT NULL, checked_at REAL NOT NULL)")
+                    try database.execute("CREATE INDEX posting_checks_opportunity_checked_at ON posting_checks(opportunity_id, checked_at, id)")
+                    try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(13), .text(versionThirteenChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 13")
                 }
                 database.removeMigrationSnapshot()
             } catch {

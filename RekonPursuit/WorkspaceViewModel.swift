@@ -21,6 +21,8 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var stageFilter = "All stages"
     @Published var selectedTitle = ""
     @Published var selectedCompany = ""
+    @Published var jobURL = ""
+    @Published var selectedJobURL = ""
     @Published var selectedStage: PipelineStage = .saved
     @Published var selectedNextAction = ""
     @Published var selectedDueAt = Date.now
@@ -50,6 +52,9 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var selectedContactOpportunities: [Opportunity] = []
     @Published private(set) var selectedContactLastTouch: Date?
     @Published private(set) var selectedContactNextTouch: Date?
+    @Published var postingStatus: PostingStatus = .stillOpen
+    @Published var postingEvidence = ""
+    @Published private(set) var selectedPostingChecks: [PostingCheck] = []
     @Published private(set) var csvPreview: CSVImportPreview?
     @Published private(set) var csvImportPlan: [CSVImportPlanRow] = []
     @Published private(set) var csvImportReport: CSVImportReport?
@@ -100,9 +105,10 @@ final class WorkspaceViewModel: ObservableObject {
             return
         }
         do {
-            _ = try store.create(CreateOpportunity(title: title, company: company, stage: stage, nextAction: nextAction, dueAt: nextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !hasDueDate ? nil : dueAt))
+            _ = try store.create(CreateOpportunity(title: title, company: company, stage: stage, nextAction: nextAction, dueAt: nextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !hasDueDate ? nil : dueAt, jobURL: jobURL))
             title = ""
             company = ""
+            jobURL = ""
             nextAction = ""
             hasDueDate = false
             refreshCounts()
@@ -215,6 +221,7 @@ final class WorkspaceViewModel: ObservableObject {
         refreshStageHistory()
         refreshSelectedTask()
         refreshRelationshipMemory()
+        refreshSelectedPostingChecks()
     }
 
     func saveSelectedOpportunity() {
@@ -226,7 +233,8 @@ final class WorkspaceViewModel: ObservableObject {
                 company: selectedCompany,
                 stage: selectedStage,
                 nextAction: selectedNextAction,
-                dueAt: selectedNextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedHasDueDate ? nil : selectedDueAt
+                dueAt: selectedNextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedHasDueDate ? nil : selectedDueAt,
+                jobURL: selectedJobURL
             )
             refreshCounts()
             statusMessage = "Opportunity updated locally."
@@ -323,6 +331,20 @@ final class WorkspaceViewModel: ObservableObject {
             statusMessage = "Contact unlinked locally."
         } catch {
             statusMessage = "The contact could not be unlinked."
+        }
+    }
+
+    func recordPostingCheck() {
+        guard let store, !selectedOpportunityID.isEmpty else { return }
+        do {
+            _ = try store.recordPostingCheck(RecordPostingCheck(opportunityID: selectedOpportunityID, url: selectedJobURL, status: postingStatus, evidence: postingEvidence))
+            postingEvidence = ""
+            refreshCounts()
+            statusMessage = "Reconciliation saved locally. The opportunity stage was not changed."
+        } catch let error as LocalizedError {
+            statusMessage = error.errorDescription ?? "The reconciliation could not be saved."
+        } catch {
+            statusMessage = "The reconciliation could not be saved."
         }
     }
 
@@ -425,6 +447,7 @@ final class WorkspaceViewModel: ObservableObject {
             refreshStageHistory()
             refreshSelectedTask()
             refreshRelationshipMemory()
+            refreshSelectedPostingChecks()
             contacts = try store?.contacts() ?? []
             refreshSelectedContactInteraction()
             activityCount = try store?.activityEvents().count ?? 0
@@ -444,6 +467,14 @@ final class WorkspaceViewModel: ObservableObject {
             selectedOpportunityInteractions = selectedOpportunityID.isEmpty ? [] : try store?.opportunityInteractions(forOpportunityID: selectedOpportunityID) ?? []
         } catch {
             statusMessage = "The relationship history could not be read."
+        }
+    }
+
+    private func refreshSelectedPostingChecks() {
+        do {
+            selectedPostingChecks = selectedOpportunityID.isEmpty ? [] : try store?.postingChecks(forOpportunityID: selectedOpportunityID) ?? []
+        } catch {
+            statusMessage = "The reconciliation history could not be read."
         }
     }
 
@@ -497,6 +528,7 @@ final class WorkspaceViewModel: ObservableObject {
         guard let opportunity = opportunities.first(where: { $0.id == selectedOpportunityID }) else {
             selectedTitle = ""
             selectedCompany = ""
+            selectedJobURL = ""
             selectedStage = .saved
             selectedNextAction = ""
             selectedHasDueDate = false
@@ -505,6 +537,7 @@ final class WorkspaceViewModel: ObservableObject {
         }
         selectedTitle = opportunity.title
         selectedCompany = opportunity.company
+        selectedJobURL = opportunity.jobURL
         selectedStage = opportunity.stage
         selectedNextAction = opportunity.nextAction
         selectedHasDueDate = opportunity.dueAt != nil
