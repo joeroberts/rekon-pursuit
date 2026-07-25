@@ -752,6 +752,7 @@ struct ContentView: View {
         GroupBox("Local workspace") {
             VStack(alignment: .leading, spacing: 10) {
                 Text(model.statusMessage)
+                    .accessibilityIdentifier("workspace-gate-status")
                 if !model.workspaceReady {
                     if model.canCreateWorkspace {
                         Button("Create local workspace") {

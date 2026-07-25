@@ -20,7 +20,7 @@ required operator-facing smoke remain pending.
 | Check | Command | Result |
 | --- | --- | --- |
 | Debug macOS build | `xcodebuild build -project RekonPursuit.xcodeproj -scheme RekonPursuit -destination 'platform=macOS,arch=arm64'` | Passed. |
-| UI navigation checks | `xcodebuild test -quiet -project RekonPursuit.xcodeproj -scheme RekonPursuit -destination 'platform=macOS' -only-testing:RekonPursuitUITests` | Passed: default Needs Attention/sidebar/workspace-state and Contacts navigation. The test asserts the visible `workspace-status` static text; SwiftUI does not expose the `GroupBox` wrapper as the `Other` element previously queried. |
+| UI navigation checks | `xcodebuild test -quiet -project RekonPursuit.xcodeproj -scheme RekonPursuit -destination 'platform=macOS' -only-testing:RekonPursuitUITests` | Passed: default Needs Attention/sidebar/workspace-gate state and Contacts navigation. The test asserts the gate's visible `workspace-gate-status` static text; SwiftUI does not expose the `GroupBox` wrapper as the `Other` element previously queried. |
 | Isolated harness preflight | `scripts/remediation/run_r1a_isolated_smoke.sh .` | Passed: temporary sandboxed app namespace and container were created. |
 
 ## Pending acceptance smoke
