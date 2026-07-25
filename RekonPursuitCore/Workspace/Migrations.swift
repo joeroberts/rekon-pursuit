@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 enum WorkspaceMigrations {
-    static let currentVersion = 15
+    static let currentVersion = 16
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
@@ -15,8 +15,9 @@ enum WorkspaceMigrations {
     static let versionThirteenChecksum = checksum(for: "13|opportunities.job_url|posting_checks")
     static let versionFourteenChecksum = checksum(for: "14|document_references.source_hash.final_sent_at")
     static let versionFifteenChecksum = checksum(for: "15|opportunities.job_description.notes")
+    static let versionSixteenChecksum = checksum(for: "16|opportunities.core_tracker_fields|opportunity_response_history")
 
-    static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false) throws {
+    static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false, failVersionSixteen: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
         let versions = try database.rows("SELECT version FROM schema_migrations LIMIT 1")
         if versions.isEmpty {
@@ -230,6 +231,26 @@ enum WorkspaceMigrations {
             } catch {
                 throw error
             }
+        }
+        if version < 16 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    try database.execute("ALTER TABLE opportunities ADD COLUMN compensation TEXT")
+                    try database.execute("ALTER TABLE opportunities ADD COLUMN location TEXT")
+                    try database.execute("ALTER TABLE opportunities ADD COLUMN work_arrangement TEXT NOT NULL DEFAULT 'Not specified'")
+                    try database.execute("ALTER TABLE opportunities ADD COLUMN application_date REAL")
+                    try database.execute("ALTER TABLE opportunities ADD COLUMN response_state TEXT NOT NULL DEFAULT 'No response recorded'")
+                    try database.execute("ALTER TABLE opportunities ADD COLUMN stage_changed_at REAL")
+                    try database.execute("UPDATE opportunities SET stage_changed_at = created_at WHERE stage_changed_at IS NULL")
+                    try database.execute("CREATE TABLE opportunity_response_history (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), from_state TEXT NOT NULL, to_state TEXT NOT NULL, occurred_at REAL NOT NULL)")
+                    try database.execute("CREATE INDEX opportunity_response_history_opportunity_occurred_at ON opportunity_response_history(opportunity_id, occurred_at DESC, id DESC)")
+                    if failVersionSixteen { throw WorkspaceStoreError.injectedFailure }
+                    try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(16), .text(versionSixteenChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 16")
+                }
+                database.removeMigrationSnapshot()
+            } catch { throw error }
         }
     }
 

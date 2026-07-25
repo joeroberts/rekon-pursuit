@@ -21,6 +21,7 @@ final class WorkspaceViewModel: ObservableObject {
         didSet { UserDefaults.standard.set(showClosedOpportunities, forKey: "showClosedOpportunities") }
     }
     @Published private(set) var selectedStageHistory: [StageHistoryEntry] = []
+    @Published private(set) var selectedResponseHistory: [ResponseHistoryEntry] = []
     @Published private(set) var selectedTask: TaskReminder?
     @Published var opportunitySearch = ""
     @Published var stageFilter = "All stages"
@@ -29,9 +30,25 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var jobURL = ""
     @Published var jobDescription = ""
     @Published var notes = ""
+    @Published var compensation = ""
+    @Published var location = ""
+    @Published var workArrangement: WorkArrangement = .notSpecified
+    @Published var applicationDate = Date.now
+    @Published var hasApplicationDate = false
+    @Published var responseState: ResponseState = .noResponseRecorded
+    @Published var responseEffectiveDate = Date.now
+    @Published var stageChangedAt = Date.now
     @Published var selectedJobURL = ""
     @Published var selectedJobDescription = ""
     @Published var selectedNotes = ""
+    @Published var selectedCompensation = ""
+    @Published var selectedLocation = ""
+    @Published var selectedWorkArrangement: WorkArrangement = .notSpecified
+    @Published var selectedApplicationDate = Date.now
+    @Published var selectedHasApplicationDate = false
+    @Published var selectedResponseState: ResponseState = .noResponseRecorded
+    @Published var selectedResponseEffectiveDate = Date.now
+    @Published var selectedStageChangedAt = Date.now
     @Published var selectedStage: PipelineStage = .saved
     @Published var selectedNextAction = ""
     @Published var selectedDueAt = Date.now
@@ -126,12 +143,17 @@ final class WorkspaceViewModel: ObservableObject {
     func createOpportunity() {
         guard let store = readyStore() else { return }
         do {
-            _ = try store.create(CreateOpportunity(title: title, company: company, stage: stage, nextAction: nextAction, dueAt: nextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !hasDueDate ? nil : dueAt, jobURL: jobURL, jobDescription: jobDescription, notes: notes))
+            _ = try store.create(CreateOpportunity(title: title, company: company, stage: stage, nextAction: nextAction, dueAt: nextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !hasDueDate ? nil : dueAt, jobURL: jobURL, jobDescription: jobDescription, notes: notes, compensation: compensation, location: location, workArrangement: workArrangement, applicationDate: hasApplicationDate ? applicationDate : nil, responseState: responseState, responseEffectiveDate: responseEffectiveDate, stageChangedAt: stageChangedAt))
             title = ""
             company = ""
             jobURL = ""
             jobDescription = ""
             notes = ""
+            compensation = ""
+            location = ""
+            workArrangement = .notSpecified
+            hasApplicationDate = false
+            responseState = .noResponseRecorded
             nextAction = ""
             hasDueDate = false
             refreshCounts()
@@ -257,6 +279,7 @@ final class WorkspaceViewModel: ObservableObject {
         selectedOpportunityID = opportunity.id
         loadSelectedOpportunity()
         refreshStageHistory()
+        refreshResponseHistory()
         refreshSelectedTask()
         refreshRelationshipMemory()
         refreshSelectedPostingChecks()
@@ -274,7 +297,14 @@ final class WorkspaceViewModel: ObservableObject {
                 dueAt: selectedNextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedHasDueDate ? nil : selectedDueAt,
                 jobURL: selectedJobURL,
                 jobDescription: selectedJobDescription,
-                notes: selectedNotes
+                notes: selectedNotes,
+                compensation: selectedCompensation,
+                location: selectedLocation,
+                workArrangement: selectedWorkArrangement,
+                applicationDate: selectedHasApplicationDate ? selectedApplicationDate : nil,
+                responseState: selectedResponseState,
+                responseEffectiveDate: selectedResponseEffectiveDate,
+                stageChangedAt: selectedStageChangedAt
             )
             refreshCounts()
             statusMessage = "Opportunity updated locally."
@@ -622,6 +652,7 @@ final class WorkspaceViewModel: ObservableObject {
         activityEvents = []
         selectedOpportunityID = ""
         selectedStageHistory = []
+        selectedResponseHistory = []
         selectedTask = nil
         loadSelectedOpportunity()
         contacts = []
@@ -651,6 +682,7 @@ final class WorkspaceViewModel: ObservableObject {
             }
             loadSelectedOpportunity()
             refreshStageHistory()
+            refreshResponseHistory()
             refreshSelectedTask()
             refreshRelationshipMemory()
             refreshSelectedPostingChecks()
@@ -746,6 +778,13 @@ final class WorkspaceViewModel: ObservableObject {
             selectedJobURL = ""
             selectedJobDescription = ""
             selectedNotes = ""
+            selectedCompensation = ""
+            selectedLocation = ""
+            selectedWorkArrangement = .notSpecified
+            selectedHasApplicationDate = false
+            selectedResponseState = .noResponseRecorded
+            selectedResponseEffectiveDate = Date.now
+            selectedStageChangedAt = Date.now
             selectedStage = .saved
             selectedNextAction = ""
             selectedHasDueDate = false
@@ -757,6 +796,14 @@ final class WorkspaceViewModel: ObservableObject {
         selectedJobURL = opportunity.jobURL
         selectedJobDescription = opportunity.jobDescription
         selectedNotes = opportunity.notes
+        selectedCompensation = opportunity.compensation ?? ""
+        selectedLocation = opportunity.location ?? ""
+        selectedWorkArrangement = opportunity.workArrangement
+        selectedHasApplicationDate = opportunity.applicationDate != nil
+        selectedApplicationDate = opportunity.applicationDate ?? Date.now
+        selectedResponseState = opportunity.responseState
+        selectedResponseEffectiveDate = Date.now
+        selectedStageChangedAt = opportunity.stageChangedAt ?? opportunity.createdAt
         selectedStage = opportunity.stage
         selectedNextAction = opportunity.nextAction
         selectedHasDueDate = opportunity.dueAt != nil
@@ -768,6 +815,14 @@ final class WorkspaceViewModel: ObservableObject {
             selectedStageHistory = selectedOpportunityID.isEmpty ? [] : try store?.stageHistory(forOpportunityID: selectedOpportunityID) ?? []
         } catch {
             statusMessage = "The stage history could not be read."
+        }
+    }
+
+    private func refreshResponseHistory() {
+        do {
+            selectedResponseHistory = selectedOpportunityID.isEmpty ? [] : try store?.responseHistory(forOpportunityID: selectedOpportunityID) ?? []
+        } catch {
+            statusMessage = "The response history could not be read."
         }
     }
 

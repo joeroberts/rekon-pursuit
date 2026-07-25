@@ -11,8 +11,14 @@ struct Opportunity: Equatable {
     let jobURL: String
     let jobDescription: String
     let notes: String
+    let compensation: String?
+    let location: String?
+    let workArrangement: WorkArrangement
+    let applicationDate: Date?
+    let responseState: ResponseState
+    let stageChangedAt: Date?
 
-    init(id: String, title: String, company: String, createdAt: Date, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil, jobURL: String = "", jobDescription: String = "", notes: String = "") {
+    init(id: String, title: String, company: String, createdAt: Date, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil, jobURL: String = "", jobDescription: String = "", notes: String = "", compensation: String? = nil, location: String? = nil, workArrangement: WorkArrangement = .notSpecified, applicationDate: Date? = nil, responseState: ResponseState = .noResponseRecorded, stageChangedAt: Date? = nil) {
         self.id = id
         self.title = title
         self.company = company
@@ -23,7 +29,35 @@ struct Opportunity: Equatable {
         self.jobURL = jobURL
         self.jobDescription = jobDescription
         self.notes = notes
+        self.compensation = compensation
+        self.location = location
+        self.workArrangement = workArrangement
+        self.applicationDate = applicationDate
+        self.responseState = responseState
+        self.stageChangedAt = stageChangedAt
     }
+}
+
+enum WorkArrangement: String, CaseIterable, Equatable {
+    case notSpecified = "Not specified"
+    case onSite = "On-site"
+    case hybrid = "Hybrid"
+    case remote = "Remote"
+}
+
+enum ResponseState: String, CaseIterable, Equatable {
+    case noResponseRecorded = "No response recorded"
+    case awaitingResponse = "Awaiting response"
+    case responseReceived = "Response received"
+    case declined = "Declined"
+}
+
+struct ResponseHistoryEntry: Equatable {
+    let id: String
+    let opportunityID: String
+    let fromState: ResponseState
+    let toState: ResponseState
+    let occurredAt: Date
 }
 
 enum PostingStatus: String, CaseIterable, Equatable {
@@ -219,8 +253,15 @@ struct CreateOpportunity: Equatable {
     let jobURL: String
     let jobDescription: String
     let notes: String
+    let compensation: String?
+    let location: String?
+    let workArrangement: WorkArrangement
+    let applicationDate: Date?
+    let responseState: ResponseState
+    let responseEffectiveDate: Date?
+    let stageChangedAt: Date?
 
-    init(title: String, company: String, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil, jobURL: String = "", jobDescription: String = "", notes: String = "") {
+    init(title: String, company: String, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil, jobURL: String = "", jobDescription: String = "", notes: String = "", compensation: String? = nil, location: String? = nil, workArrangement: WorkArrangement = .notSpecified, applicationDate: Date? = nil, responseState: ResponseState = .noResponseRecorded, responseEffectiveDate: Date? = nil, stageChangedAt: Date? = nil) {
         self.title = title
         self.company = company
         self.stage = stage
@@ -229,6 +270,13 @@ struct CreateOpportunity: Equatable {
         self.jobURL = jobURL
         self.jobDescription = jobDescription
         self.notes = notes
+        self.compensation = compensation
+        self.location = location
+        self.workArrangement = workArrangement
+        self.applicationDate = applicationDate
+        self.responseState = responseState
+        self.responseEffectiveDate = responseEffectiveDate
+        self.stageChangedAt = stageChangedAt
     }
 }
 

@@ -55,6 +55,16 @@ struct ContentView: View {
                 TextField("Job URL (optional)", text: $model.jobURL)
                 TextField("Job description (optional)", text: $model.jobDescription, axis: .vertical)
                 TextField("Notes (optional)", text: $model.notes, axis: .vertical)
+                Section("Job details") {
+                    TextField("Compensation (optional)", text: $model.compensation)
+                    TextField("Location (optional)", text: $model.location)
+                    Picker("Work arrangement", selection: $model.workArrangement) { ForEach(WorkArrangement.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                    Toggle("Add applied date", isOn: $model.hasApplicationDate)
+                    if model.hasApplicationDate { DatePicker("Applied date", selection: $model.applicationDate, displayedComponents: .date) }
+                    Picker("Current response", selection: $model.responseState) { ForEach(ResponseState.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                    if model.responseState != .noResponseRecorded { DatePicker(model.responseState == .responseReceived ? "Response received date" : "Response status date", selection: $model.responseEffectiveDate, displayedComponents: .date) }
+                    DatePicker("Stage changed date", selection: $model.stageChangedAt, displayedComponents: .date)
+                }
                 Picker("Stage", selection: $model.stage) {
                     ForEach(PipelineStage.allCases, id: \.self) { stage in
                         Text(stage.rawValue).tag(stage)
@@ -203,6 +213,16 @@ struct ContentView: View {
                         TextField("Job URL (optional)", text: $model.selectedJobURL)
                         TextField("Job description (optional)", text: $model.selectedJobDescription, axis: .vertical)
                         TextField("Notes (optional)", text: $model.selectedNotes, axis: .vertical)
+                        Section("Job details") {
+                            TextField("Compensation (optional)", text: $model.selectedCompensation)
+                            TextField("Location (optional)", text: $model.selectedLocation)
+                            Picker("Work arrangement", selection: $model.selectedWorkArrangement) { ForEach(WorkArrangement.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                            Toggle("Add applied date", isOn: $model.selectedHasApplicationDate)
+                            if model.selectedHasApplicationDate { DatePicker("Applied date", selection: $model.selectedApplicationDate, displayedComponents: .date) }
+                            Picker("Current response", selection: $model.selectedResponseState) { ForEach(ResponseState.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                            if model.selectedResponseState != model.selectedOpportunity?.responseState { DatePicker(model.selectedResponseState == .responseReceived ? "Response received date" : "Response status date", selection: $model.selectedResponseEffectiveDate, displayedComponents: .date) }
+                            DatePicker("Stage changed date", selection: $model.selectedStageChangedAt, displayedComponents: .date)
+                        }
                         Picker("Stage", selection: $model.selectedStage) {
                             ForEach(PipelineStage.allCases, id: \.self) { stage in
                                 Text(stage.rawValue).tag(stage)
@@ -234,6 +254,14 @@ struct ContentView: View {
                         ForEach(model.selectedStageHistory, id: \.id) { entry in
                             Text("\(entry.fromStage?.rawValue ?? "Created") → \(entry.toStage.rawValue) · \(entry.occurredAt.formatted(date: .abbreviated, time: .shortened))")
                                 .font(.caption)
+                        }
+                    }
+                    Text("Response history").font(.headline)
+                    if model.selectedResponseHistory.isEmpty {
+                        Text("No response has been recorded.").foregroundStyle(.secondary)
+                    } else {
+                        ForEach(model.selectedResponseHistory, id: \.id) { entry in
+                            Text("\(entry.fromState.rawValue) → \(entry.toState.rawValue) · \(entry.occurredAt.formatted(date: .abbreviated, time: .omitted))").font(.caption)
                         }
                     }
                     if model.selectedActivityEvents.isEmpty {

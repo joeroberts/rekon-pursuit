@@ -49,15 +49,15 @@ final class WorkspaceStore {
 
         return try synchronized {
             let nextAction = command.nextAction.trimmingCharacters(in: .whitespacesAndNewlines)
-            let opportunity = Opportunity(id: nextIdentifier(), title: title, company: company, createdAt: now, stage: command.stage, nextAction: nextAction, dueAt: command.dueAt, jobURL: command.jobURL.trimmingCharacters(in: .whitespacesAndNewlines), jobDescription: command.jobDescription.trimmingCharacters(in: .whitespacesAndNewlines), notes: command.notes.trimmingCharacters(in: .whitespacesAndNewlines))
+            let opportunity = Opportunity(id: nextIdentifier(), title: title, company: company, createdAt: now, stage: command.stage, nextAction: nextAction, dueAt: command.dueAt, jobURL: command.jobURL.trimmingCharacters(in: .whitespacesAndNewlines), jobDescription: command.jobDescription.trimmingCharacters(in: .whitespacesAndNewlines), notes: command.notes.trimmingCharacters(in: .whitespacesAndNewlines), compensation: trimmedOptional(command.compensation), location: trimmedOptional(command.location), workArrangement: command.workArrangement, applicationDate: command.applicationDate, responseState: command.responseState, stageChangedAt: command.stageChangedAt ?? now)
             let event = ActivityEvent(
                 id: nextIdentifier(), kind: "opportunity_created", opportunityID: opportunity.id,
                 actorID: actorID, correlationID: correlationID, occurredAt: now
             )
             try database.transaction {
                 try database.execute(
-                    "INSERT INTO opportunities (id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    values: [.text(opportunity.id), .text(opportunity.title), .text(opportunity.company), .real(opportunity.createdAt.timeIntervalSince1970), .text(opportunity.stage.rawValue), .text(nextAction), opportunity.dueAt.map { .real($0.timeIntervalSince1970) } ?? .null, .text(opportunity.jobURL), .text(opportunity.jobDescription), .text(opportunity.notes)]
+                    "INSERT INTO opportunities (id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes, compensation, location, work_arrangement, application_date, response_state, stage_changed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    values: opportunityValues(opportunity)
                 )
                 if !nextAction.isEmpty {
                     try database.execute("INSERT INTO task_reminders (id, opportunity_id, title, due_at) VALUES (?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(opportunity.id), .text(nextAction), opportunity.dueAt.map { .real($0.timeIntervalSince1970) } ?? .null])
@@ -69,8 +69,13 @@ final class WorkspaceStore {
                 )
                 try database.execute(
                     "INSERT INTO opportunity_stage_history (id, opportunity_id, from_stage, to_stage, occurred_at) VALUES (?, ?, NULL, ?, ?)",
-                    values: [.text(nextIdentifier()), .text(opportunity.id), .text(opportunity.stage.rawValue), .real(now.timeIntervalSince1970)]
+                    values: [.text(nextIdentifier()), .text(opportunity.id), .text(opportunity.stage.rawValue), .real(opportunity.stageChangedAt!.timeIntervalSince1970)]
                 )
+                if opportunity.responseState != .noResponseRecorded {
+                    let responseDate = command.responseEffectiveDate ?? now
+                    try database.execute("INSERT INTO opportunity_response_history (id, opportunity_id, from_state, to_state, occurred_at) VALUES (?, ?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(opportunity.id), .text(ResponseState.noResponseRecorded.rawValue), .text(opportunity.responseState.rawValue), .real(responseDate.timeIntervalSince1970)])
+                    try appendActivity(kind: "opportunity_response_changed", opportunityID: opportunity.id)
+                }
             }
             return opportunity
         }
@@ -78,7 +83,7 @@ final class WorkspaceStore {
 
     func opportunities() throws -> [Opportunity] {
         try synchronized {
-            try database.rows("SELECT id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes FROM opportunities WHERE deleted_at IS NULL ORDER BY created_at, id").map(opportunity(from:))
+            try database.rows(opportunitySelect + " FROM opportunities WHERE deleted_at IS NULL ORDER BY created_at, id").map(opportunity(from:))
         }
     }
 
@@ -105,8 +110,8 @@ final class WorkspaceStore {
                         continue
                     }
                     let command = planRow.row.opportunity
-                    let opportunity = Opportunity(id: nextIdentifier(), title: command.title.trimmingCharacters(in: .whitespacesAndNewlines), company: command.company.trimmingCharacters(in: .whitespacesAndNewlines), createdAt: now, stage: command.stage, nextAction: command.nextAction, dueAt: command.dueAt, jobURL: command.jobURL.trimmingCharacters(in: .whitespacesAndNewlines), jobDescription: command.jobDescription.trimmingCharacters(in: .whitespacesAndNewlines), notes: command.notes.trimmingCharacters(in: .whitespacesAndNewlines))
-                    try database.execute("INSERT INTO opportunities (id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", values: [.text(opportunity.id), .text(opportunity.title), .text(opportunity.company), .real(now.timeIntervalSince1970), .text(opportunity.stage.rawValue), .text(opportunity.nextAction), opportunity.dueAt.map { .real($0.timeIntervalSince1970) } ?? .null, .text(opportunity.jobURL), .text(opportunity.jobDescription), .text(opportunity.notes)])
+                    let opportunity = Opportunity(id: nextIdentifier(), title: command.title.trimmingCharacters(in: .whitespacesAndNewlines), company: command.company.trimmingCharacters(in: .whitespacesAndNewlines), createdAt: now, stage: command.stage, nextAction: command.nextAction, dueAt: command.dueAt, jobURL: command.jobURL.trimmingCharacters(in: .whitespacesAndNewlines), jobDescription: command.jobDescription.trimmingCharacters(in: .whitespacesAndNewlines), notes: command.notes.trimmingCharacters(in: .whitespacesAndNewlines), stageChangedAt: now)
+                    try database.execute("INSERT INTO opportunities (id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes, compensation, location, work_arrangement, application_date, response_state, stage_changed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", values: opportunityValues(opportunity))
                     try appendActivity(kind: planRow.isDuplicate ? "csv_duplicate_kept" : "csv_imported", opportunityID: opportunity.id)
                     try database.execute("INSERT INTO opportunity_stage_history (id, opportunity_id, from_stage, to_stage, occurred_at) VALUES (?, ?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(opportunity.id), .null, .text(opportunity.stage.rawValue), .real(now.timeIntervalSince1970)])
                 }
@@ -220,7 +225,7 @@ final class WorkspaceStore {
             guard currentStage != stage else { return }
             let event = ActivityEvent(id: nextIdentifier(), kind: "opportunity_stage_changed", opportunityID: opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: now)
             try database.transaction {
-                try database.execute("UPDATE opportunities SET stage = ? WHERE id = ?", values: [.text(stage.rawValue), .text(opportunityID)])
+                try database.execute("UPDATE opportunities SET stage = ?, stage_changed_at = ? WHERE id = ?", values: [.text(stage.rawValue), .real(now.timeIntervalSince1970), .text(opportunityID)])
                 try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), event.opportunityID.map(DatabaseValue.text) ?? .null, .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
                 try database.execute("INSERT INTO opportunity_stage_history (id, opportunity_id, from_stage, to_stage, occurred_at) VALUES (?, ?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(opportunityID), .text(currentStage.rawValue), .text(stage.rawValue), .real(now.timeIntervalSince1970)])
             }
@@ -236,7 +241,14 @@ final class WorkspaceStore {
         dueAt: Date?,
         jobURL: String = "",
         jobDescription: String = "",
-        notes: String = ""
+        notes: String = "",
+        compensation: String? = nil,
+        location: String? = nil,
+        workArrangement: WorkArrangement = .notSpecified,
+        applicationDate: Date? = nil,
+        responseState: ResponseState = .noResponseRecorded,
+        responseEffectiveDate: Date? = nil,
+        stageChangedAt: Date? = nil
     ) throws {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let company = company.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -246,12 +258,14 @@ final class WorkspaceStore {
         try synchronized {
             guard try isActiveOpportunity(id) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
             let currentStage = try activeOpportunityStage(id: id)
+            let currentResponse = try activeOpportunityResponseState(id: id)
             let didChangeStage = currentStage != stage
+            let didChangeResponse = currentResponse != responseState
             let event = ActivityEvent(id: nextIdentifier(), kind: didChangeStage ? "opportunity_stage_changed" : "opportunity_updated", opportunityID: id, actorID: actorID, correlationID: correlationID, occurredAt: now)
             try database.transaction {
                 try database.execute(
-                    "UPDATE opportunities SET title = ?, company = ?, stage = ?, next_action = ?, due_at = ?, job_url = ?, job_description = ?, notes = ? WHERE id = ?",
-                    values: [.text(title), .text(company), .text(stage.rawValue), .text(nextAction), dueAt.map { .real($0.timeIntervalSince1970) } ?? .null, .text(jobURL.trimmingCharacters(in: .whitespacesAndNewlines)), .text(jobDescription.trimmingCharacters(in: .whitespacesAndNewlines)), .text(notes.trimmingCharacters(in: .whitespacesAndNewlines)), .text(id)]
+                    "UPDATE opportunities SET title = ?, company = ?, stage = ?, next_action = ?, due_at = ?, job_url = ?, job_description = ?, notes = ?, compensation = ?, location = ?, work_arrangement = ?, application_date = ?, response_state = ?, stage_changed_at = ? WHERE id = ?",
+                    values: [.text(title), .text(company), .text(stage.rawValue), .text(nextAction), dueAt.map { .real($0.timeIntervalSince1970) } ?? .null, .text(jobURL.trimmingCharacters(in: .whitespacesAndNewlines)), .text(jobDescription.trimmingCharacters(in: .whitespacesAndNewlines)), .text(notes.trimmingCharacters(in: .whitespacesAndNewlines)), trimmedOptional(compensation).map(DatabaseValue.text) ?? .null, trimmedOptional(location).map(DatabaseValue.text) ?? .null, .text(workArrangement.rawValue), applicationDate.map { .real($0.timeIntervalSince1970) } ?? .null, .text(responseState.rawValue), (didChangeStage ? (stageChangedAt ?? now) : try currentStageChangedAt(id: id)).map { .real($0.timeIntervalSince1970) } ?? .null, .text(id)]
                 )
 
                 let activeTaskID = try database.rows(
@@ -266,9 +280,13 @@ final class WorkspaceStore {
                     try database.execute("INSERT INTO task_reminders (id, opportunity_id, title, due_at) VALUES (?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(id), .text(nextAction), dueAt.map { .real($0.timeIntervalSince1970) } ?? .null])
                 }
                 if didChangeStage {
-                    try database.execute("INSERT INTO opportunity_stage_history (id, opportunity_id, from_stage, to_stage, occurred_at) VALUES (?, ?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(id), .text(currentStage.rawValue), .text(stage.rawValue), .real(now.timeIntervalSince1970)])
+                    try database.execute("INSERT INTO opportunity_stage_history (id, opportunity_id, from_stage, to_stage, occurred_at) VALUES (?, ?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(id), .text(currentStage.rawValue), .text(stage.rawValue), .real((stageChangedAt ?? now).timeIntervalSince1970)])
                 }
                 try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), .text(id), .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
+                if didChangeResponse {
+                    try database.execute("INSERT INTO opportunity_response_history (id, opportunity_id, from_state, to_state, occurred_at) VALUES (?, ?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(id), .text(currentResponse.rawValue), .text(responseState.rawValue), .real((responseEffectiveDate ?? now).timeIntervalSince1970)])
+                    try appendActivity(kind: "opportunity_response_changed", opportunityID: id)
+                }
             }
         }
     }
@@ -355,7 +373,7 @@ final class WorkspaceStore {
     func opportunities(forContactID contactID: String) throws -> [Opportunity] {
         try synchronized {
             guard try isActiveContact(contactID) else { return [] }
-            return try database.rows("SELECT opportunities.id, opportunities.title, opportunities.company, opportunities.created_at, opportunities.stage, opportunities.next_action, opportunities.due_at, opportunities.job_url, opportunities.job_description, opportunities.notes FROM opportunities JOIN contact_opportunities ON opportunities.id = contact_opportunities.opportunity_id WHERE contact_opportunities.contact_id = ? AND opportunities.deleted_at IS NULL ORDER BY opportunities.company, opportunities.title, opportunities.id", values: [.text(contactID)]).map(opportunity(from:))
+            return try database.rows("SELECT opportunities.id, opportunities.title, opportunities.company, opportunities.created_at, opportunities.stage, opportunities.next_action, opportunities.due_at, opportunities.job_url, opportunities.job_description, opportunities.notes, opportunities.compensation, opportunities.location, opportunities.work_arrangement, opportunities.application_date, opportunities.response_state, opportunities.stage_changed_at FROM opportunities JOIN contact_opportunities ON opportunities.id = contact_opportunities.opportunity_id WHERE contact_opportunities.contact_id = ? AND opportunities.deleted_at IS NULL ORDER BY opportunities.company, opportunities.title, opportunities.id", values: [.text(contactID)]).map(opportunity(from:))
         }
     }
 
@@ -494,6 +512,12 @@ final class WorkspaceStore {
         }
     }
 
+    func responseHistory(forOpportunityID opportunityID: String) throws -> [ResponseHistoryEntry] {
+        try synchronized {
+            try database.rows("SELECT id, opportunity_id, from_state, to_state, occurred_at FROM opportunity_response_history WHERE opportunity_id = ? ORDER BY occurred_at DESC, id DESC", values: [.text(opportunityID)]).map(responseHistoryEntry(from:))
+        }
+    }
+
     private func synchronized<T>(_ work: () throws -> T) throws -> T {
         lock.lock()
         defer { lock.unlock() }
@@ -511,6 +535,32 @@ final class WorkspaceStore {
             throw WorkspaceStoreError.unexpectedDatabaseValue
         }
         return stage
+    }
+
+    private func activeOpportunityResponseState(id: String) throws -> ResponseState {
+        guard case let .text(value)? = try database.rows("SELECT response_state FROM opportunities WHERE id = ? AND deleted_at IS NULL", values: [.text(id)]).first?.first,
+              let state = ResponseState(rawValue: value) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+        return state
+    }
+
+    private func currentStageChangedAt(id: String) throws -> Date? {
+        guard let value = try database.rows("SELECT stage_changed_at FROM opportunities WHERE id = ? AND deleted_at IS NULL", values: [.text(id)]).first?.first else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+        if case let .real(date) = value { return Date(timeIntervalSince1970: date) }
+        return nil
+    }
+
+    private var opportunitySelect: String {
+        "SELECT id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes, compensation, location, work_arrangement, application_date, response_state, stage_changed_at"
+    }
+
+    private func opportunityValues(_ opportunity: Opportunity) -> [DatabaseValue] {
+        [.text(opportunity.id), .text(opportunity.title), .text(opportunity.company), .real(opportunity.createdAt.timeIntervalSince1970), .text(opportunity.stage.rawValue), .text(opportunity.nextAction), opportunity.dueAt.map { .real($0.timeIntervalSince1970) } ?? .null, .text(opportunity.jobURL), .text(opportunity.jobDescription), .text(opportunity.notes), opportunity.compensation.map(DatabaseValue.text) ?? .null, opportunity.location.map(DatabaseValue.text) ?? .null, .text(opportunity.workArrangement.rawValue), opportunity.applicationDate.map { .real($0.timeIntervalSince1970) } ?? .null, .text(opportunity.responseState.rawValue), opportunity.stageChangedAt.map { .real($0.timeIntervalSince1970) } ?? .null]
+    }
+
+    private func trimmedOptional(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func isActiveOpportunity(_ id: String) throws -> Bool {
@@ -562,15 +612,24 @@ final class WorkspaceStore {
     }
 
     private func opportunity(from row: [DatabaseValue]) throws -> Opportunity {
-        guard row.count == 10,
+        guard row.count == 16,
               case let .text(id) = row[0], case let .text(title) = row[1],
               case let .text(company) = row[2], case let .real(createdAt) = row[3], case let .text(stageValue) = row[4], let stage = PipelineStage(rawValue: stageValue), case let .text(nextAction) = row[5] else {
             throw WorkspaceStoreError.unexpectedDatabaseValue
         }
         let dueAt: Date?
         if case let .real(value) = row[6] { dueAt = Date(timeIntervalSince1970: value) } else { dueAt = nil }
-        guard case let .text(jobURL) = row[7], case let .text(jobDescription) = row[8], case let .text(notes) = row[9] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
-        return Opportunity(id: id, title: title, company: company, createdAt: Date(timeIntervalSince1970: createdAt), stage: stage, nextAction: nextAction, dueAt: dueAt, jobURL: jobURL, jobDescription: jobDescription, notes: notes)
+        guard case let .text(jobURL) = row[7], case let .text(jobDescription) = row[8], case let .text(notes) = row[9], case let .text(workValue) = row[12], let workArrangement = WorkArrangement(rawValue: workValue), case let .text(responseValue) = row[14], let responseState = ResponseState(rawValue: responseValue) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+        let compensation: String? = if case let .text(value) = row[10] { value } else { nil }
+        let location: String? = if case let .text(value) = row[11] { value } else { nil }
+        let applicationDate: Date? = if case let .real(value) = row[13] { Date(timeIntervalSince1970: value) } else { nil }
+        let stageChangedAt: Date? = if case let .real(value) = row[15] { Date(timeIntervalSince1970: value) } else { nil }
+        return Opportunity(id: id, title: title, company: company, createdAt: Date(timeIntervalSince1970: createdAt), stage: stage, nextAction: nextAction, dueAt: dueAt, jobURL: jobURL, jobDescription: jobDescription, notes: notes, compensation: compensation, location: location, workArrangement: workArrangement, applicationDate: applicationDate, responseState: responseState, stageChangedAt: stageChangedAt)
+    }
+
+    private func responseHistoryEntry(from row: [DatabaseValue]) throws -> ResponseHistoryEntry {
+        guard row.count == 5, case let .text(id) = row[0], case let .text(opportunityID) = row[1], case let .text(from) = row[2], let fromState = ResponseState(rawValue: from), case let .text(to) = row[3], let toState = ResponseState(rawValue: to), case let .real(occurredAt) = row[4] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+        return ResponseHistoryEntry(id: id, opportunityID: opportunityID, fromState: fromState, toState: toState, occurredAt: Date(timeIntervalSince1970: occurredAt))
     }
 
     private func task(from row: [DatabaseValue]) throws -> TaskReminder {

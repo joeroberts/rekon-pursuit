@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 15)
+        XCTAssertEqual(try store.schemaVersion(), 16)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -39,7 +39,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 15)
+        XCTAssertEqual(try store.schemaVersion(), 16)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -55,9 +55,17 @@ final class WorkspaceStoreTests: XCTestCase {
                 [.integer(13), .text(WorkspaceMigrations.versionThirteenChecksum)],
                 [.integer(14), .text(WorkspaceMigrations.versionFourteenChecksum)],
                 [.integer(15), .text(WorkspaceMigrations.versionFifteenChecksum)]
+                , [.integer(16), .text(WorkspaceMigrations.versionSixteenChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
+        let migrated = try store.opportunities().first
+        XCTAssertEqual(migrated?.compensation, nil)
+        XCTAssertEqual(migrated?.location, nil)
+        XCTAssertEqual(migrated?.workArrangement, .notSpecified)
+        XCTAssertEqual(migrated?.responseState, .noResponseRecorded)
+        XCTAssertEqual(migrated?.stageChangedAt, Date(timeIntervalSince1970: 1_704_067_200))
+        XCTAssertEqual(try store.responseHistory(forOpportunityID: "opportunity-1"), [])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotArtifactURLs[1].path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotArtifactURLs[2].path))
@@ -75,7 +83,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 15)
+        XCTAssertEqual(try store.schemaVersion(), 16)
         XCTAssertEqual(try database.rows("SELECT id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at FROM interactions"), [[.text("interaction-1"), .null, .text("opportunity-1"), .text("Note"), .text("Legacy note"), .real(1_704_067_200), .null]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
@@ -110,6 +118,18 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try database.rows("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'workspace_metadata'"), [])
     }
 
+    func testFailedVersionSixteenMigrationKeepsVerifiedSnapshot() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        try WorkspaceMigrations.apply(to: database)
+        try database.execute("UPDATE schema_migrations SET version = 15")
+        try database.execute("DELETE FROM migration_history WHERE version = 16")
+
+        XCTAssertThrowsError(try WorkspaceMigrations.apply(to: database, failVersionSixteen: true))
+
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(15)]])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
+    }
+
     func testCreateOpportunityAddsOneMatchingActivityEvent() throws {
         let store = try makeStore()
 
@@ -126,6 +146,25 @@ final class WorkspaceStoreTests: XCTestCase {
                 occurredAt: now
             )
         ])
+    }
+
+    func testOpportunityDetailsAndExplicitResponseTransitionPersist() throws {
+        let store = try makeStore()
+        let responseDate = now.addingTimeInterval(-86_400)
+        let stageDate = now.addingTimeInterval(-172_800)
+
+        let opportunity = try store.create(CreateOpportunity(
+            title: "Product Manager", company: "Rekon Labs",
+            compensation: "150k base", location: "New York", workArrangement: .hybrid,
+            applicationDate: responseDate, responseState: .awaitingResponse,
+            responseEffectiveDate: responseDate, stageChangedAt: stageDate
+        ))
+
+        XCTAssertEqual(try store.opportunities().first?.compensation, "150k base")
+        XCTAssertEqual(try store.opportunities().first?.workArrangement, .hybrid)
+        XCTAssertEqual(try store.responseHistory(forOpportunityID: opportunity.id).map(\.toState), [.awaitingResponse])
+        XCTAssertEqual(try store.responseHistory(forOpportunityID: opportunity.id).first?.occurredAt, responseDate)
+        XCTAssertEqual(try store.activityEvents().map(\.kind), ["opportunity_created", "opportunity_response_changed"])
     }
 
     func testFailureBetweenOpportunityAndEventRollsBackBothRecords() throws {
@@ -251,7 +290,8 @@ final class WorkspaceStoreTests: XCTestCase {
                 createdAt: now,
                 stage: .screening,
                 nextAction: "Prepare recruiter call",
-                dueAt: rescheduled
+                dueAt: rescheduled,
+                stageChangedAt: now
             )
         ])
         XCTAssertEqual(try store.needsAttention().map(\.title), ["Prepare recruiter call"])
