@@ -54,14 +54,16 @@ the save time.
 fields. The create/update store command trims text, preserves absent optional
 dates, and commits the record change, stage history when the stage changes,
 response history when the response state changes, and corresponding activity
-events in one transaction. A stage change writes its user-selected
+events in one transaction. A form-based stage change writes its user-selected
 `stage_changed_at`; a metadata-only edit (including applying then clearing an
 application date) preserves it and writes no stage/response history. Use
 `opportunity_response_changed` for a response-state change and retain the
 existing `opportunity_stage_changed` / `opportunity_updated` meanings. One
 save may legitimately emit both distinct material-change events. The existing
-quick `changeStage` path must call the same stage-effective-date/history logic
-with its `now` value; CSV-created opportunities use `CreateOpportunity`'s R2
+one-click quick `changeStage` path has no date prompt, so it must use the
+current event time as the identical value for `stage_changed_at`, the
+stage-history row, and the stage-change activity event; CSV-created
+opportunities use `CreateOpportunity`'s R2
 defaults only and do not acquire mapping/update behavior.
 
 ## UI decisions
@@ -69,9 +71,12 @@ defaults only and do not acquire mapping/update behavior.
 In the existing Add opportunity and selected-record forms, present a compact
 “Job details” group: Compensation (optional free text), Location (optional),
 Work arrangement picker, Applied date toggle/date picker, current response
-picker, a Response received date picker when `Response received` is selected
-(and a response-status date picker for the other non-default response states),
-and a **Stage changed date** picker. Default stage date for a new record is
+picker, and a response-effective-date picker whenever the selected response
+differs from the persisted response—including a reset to `No response
+recorded`. Label that control **Response received date** when `Response
+received` is selected and **Response status date** otherwise. Each response
+transition uses its selected date for the history/event. Include a **Stage
+changed date** picker. Default stage date for a new record is
 today; the user can change it before saving. The stage-date control affects
 only pipeline stage history; response dates affect only response history. Show the selected record’s
 response history, newest first, with state and date; its empty state says no
@@ -89,7 +94,8 @@ are. The data is local-only and uses plain-language labels, not color alone.
    contact-opportunity query so no projection drops fields.
 2. **Atomic editing and history.** First add failing store tests that create
    and update every new field, change response state twice with explicit
-   response effective dates (including identical-date IDs/tie ordering), and
+   response effective dates (including a reset to `No response recorded` and
+   identical-date IDs/tie ordering), and
    change stage with an explicit stage date. Assert exact response-history order,
    stage-history date, expected activity kinds, preserved task behavior, and
    rollback leaves neither field change nor history/event on an injected
@@ -104,8 +110,9 @@ are. The data is local-only and uses plain-language labels, not color alone.
 4. **Focused acceptance.** Build Debug macOS and run the focused core and
    view-model tests. In the existing isolated temporary app: create a
    synthetic opportunity with all fields; save; edit compensation, response,
-   Response received date, and Stage changed date; relaunch; confirm values
-   and response history persist;
+   Response received date, reset response to `No response recorded` with its
+   selected response-status date, and edit Stage changed date; relaunch;
+   confirm values and response history persist;
    confirm Pipeline and Needs Attention still refresh. Record only synthetic
    data and no local paths.
 
@@ -119,7 +126,11 @@ are. The data is local-only and uses plain-language labels, not color alone.
   immutable, and local; saving metadata alone creates neither response nor
   stage history.
 - Every material response/stage change has an atomic local activity event;
-  existing stage/task/Needs Attention semantics remain unchanged.
+  every response transition, including reset, has its selected effective date;
+  existing stage/task/Needs Attention semantics remain unchanged. A form-based
+  stage edit uses its selected Stage changed date, while one-click quick stage
+  change uses the same current timestamp for current stage, stage history, and
+  stage activity.
 - Both forms expose the fields and history with usable empty/default states.
 - Evidence is committed under
   `docs/delivery/evidence/remediation/RP-R2/`; include focused command
