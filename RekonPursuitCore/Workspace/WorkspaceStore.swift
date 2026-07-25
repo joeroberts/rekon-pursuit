@@ -4,7 +4,6 @@ import Foundation
 final class WorkspaceStore {
     private let database: EncryptedDatabase
     private let clock: () -> Date
-    private var now: Date { clock() }
     private let nextIdentifier: () -> String
     private let actorID: String
     private let correlationID: String
@@ -154,16 +153,17 @@ final class WorkspaceStore {
     }
 
     func deleteOpportunity(id: String) throws {
+        let commandNow = clock()
         try synchronized {
             guard try isActiveOpportunity(id) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
             let reference = try deletedOpportunityReferenceUnlocked(for: id)
-            let event = ActivityEvent(id: nextIdentifier(), kind: "opportunity_deleted", opportunityID: id, actorID: actorID, correlationID: correlationID, occurredAt: now)
+            let event = ActivityEvent(id: nextIdentifier(), kind: "opportunity_deleted", opportunityID: id, actorID: actorID, correlationID: correlationID, occurredAt: commandNow)
             try database.transaction {
-                try database.execute("UPDATE opportunities SET deleted_at = ? WHERE id = ?", values: [.real(now.timeIntervalSince1970), .text(id)])
+                try database.execute("UPDATE opportunities SET deleted_at = ? WHERE id = ?", values: [.real(commandNow.timeIntervalSince1970), .text(id)])
                 try database.execute("DELETE FROM task_reminders WHERE opportunity_id = ?", values: [.text(id)])
                 try database.execute(
                     "INSERT INTO deletion_tombstones (subject_id, subject_type, deleted_at, display_value) VALUES (?, 'opportunity', ?, ?)",
-                    values: [.text(id), .real(now.timeIntervalSince1970), .text("Deleted opportunity #\(reference)")]
+                    values: [.text(id), .real(commandNow.timeIntervalSince1970), .text("Deleted opportunity #\(reference)")]
                 )
                 try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), event.opportunityID.map(DatabaseValue.text) ?? .null, .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
             }
@@ -311,60 +311,65 @@ final class WorkspaceStore {
     }
 
     func createContact(_ command: CreateContact) throws -> Contact {
+        let commandNow = clock()
         let contact = try validatedContact(id: nil, command: command)
         return try synchronized {
             let contact = Contact(id: nextIdentifier(), name: contact.name, employer: contact.employer, title: contact.title, email: contact.email, profileURL: contact.profileURL, relationshipContext: contact.relationshipContext, notes: contact.notes)
             try database.transaction {
                 try database.execute("INSERT INTO contacts (id, name, employer, title, email, profile_url, relationship_context, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", values: [.text(contact.id), .text(contact.name), .text(contact.employer), .text(contact.title), .text(contact.email), .text(contact.profileURL), .text(contact.relationshipContext), .text(contact.notes)])
-                try appendActivity(kind: "contact_created", opportunityID: nil, contactID: contact.id)
+                try appendActivity(kind: "contact_created", opportunityID: nil, contactID: contact.id, occurredAt: commandNow)
             }
             return contact
         }
     }
 
     func updateContact(id: String, command: CreateContact) throws -> Contact {
+        let commandNow = clock()
         let contact = try validatedContact(id: id, command: command)
         return try synchronized {
             guard try isActiveContact(id) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
             try database.transaction {
                 try database.execute("UPDATE contacts SET name = ?, employer = ?, title = ?, email = ?, profile_url = ?, relationship_context = ?, notes = ? WHERE id = ?", values: [.text(contact.name), .text(contact.employer), .text(contact.title), .text(contact.email), .text(contact.profileURL), .text(contact.relationshipContext), .text(contact.notes), .text(id)])
-                try appendActivity(kind: "contact_updated", opportunityID: nil, contactID: id)
+                try appendActivity(kind: "contact_updated", opportunityID: nil, contactID: id, occurredAt: commandNow)
             }
             return contact
         }
     }
 
     func deleteContact(id: String) throws {
+        let commandNow = clock()
         try synchronized {
             guard try isActiveContact(id) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
             let reference = try deletedContactReferenceUnlocked(for: id)
             try database.transaction {
-                try database.execute("UPDATE contacts SET deleted_at = ? WHERE id = ?", values: [.real(now.timeIntervalSince1970), .text(id)])
-                try database.execute("INSERT INTO deletion_tombstones (subject_id, subject_type, deleted_at, display_value) VALUES (?, 'contact', ?, ?)", values: [.text(id), .real(now.timeIntervalSince1970), .text("Deleted contact #\(reference)")])
-                try appendActivity(kind: "contact_deleted", opportunityID: nil, contactID: id)
+                try database.execute("UPDATE contacts SET deleted_at = ? WHERE id = ?", values: [.real(commandNow.timeIntervalSince1970), .text(id)])
+                try database.execute("INSERT INTO deletion_tombstones (subject_id, subject_type, deleted_at, display_value) VALUES (?, 'contact', ?, ?)", values: [.text(id), .real(commandNow.timeIntervalSince1970), .text("Deleted contact #\(reference)")])
+                try appendActivity(kind: "contact_deleted", opportunityID: nil, contactID: id, occurredAt: commandNow)
             }
         }
     }
 
     func linkContact(contactID: String, toOpportunityID opportunityID: String) throws {
+        let commandNow = clock()
         try synchronized {
             guard try isActiveOpportunity(opportunityID) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
             guard try isActiveContact(contactID) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
             guard (try database.rows("SELECT contact_id FROM contact_opportunities WHERE contact_id = ? AND opportunity_id = ?", values: [.text(contactID), .text(opportunityID)])).isEmpty else { return }
             try database.transaction {
                 try database.execute("INSERT INTO contact_opportunities (contact_id, opportunity_id) VALUES (?, ?)", values: [.text(contactID), .text(opportunityID)])
-                try appendActivity(kind: "contact_linked", opportunityID: opportunityID, contactID: contactID)
+                try appendActivity(kind: "contact_linked", opportunityID: opportunityID, contactID: contactID, occurredAt: commandNow)
             }
         }
     }
 
     func unlinkContact(contactID: String, fromOpportunityID opportunityID: String) throws {
+        let commandNow = clock()
         try synchronized {
             guard try isActiveOpportunity(opportunityID), try isActiveContact(contactID) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
             guard !(try database.rows("SELECT contact_id FROM contact_opportunities WHERE contact_id = ? AND opportunity_id = ?", values: [.text(contactID), .text(opportunityID)])).isEmpty else { return }
             try database.transaction {
                 try database.execute("DELETE FROM contact_opportunities WHERE contact_id = ? AND opportunity_id = ?", values: [.text(contactID), .text(opportunityID)])
-                try appendActivity(kind: "contact_unlinked", opportunityID: opportunityID, contactID: contactID)
+                try appendActivity(kind: "contact_unlinked", opportunityID: opportunityID, contactID: contactID, occurredAt: commandNow)
             }
         }
     }
@@ -404,6 +409,7 @@ final class WorkspaceStore {
     }
 
     func recordContactInteraction(_ command: CreateContactInteraction) throws -> ContactInteraction {
+        let commandNow = clock()
         let summary = command.summary.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !summary.isEmpty, command.nextTouchAt.map({ $0 >= command.occurredAt }) ?? true else {
             throw WorkspaceStoreError.invalidInteraction
@@ -419,7 +425,7 @@ final class WorkspaceStore {
             let interaction = ContactInteraction(id: nextIdentifier(), contactID: command.contactID, opportunityID: command.opportunityID, kind: command.kind, summary: summary, occurredAt: command.occurredAt, nextTouchAt: command.nextTouchAt)
             try database.transaction {
                 try database.execute("INSERT INTO interactions (id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at) VALUES (?, ?, ?, ?, ?, ?, ?)", values: [.text(interaction.id), .text(interaction.contactID), interaction.opportunityID.map(DatabaseValue.text) ?? .null, .text(interaction.kind.rawValue), .text(interaction.summary), .real(interaction.occurredAt.timeIntervalSince1970), interaction.nextTouchAt.map { .real($0.timeIntervalSince1970) } ?? .null])
-                try appendActivity(kind: "interaction_recorded", opportunityID: interaction.opportunityID, contactID: interaction.contactID)
+                try appendActivity(kind: "interaction_recorded", opportunityID: interaction.opportunityID, contactID: interaction.contactID, occurredAt: commandNow)
             }
             return interaction
         }
@@ -440,15 +446,16 @@ final class WorkspaceStore {
     }
 
     func recordPostingCheck(_ command: RecordPostingCheck) throws -> PostingCheck {
+        let commandNow = clock()
         let url = command.url.trimmingCharacters(in: .whitespacesAndNewlines)
         let evidence = command.evidence.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !url.isEmpty, !evidence.isEmpty else { throw WorkspaceStoreError.invalidPostingCheck }
         return try synchronized {
             guard try isActiveOpportunity(command.opportunityID) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
-            let check = PostingCheck(id: nextIdentifier(), opportunityID: command.opportunityID, url: url, status: command.status, evidence: evidence, checkedAt: now)
+            let check = PostingCheck(id: nextIdentifier(), opportunityID: command.opportunityID, url: url, status: command.status, evidence: evidence, checkedAt: commandNow)
             try database.transaction {
                 try database.execute("INSERT INTO posting_checks (id, opportunity_id, url, status, evidence, checked_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(check.id), .text(check.opportunityID), .text(check.url), .text(check.status.rawValue), .text(check.evidence), .real(check.checkedAt.timeIntervalSince1970)])
-                try appendActivity(kind: "posting_checked", opportunityID: check.opportunityID)
+                try appendActivity(kind: "posting_checked", opportunityID: check.opportunityID, occurredAt: commandNow)
             }
             return check
         }
@@ -462,44 +469,48 @@ final class WorkspaceStore {
     }
 
     func recordOpportunitiesExport() throws {
+        let commandNow = clock()
         try synchronized {
             try database.transaction {
-                try appendActivity(kind: "opportunities_exported", opportunityID: nil)
+                try appendActivity(kind: "opportunities_exported", opportunityID: nil, occurredAt: commandNow)
             }
         }
     }
 
     func createEncryptedBackup(at destinationURL: URL) throws {
+        let commandNow = clock()
         try synchronized {
             try database.createEncryptedBackup(at: destinationURL)
             try database.transaction {
-                try appendActivity(kind: "workspace_backed_up", opportunityID: nil)
+                try appendActivity(kind: "workspace_backed_up", opportunityID: nil, occurredAt: commandNow)
             }
         }
     }
 
     func recordDocumentReference(_ command: RecordDocumentReference) throws -> DocumentReference {
+        let commandNow = clock()
         let filename = command.filename.trimmingCharacters(in: .whitespacesAndNewlines)
         let sourceHash = command.sourceHash.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !filename.isEmpty, !sourceHash.isEmpty, command.byteCount >= 0 else { throw WorkspaceStoreError.invalidDocumentReference }
         return try synchronized {
             guard try isActiveOpportunity(command.opportunityID) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
-            let reference = DocumentReference(id: nextIdentifier(), opportunityID: command.opportunityID, kind: command.kind, filename: filename, contentType: command.contentType, sourceHash: sourceHash, byteCount: command.byteCount, attachedAt: now, finalSentAt: nil)
+            let reference = DocumentReference(id: nextIdentifier(), opportunityID: command.opportunityID, kind: command.kind, filename: filename, contentType: command.contentType, sourceHash: sourceHash, byteCount: command.byteCount, attachedAt: commandNow, finalSentAt: nil)
             try database.transaction {
                 try database.execute("INSERT INTO document_references (id, opportunity_id, kind, filename, content_type, source_hash, byte_count, attached_at, final_sent_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)", values: [.text(reference.id), .text(reference.opportunityID), .text(reference.kind.rawValue), .text(reference.filename), .text(reference.contentType), .text(reference.sourceHash), .integer(Int64(reference.byteCount)), .real(reference.attachedAt.timeIntervalSince1970)])
-                try appendActivity(kind: "document_reference_linked", opportunityID: reference.opportunityID)
+                try appendActivity(kind: "document_reference_linked", opportunityID: reference.opportunityID, occurredAt: commandNow)
             }
             return reference
         }
     }
 
     func markDocumentReferenceFinalSent(id: String) throws {
+        let commandNow = clock()
         try synchronized {
             let rows = try database.rows("SELECT opportunity_id FROM document_references WHERE id = ? AND final_sent_at IS NULL", values: [.text(id)])
             guard let row = rows.first, case let .text(opportunityID) = row.first else { throw WorkspaceStoreError.unexpectedDatabaseValue }
             try database.transaction {
-                try database.execute("UPDATE document_references SET final_sent_at = ? WHERE id = ?", values: [.real(now.timeIntervalSince1970), .text(id)])
-                try appendActivity(kind: "document_reference_marked_final", opportunityID: opportunityID)
+                try database.execute("UPDATE document_references SET final_sent_at = ? WHERE id = ?", values: [.real(commandNow.timeIntervalSince1970), .text(id)])
+                try appendActivity(kind: "document_reference_marked_final", opportunityID: opportunityID, occurredAt: commandNow)
             }
         }
     }
@@ -611,8 +622,8 @@ final class WorkspaceStore {
         "\(title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())\u{1F}\(company.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
     }
 
-    private func appendActivity(kind: String, opportunityID: String?, contactID: String? = nil, occurredAt: Date? = nil) throws {
-        let event = ActivityEvent(id: nextIdentifier(), kind: kind, opportunityID: opportunityID, contactID: contactID, actorID: actorID, correlationID: correlationID, occurredAt: occurredAt ?? clock())
+    private func appendActivity(kind: String, opportunityID: String?, contactID: String? = nil, occurredAt: Date) throws {
+        let event = ActivityEvent(id: nextIdentifier(), kind: kind, opportunityID: opportunityID, contactID: contactID, actorID: actorID, correlationID: correlationID, occurredAt: occurredAt)
         try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, contact_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), event.opportunityID.map(DatabaseValue.text) ?? .null, event.contactID.map(DatabaseValue.text) ?? .null, .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
     }
 

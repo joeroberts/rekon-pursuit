@@ -211,6 +211,64 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.responseHistory(forOpportunityID: opportunity.id).map(\.id), ["fixture-id-9", "fixture-id-5"])
     }
 
+    func testUpdateRejectsMissingEffectiveDatesWithoutWriting() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", nextAction: "Follow up", dueAt: now))
+        let baseline = try store.activityEvents()
+
+        XCTAssertThrowsError(try store.updateOpportunity(
+            id: opportunity.id, title: opportunity.title, company: opportunity.company,
+            stage: .screening, nextAction: "Changed action", dueAt: now,
+            responseState: .responseReceived, responseEffectiveDate: nil, stageChangedAt: nil
+        ))
+
+        XCTAssertEqual(try store.opportunities(), [opportunity])
+        XCTAssertEqual(try store.stageHistory(forOpportunityID: opportunity.id).count, 1)
+        XCTAssertEqual(try store.responseHistory(forOpportunityID: opportunity.id), [])
+        XCTAssertEqual(try store.activityEvents(), baseline)
+        XCTAssertEqual(try store.latestTask(forOpportunityID: opportunity.id)?.title, "Follow up")
+    }
+
+    func testMultiRowCSVImportUsesOneCurrentCommandTimestamp() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        var current = now
+        var identifier = 0
+        let store = try WorkspaceStore(
+            database: database,
+            clock: { current },
+            nextIdentifier: { defer { identifier += 1 }; return "csv-clock-\(identifier)" },
+            actorID: "local-user", correlationID: "csv-clock"
+        )
+        let preview = try CSVOpportunityImporter.preview(data: Data("title,company\nFirst,Rekon Labs\nSecond,Rekon Labs\n".utf8))
+        let plan = try store.csvImportPlan(for: preview)
+        current = now.addingTimeInterval(3600)
+
+        let report = try store.importCSV(plan, invalidCount: 0)
+
+        XCTAssertEqual(report.createdAt, current)
+        XCTAssertTrue(try store.opportunities().allSatisfy { $0.createdAt == current && $0.stageChangedAt == current })
+        let importedIDs = Set(try store.opportunities().map(\.id))
+        XCTAssertTrue(try importedIDs.allSatisfy { try store.stageHistory(forOpportunityID: $0).allSatisfy { $0.occurredAt == current } })
+        XCTAssertTrue(try store.activityEvents().allSatisfy { $0.occurredAt == current })
+    }
+
+    func testNeedsAttentionSamplesTheClockAtReadTime() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        var current = now
+        var identifier = 0
+        let store = try WorkspaceStore(
+            database: database,
+            clock: { current },
+            nextIdentifier: { defer { identifier += 1 }; return "attention-clock-\(identifier)" },
+            actorID: "local-user", correlationID: "attention-clock"
+        )
+        let dueAt = now.addingTimeInterval(3600)
+        _ = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", nextAction: "Follow up", dueAt: dueAt))
+
+        current = now.addingTimeInterval(7200)
+        XCTAssertEqual(try store.needsAttention().map(\.title), ["Follow up"])
+    }
+
     func testOpportunityDetailsAndExplicitResponseTransitionPersist() throws {
         let store = try makeStore()
         let responseDate = now.addingTimeInterval(-86_400)
