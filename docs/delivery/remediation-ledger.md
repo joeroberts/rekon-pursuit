@@ -98,7 +98,7 @@
 | Architect | Approved | Coherent schema/default/migration contract; fixed work-arrangement values; stage and response audit semantics; existing CSV safe defaults without mapping scope. No ADR change required. |
 | QA | Approved | Deterministic focused migration/create/edit/relaunch/history checks include history ordering and optional-date clearing; no coverage/CI expansion. |
 | TPM | Approved | R2 is the sole released scope; all successors remain blocked. |
-| Delivery Manager | Pending final plan-record recheck | Must confirm the durable plan record before implementation begins. |
+| Delivery Manager | Approved — released for implementation | Plan record is dependency-safe. R2 is the only implementation task; `RP-R3`–`RP-R10` remain blocked. |
 
 ## Release log
 
@@ -111,6 +111,7 @@
 | 2026-07-25 | `RP-R1a` | **Ready for final Delivery acceptance** | All independent implementation reviewers approve. The only remaining decision is Delivery Manager acceptance and, if accepted, release of `RP-R1b` only. |
 | 2026-07-25 | `RP-R1a` | **Accepted — `RP-R1b` released** | Delivery Manager rechecked final evidence and approvals. The native picker’s dialog/preview remains direct user-observed evidence. `RP-R2`–`RP-R10` remain blocked. |
 | 2026-07-25 | `RP-R1b` | **Accepted — `RP-R2` released** | Delivery Manager accepted the completed shell slice after independent Code Review, QA, Architect, TPM, and direct user 900×640 evidence. `RP-R3`–`RP-R10` remain blocked. |
+| 2026-07-25 | `RP-R2` | **Released for implementation** | Delivery Manager approved the migration-and-core-fields brief. No successor is released; `RP-R3`–`RP-R10` remain blocked. |
 
 ## Risks and decisions
 
