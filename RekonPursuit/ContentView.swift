@@ -41,7 +41,6 @@ struct ContentView: View {
     @State private var taskToReschedule: TaskReminder?
     @State private var rescheduledDueAt = Date.now
     @State private var showsPipelineBoard = false
-    @State private var showsCSVImporter = false
     @State private var showsDocumentReferenceImporter = false
     @State private var showsBackupImporter = false
     @State private var pendingRestoreURL: URL?
@@ -128,18 +127,9 @@ struct ContentView: View {
                 GroupBox("Import opportunities") {
                     Text("Use a UTF-8 CSV with title and company columns. Imported rows stay on this Mac.")
                         .foregroundStyle(.secondary)
-                    Button("Choose CSV file…") { showsCSVImporter = true }
+                    Button("Choose CSV file…") { chooseCSVFile() }
                         .disabled(!model.workspaceReady)
                         .accessibilityIdentifier("choose-csv-file")
-                        .fileImporter(
-                            isPresented: $showsCSVImporter,
-                            allowedContentTypes: [.commaSeparatedText, .plainText],
-                            allowsMultipleSelection: false
-                        ) { result in
-                            if case let .success(urls) = result, let url = urls.first {
-                                model.previewCSV(at: url)
-                            }
-                        }
                     if !model.workspaceReady {
                         Text("Create or recover the local workspace before choosing a CSV file.")
                             .font(.caption)
@@ -800,6 +790,29 @@ struct ContentView: View {
                 .padding(24)
                 .frame(width: 380)
             }
+        }
+    }
+
+    private func chooseCSVFile() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose CSV file"
+        panel.message = "Select a UTF-8 CSV file to preview before importing."
+        panel.prompt = "Choose CSV"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.commaSeparatedText, .plainText]
+
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+
+            let accessedSecurityScopedResource = url.startAccessingSecurityScopedResource()
+            defer {
+                if accessedSecurityScopedResource {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+            model.previewCSV(at: url)
         }
     }
 }
