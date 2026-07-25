@@ -94,6 +94,38 @@ final class WorkspaceSession {
         }
     }
 
+    func restore(from backupURL: URL) throws -> WorkspaceStore {
+        guard FileManager.default.fileExists(atPath: databaseURL.path) else { throw WorkspaceSessionError.workspaceMissing }
+        guard let key = try keyStore.readWorkspaceKey() else { throw WorkspaceSessionError.workspaceKeyMissing }
+
+        let backup = try EncryptedDatabase.open(url: backupURL, key: key, createIfMissing: false)
+        do {
+            _ = try backup.scalarInt("SELECT count(*) FROM sqlite_master")
+            try backup.close()
+        } catch {
+            try? backup.close()
+            throw error
+        }
+
+        let stagingURL = root.appendingPathComponent(".restoring-\(UUID().uuidString)")
+        let previousURL = root.appendingPathComponent(".restore-rollback-\(UUID().uuidString)")
+        try FileManager.default.copyItem(at: backupURL, to: stagingURL)
+        do {
+            try FileManager.default.moveItem(at: databaseURL, to: previousURL)
+            try FileManager.default.moveItem(at: stagingURL, to: databaseURL)
+            let restored = try openStore(with: key, createIfMissing: false)
+            try? FileManager.default.removeItem(at: previousURL)
+            return restored
+        } catch {
+            try? FileManager.default.removeItem(at: databaseURL)
+            if FileManager.default.fileExists(atPath: previousURL.path) {
+                try? FileManager.default.moveItem(at: previousURL, to: databaseURL)
+            }
+            try? FileManager.default.removeItem(at: stagingURL)
+            throw error
+        }
+    }
+
     private var databaseURL: URL {
         root.appendingPathComponent("workspace.sqlite")
     }
@@ -134,4 +166,6 @@ final class WorkspaceSession {
 
 enum WorkspaceSessionError: Error {
     case workspaceAlreadyExists
+    case workspaceMissing
+    case workspaceKeyMissing
 }

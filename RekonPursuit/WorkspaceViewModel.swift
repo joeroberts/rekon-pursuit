@@ -72,19 +72,23 @@ final class WorkspaceViewModel: ObservableObject {
 
     private let openWorkspace: () throws -> WorkspaceOpenState
     private let createWorkspace: () throws -> WorkspaceStore
+    private let restoreWorkspace: (URL) throws -> WorkspaceStore
     private var store: WorkspaceStore?
+    private var stagedRestoreURL: URL?
 
     init(
         openWorkspace: @escaping () throws -> WorkspaceOpenState,
-        createWorkspace: @escaping () throws -> WorkspaceStore
+        createWorkspace: @escaping () throws -> WorkspaceStore,
+        restoreWorkspace: @escaping (URL) throws -> WorkspaceStore = { _ in throw WorkspaceStoreError.injectedFailure }
     ) {
         self.openWorkspace = openWorkspace
         self.createWorkspace = createWorkspace
+        self.restoreWorkspace = restoreWorkspace
     }
 
     convenience init() {
         let session = WorkspaceSession(root: Self.defaultWorkspaceRoot())
-        self.init(openWorkspace: session.open, createWorkspace: session.create)
+        self.init(openWorkspace: session.open, createWorkspace: session.create, restoreWorkspace: session.restore)
     }
 
     func start() {
@@ -399,6 +403,45 @@ final class WorkspaceViewModel: ObservableObject {
         } catch {
             statusMessage = "The encrypted backup could not be created."
         }
+    }
+
+    func restoreEncryptedBackup(from url: URL) {
+        defer {
+            if url == stagedRestoreURL {
+                try? FileManager.default.removeItem(at: url)
+                stagedRestoreURL = nil
+            }
+        }
+        do {
+            try store?.close()
+            store = try restoreWorkspace(url)
+            refreshCounts()
+            statusMessage = "Encrypted backup restored locally."
+        } catch {
+            store = nil
+            start()
+            statusMessage = "The encrypted backup could not be restored. Your existing workspace was kept."
+        }
+    }
+
+    func stageEncryptedBackupForRestore(from url: URL) -> URL? {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        let stagedURL = FileManager.default.temporaryDirectory.appendingPathComponent("rekon-restore-\(UUID().uuidString).rekonbackup")
+        do {
+            if let stagedRestoreURL { try? FileManager.default.removeItem(at: stagedRestoreURL) }
+            try FileManager.default.copyItem(at: url, to: stagedURL)
+            stagedRestoreURL = stagedURL
+            return stagedURL
+        } catch {
+            statusMessage = "The encrypted backup could not be prepared for restore."
+            return nil
+        }
+    }
+
+    func discardStagedBackupRestore() {
+        if let stagedRestoreURL { try? FileManager.default.removeItem(at: stagedRestoreURL) }
+        stagedRestoreURL = nil
     }
 
     func attachDocumentReference(at url: URL) {

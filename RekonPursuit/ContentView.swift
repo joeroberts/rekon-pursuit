@@ -42,6 +42,8 @@ struct ContentView: View {
     @State private var showsPipelineBoard = false
     @State private var showsCSVImporter = false
     @State private var showsDocumentReferenceImporter = false
+    @State private var showsBackupImporter = false
+    @State private var pendingRestoreURL: URL?
     @State private var showsUnencryptedExportWarning = false
     @State private var showsCSVExporter = false
     @State private var exportDocument: CSVExportDocument?
@@ -631,10 +633,13 @@ struct ContentView: View {
                 }
                 .disabled(!model.workspaceReady)
                 .accessibilityIdentifier("create-encrypted-backup")
+                Button("Restore encrypted backup…") { showsBackupImporter = true }
+                    .disabled(!model.workspaceReady)
+                    .accessibilityIdentifier("restore-encrypted-backup")
             }
             }
 
-            Text("This MVP keeps data on this Mac. CSV exports are unencrypted; encrypted backup restore and portable recovery are not available yet.")
+            Text("This MVP keeps data on this Mac. CSV exports are unencrypted; encrypted backup is same-Mac only and replaces the current workspace after confirmation.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -654,6 +659,15 @@ struct ContentView: View {
         ) { result in
             if case let .success(urls) = result, let url = urls.first {
                 model.previewCSV(at: url)
+            }
+        }
+        .fileImporter(
+            isPresented: $showsBackupImporter,
+            allowedContentTypes: [.data],
+            allowsMultipleSelection: false
+        ) { result in
+            if case let .success(urls) = result, let url = urls.first {
+                pendingRestoreURL = model.stageEncryptedBackupForRestore(from: url)
             }
         }
         .fileImporter(
@@ -686,6 +700,18 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This file will contain your job titles, companies, actions, dates, and job URLs in plain text. Save it only to storage you trust.")
+        }
+        .alert("Replace current workspace?", isPresented: Binding(
+            get: { pendingRestoreURL != nil },
+            set: { if !$0 { pendingRestoreURL = nil; model.discardStagedBackupRestore() } }
+        )) {
+            Button("Restore and replace", role: .destructive) {
+                if let pendingRestoreURL { model.restoreEncryptedBackup(from: pendingRestoreURL) }
+                pendingRestoreURL = nil
+            }
+            Button("Cancel", role: .cancel) { pendingRestoreURL = nil; model.discardStagedBackupRestore() }
+        } message: {
+            Text("This replaces the current local workspace with the selected same-Mac encrypted backup. Your current workspace is kept if the restore fails.")
         }
         .alert("Delete opportunity?", isPresented: Binding(
             get: { pendingDeletion != nil },
