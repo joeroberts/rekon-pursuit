@@ -8,8 +8,9 @@
   distinct, compiled Keychain-service constant before launch.
 - Use a fresh temporary sandbox container and temporary workspace namespace.
 - Verify the built app entitlement contains `com.apple.security.app-sandbox`.
-- Record only the temporary namespace ID and boolean before/after assertions:
-  production workspace unchanged; production Keychain namespace unchanged.
+- Record only the temporary namespace ID, App Sandbox result, and temporary
+  container assertion. Do not read the production workspace or Keychain
+  namespace; isolation follows from the compiled temporary bundle identity.
 
 No absolute path, Keychain account metadata, key bytes, CSV contents, journal
 attempt ID, or fixture content belongs in the smoke record.

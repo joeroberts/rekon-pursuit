@@ -17,15 +17,12 @@ used as evidence for workspace creation, CSV reachability, or CSV preview.
 | Temporary app compiled with its distinct namespace | Pass |
 | App sandbox entitlement present | Pass |
 | Fresh temporary sandbox container present | Pass |
-| Production legacy-workspace unchanged | Pass |
-| Production sandbox-workspace unchanged | Pass |
-| Production primary-key record unchanged | Pass |
-| Production pending-key record unchanged | Pass |
+| Temporary app uses a compiled namespace distinct from production | Pass |
+| Harness reads or modifies production workspace/Keychain namespaces | No |
 
-The harness retains only boolean unchanged assertions. It fails when either
-workspace or either Keychain-record assertion differs. It prints no
-fingerprints, persistent paths, Keychain service/account metadata, key
-content, or fixture content, and it never modifies production namespaces.
+The harness records no production file, Keychain, path, fingerprint, account,
+key, or fixture-content data. Isolation follows from the distinct compiled
+bundle identity, derived Keychain service, and App Sandbox container.
 
 ## Required UI workflow
 
