@@ -87,7 +87,7 @@ struct ContentView: View {
 
             if page == .importCSV {
                 GroupBox("Import opportunities") {
-                    Text("Use a UTF-8 CSV with title and company columns. Imported rows stay on this Mac.")
+                    Text("Map a UTF-8 CSV, validate it, review duplicates, then import local data in one step.")
                         .foregroundStyle(.secondary)
                     Button("Choose CSV file…") { chooseCSVFile() }
                         .disabled(!model.workspaceReady)
@@ -99,17 +99,33 @@ struct ContentView: View {
                     }
 
                     if let preview = model.csvPreview {
-                        Text("\(preview.rows.count) valid row\(preview.rows.count == 1 ? "" : "s") · \(preview.invalidRowCount) invalid row\(preview.invalidRowCount == 1 ? "" : "s") skipped")
+                        Text("1. Map columns")
                             .font(.headline)
-                        if preview.rows.isEmpty {
-                            Text("No importable rows were found. Check the title and company values.")
-                                .foregroundStyle(.secondary)
+                        ForEach(CSVImportField.allCases) { field in
+                            Picker(field.label + (field.required ? " *" : ""), selection: Binding(
+                                get: { preview.mapping[field] },
+                                set: { model.setCSVMapping(field, to: $0) }
+                            )) {
+                                Text("Not mapped").tag(Int?.none)
+                                ForEach(Array(preview.headers.enumerated()), id: \.offset) { index, header in
+                                    Text(header).tag(Int?.some(index))
+                                }
+                            }
                         }
+                        Button("2. Validate mapped rows") { model.validateCSVMapping() }
+                            .disabled(!CSVOpportunityImporter.mappingIsValid(preview.mapping))
+                        Text("\(preview.rows.filter(\.isValid).count) valid · \(preview.invalidRowCount) invalid")
+                            .font(.caption).foregroundStyle(.secondary)
+                        ForEach(preview.rows.filter { !$0.isValid }) { row in
+                            Text("Row \(row.sourceRow): \(row.reasons.joined(separator: " "))")
+                                .font(.caption).foregroundStyle(.red)
+                        }
+                        if !model.csvImportPlan.isEmpty { Text("3. Review duplicates").font(.headline) }
                         ForEach(model.csvImportPlan) { row in
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Row \(row.id): \(row.row.opportunity.title) · \(row.row.opportunity.company)")
+                                Text("Row \(row.id): \(row.row.opportunity!.title) · \(row.row.opportunity!.company)")
                                 if row.isDuplicate {
-                                    Text("Possible duplicate — exact title and company match. Choose what to do.")
+                                    Text("Possible duplicate — \(row.duplicateRationale ?? "local match").")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                     Picker("Duplicate decision for row \(row.id)", selection: Binding(
@@ -117,22 +133,29 @@ struct ContentView: View {
                                         set: { decision in if let decision { model.setCSVDecision(decision, for: row.id) } }
                                     )) {
                                         Text("Choose a decision").tag(CSVDuplicateDecision?.none)
-                                        Text("Skip this row").tag(CSVDuplicateDecision?.some(.skip))
+                                        Text("Update selected fields").tag(CSVDuplicateDecision?.some(.updateSelectedFields))
                                         Text("Keep as separate opportunity").tag(CSVDuplicateDecision?.some(.keepSeparate))
+                                        Text("Skip this row").tag(CSVDuplicateDecision?.some(.skip))
+                                    }
+                                    if row.decision == .updateSelectedFields {
+                                        ForEach(CSVImportField.allCases.filter { !$0.required && row.row.values[$0]?.isEmpty == false }) { field in
+                                            Toggle("Update \(field.label)", isOn: Binding(get: { row.selectedFields.contains(field) }, set: { model.setCSVSelectedField(field, selected: $0, for: row.id) }))
+                                        }
                                     }
                                 }
                             }
                             .padding(.vertical, 4)
                         }
+                        if !model.csvImportPlan.isEmpty { Text("4. Import").font(.headline) }
                         Button("Import reviewed rows") { model.importCSVPreview() }
-                            .disabled(!model.workspaceReady || model.csvImportPlan.isEmpty || model.csvImportPlan.contains { $0.isDuplicate && $0.decision == nil })
+                            .disabled(!model.workspaceReady || model.csvImportPlan.isEmpty || model.csvImportPlan.contains { $0.decision == nil || ($0.decision == .updateSelectedFields && $0.selectedFields.isEmpty) })
                             .accessibilityIdentifier("import-reviewed-csv")
                     }
                     if let report = model.csvImportReport, model.csvPreview == nil {
                         Divider()
                         Text("Last import report")
                             .font(.headline)
-                        Text("Created \(report.importedCount) · skipped \(report.skippedCount) · kept separate \(report.duplicateKeptCount) · invalid \(report.invalidCount)")
+                        Text("\(report.sourceBasename) · Created \(report.importedCount) · updated \(report.updatedCount) · skipped \(report.skippedCount) · kept separate \(report.duplicateKeptCount) · invalid \(report.invalidCount)")
                             .foregroundStyle(.secondary)
                     }
                 }

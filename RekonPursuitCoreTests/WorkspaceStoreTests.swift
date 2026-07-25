@@ -565,8 +565,16 @@ final class WorkspaceStoreTests: XCTestCase {
     func testCSVPreviewMapsTitleAndCompanyAndRejectsIncompleteRows() throws {
         let preview = try CSVOpportunityImporter.preview(data: Data("title,company\nProduct Manager,Rekon Labs\n,Missing Co\n".utf8))
 
-        XCTAssertEqual(preview.rows, [CSVImportRow(id: 2, opportunity: CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))])
+        XCTAssertEqual(preview.rows.filter(\.isValid).map(\.opportunity), [CreateOpportunity(title: "Product Manager", company: "Rekon Labs")])
         XCTAssertEqual(preview.invalidRowCount, 1)
+    }
+
+    func testCSVPreviewSuggestsNonstandardHeadersAndValidatesDueDateCoupling() throws {
+        let preview = try CSVOpportunityImporter.preview(data: Data("Role,Employer,Follow up,Due date\n\"Product, Platform\",Rekon Labs,Email recruiter,2026-08-01\nDirector,Rekon Labs,,2026-08-02\n".utf8))
+        XCTAssertEqual(preview.mapping[.title], 0)
+        XCTAssertEqual(preview.mapping[.company], 1)
+        XCTAssertEqual(preview.rows.first?.opportunity?.title, "Product, Platform")
+        XCTAssertEqual(preview.rows.last?.reasons, ["Due date requires a Next action."])
     }
 
     func testCSVImportRequiresDuplicateDecisionAndPersistsReport() throws {
@@ -586,6 +594,21 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.importReports(), [report])
         XCTAssertEqual(try store.opportunities().map(\.title), ["Product Manager", "Director"])
         XCTAssertEqual(try store.activityEvents().suffix(2).map(\.kind), ["csv_duplicate_skipped", "csv_imported"])
+    }
+
+    func testCSVSelectedFieldUpdatePreservesUnselectedExistingFields() throws {
+        let store = try makeStore()
+        let existing = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", jobURL: "https://jobs.example.com/old", notes: "Keep this", compensation: "120k"))
+        let preview = try CSVOpportunityImporter.preview(data: Data("title,company,compensation,notes\nProduct Manager,Rekon Labs,150k,Do not overwrite\n".utf8))
+        var plan = try store.csvImportPlan(for: preview)
+        plan[0].decision = .updateSelectedFields
+        plan[0].selectedFields = [.compensation]
+        let report = try store.importCSV(plan, invalidCount: preview.invalidRowCount, sourceBasename: "jobs.csv", mapping: preview.mapping)
+        let updated = try XCTUnwrap(try store.opportunities().first(where: { $0.id == existing.id }))
+        XCTAssertEqual(report.updatedCount, 1)
+        XCTAssertEqual(updated.compensation, "150k")
+        XCTAssertEqual(updated.jobURL, "https://jobs.example.com/old")
+        XCTAssertEqual(updated.notes, "Keep this")
     }
 
     func testContactInteractionIsStoredWithAnExplicitlyLinkedOpportunityAndActivityEvent() throws {

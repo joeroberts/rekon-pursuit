@@ -558,20 +558,20 @@ final class WorkspaceViewModel: ObservableObject {
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         do {
-            csvPreview = try CSVOpportunityImporter.preview(data: Data(contentsOf: url))
+            csvPreview = try CSVOpportunityImporter.preview(data: Data(contentsOf: url), sourceBasename: url.lastPathComponent)
             csvImportPlan = try store.csvImportPlan(for: csvPreview!)
-            statusMessage = "CSV preview ready. Review before importing."
+            statusMessage = "CSV map ready. Confirm the columns, validate rows, then review duplicates."
         } catch {
             csvPreview = nil
             csvImportPlan = []
-            statusMessage = "The CSV file could not be read. It needs title and company columns."
+            statusMessage = "The CSV file could not be read. Check its UTF-8 formatting."
         }
     }
 
     func importCSVPreview() {
         guard let store = readyStore(), let preview = csvPreview else { return }
         do {
-            csvImportReport = try store.importCSV(csvImportPlan, invalidCount: preview.invalidRowCount)
+            csvImportReport = try store.importCSV(csvImportPlan, invalidCount: preview.invalidRowCount, invalidRows: preview.rows.filter { !$0.isValid }, sourceBasename: preview.sourceBasename, mapping: preview.mapping)
             csvPreview = nil
             csvImportPlan = []
             refreshCounts()
@@ -588,6 +588,27 @@ final class WorkspaceViewModel: ObservableObject {
         }
         guard let index = csvImportPlan.firstIndex(where: { $0.id == rowID }) else { return }
         csvImportPlan[index].decision = decision
+        if decision != .updateSelectedFields { csvImportPlan[index].selectedFields = [] }
+    }
+
+    func setCSVMapping(_ field: CSVImportField, to column: Int?) {
+        guard var preview = csvPreview else { return }
+        preview.mapping.removeValue(forKey: field)
+        if let column { preview.mapping[field] = column }
+        csvPreview = preview
+        csvImportPlan = []
+        statusMessage = CSVOpportunityImporter.mappingIsValid(preview.mapping) ? "Mapping changed. Validate to review rows again." : "Map both Job title and Company; each source column can be used once."
+    }
+
+    func validateCSVMapping() {
+        guard let preview = csvPreview, CSVOpportunityImporter.mappingIsValid(preview.mapping), let store = readyStore() else { statusMessage = "Map both Job title and Company using separate columns."; return }
+        do { csvImportPlan = try store.csvImportPlan(for: preview); statusMessage = "Validation complete. Choose an action for each possible duplicate." }
+        catch { statusMessage = "The mapped CSV could not be validated." }
+    }
+
+    func setCSVSelectedField(_ field: CSVImportField, selected: Bool, for rowID: Int) {
+        guard let index = csvImportPlan.firstIndex(where: { $0.id == rowID }) else { return }
+        if selected { csvImportPlan[index].selectedFields.insert(field) } else { csvImportPlan[index].selectedFields.remove(field) }
     }
 
     private func apply(_ state: WorkspaceOpenState) {

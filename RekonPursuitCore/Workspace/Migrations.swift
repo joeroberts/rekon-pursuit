@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 enum WorkspaceMigrations {
-    static let currentVersion = 16
+    static let currentVersion = 17
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
@@ -16,6 +16,7 @@ enum WorkspaceMigrations {
     static let versionFourteenChecksum = checksum(for: "14|document_references.source_hash.final_sent_at")
     static let versionFifteenChecksum = checksum(for: "15|opportunities.job_description.notes")
     static let versionSixteenChecksum = checksum(for: "16|opportunities.core_tracker_fields|opportunity_response_history")
+    static let versionSeventeenChecksum = checksum(for: "17|import_reports.completed_detail|import_report_rows")
 
     static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false, failVersionSixteen: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
@@ -248,6 +249,21 @@ enum WorkspaceMigrations {
                     if failVersionSixteen { throw WorkspaceStoreError.injectedFailure }
                     try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(16), .text(versionSixteenChecksum)])
                     try database.execute("UPDATE schema_migrations SET version = 16")
+                }
+                database.removeMigrationSnapshot()
+            } catch { throw error }
+        }
+        if version < 17 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    try database.execute("ALTER TABLE import_reports ADD COLUMN updated_count INTEGER NOT NULL DEFAULT 0")
+                    try database.execute("ALTER TABLE import_reports ADD COLUMN source_basename TEXT NOT NULL DEFAULT ''")
+                    try database.execute("ALTER TABLE import_reports ADD COLUMN mapping_summary TEXT NOT NULL DEFAULT ''")
+                    try database.execute("CREATE TABLE import_report_rows (id TEXT PRIMARY KEY NOT NULL, report_id TEXT NOT NULL REFERENCES import_reports(id), source_row INTEGER NOT NULL, outcome TEXT NOT NULL, reason TEXT NOT NULL, duplicate_rationale TEXT NOT NULL, opportunity_id TEXT)")
+                    try database.execute("CREATE INDEX import_report_rows_report_row ON import_report_rows(report_id, source_row)")
+                    try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(17), .text(versionSeventeenChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 17")
                 }
                 database.removeMigrationSnapshot()
             } catch { throw error }

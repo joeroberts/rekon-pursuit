@@ -1,68 +1,101 @@
 import Foundation
 
-struct CSVImportPreview: Equatable {
-    let rows: [CSVImportRow]
-    let invalidRowCount: Int
+enum CSVImportField: String, CaseIterable, Identifiable {
+    case title, company, jobURL, jobDescription, notes, compensation, location, workArrangement, stage, nextAction, dueDate, applicationDate, responseState, responseDate, stageDate
+    var id: String { rawValue }
+    var label: String { switch self {
+    case .title: "Job title"; case .company: "Company"; case .jobURL: "Job URL"; case .jobDescription: "Job description"; case .notes: "Notes"; case .compensation: "Compensation"; case .location: "Location"; case .workArrangement: "Work arrangement"; case .stage: "Pipeline stage"; case .nextAction: "Next action"; case .dueDate: "Due date"; case .applicationDate: "Applied date"; case .responseState: "Response state"; case .responseDate: "Response status date"; case .stageDate: "Stage changed date" } }
+    var required: Bool { self == .title || self == .company }
+    static func suggested(for header: String) -> CSVImportField? {
+        let value = header.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let aliases: [CSVImportField: Set<String>] = [.title:["title","job title","role"], .company:["company","employer"], .jobURL:["url","job url","posting url","link"], .jobDescription:["description","job description"], .notes:["notes","note"], .compensation:["compensation","salary","pay"], .location:["location","city","location/city"], .workArrangement:["work arrangement","work mode","remote/hybrid"], .stage:["stage","status","pipeline stage"], .nextAction:["next action","follow up","follow-up"], .dueDate:["due date","next action date","follow up date"], .applicationDate:["applied date","application date","date applied"], .responseState:["response","response status"], .responseDate:["response date","response received date","response status date"], .stageDate:["stage date","status date","stage changed date"]]
+        return aliases.first(where: { $0.value.contains(value) })?.key
+    }
+}
 
-    var validRows: [CreateOpportunity] { rows.map(\.opportunity) }
+struct CSVImportPreview: Equatable {
+    let headers: [String]
+    let sourceBasename: String
+    let rawRows: [[String]]
+    var mapping: [CSVImportField: Int]
+    var rows: [CSVImportRow] { CSVOpportunityImporter.validate(rawRows: rawRows, mapping: mapping) }
+    var invalidRowCount: Int { rows.filter { !$0.isValid }.count }
+    var validRows: [CreateOpportunity] { rows.compactMap(\.opportunity) }
 }
 
 struct CSVImportRow: Equatable, Identifiable {
     let id: Int
-    let opportunity: CreateOpportunity
+    let sourceRow: Int
+    let values: [CSVImportField: String]
+    let reasons: [String]
+    let opportunity: CreateOpportunity?
+    var isValid: Bool { reasons.isEmpty && opportunity != nil }
+    init(id: Int, opportunity: CreateOpportunity) { self.id = id; sourceRow = id; values = [:]; reasons = []; self.opportunity = opportunity }
+    init(id: Int, sourceRow: Int, values: [CSVImportField: String], reasons: [String], opportunity: CreateOpportunity?) { self.id = id; self.sourceRow = sourceRow; self.values = values; self.reasons = reasons; self.opportunity = opportunity }
 }
 
-enum CSVDuplicateDecision: String, CaseIterable, Equatable {
-    case skip
-    case keepSeparate
-}
+enum CSVDuplicateDecision: String, CaseIterable, Equatable { case create, updateSelectedFields, skip, keepSeparate }
 
 struct CSVImportPlanRow: Equatable, Identifiable {
     let row: CSVImportRow
-    let isDuplicate: Bool
+    let candidateID: String?
+    let duplicateRationale: String?
     var decision: CSVDuplicateDecision?
-
+    var selectedFields: Set<CSVImportField> = []
     var id: Int { row.id }
+    var isDuplicate: Bool { candidateID != nil }
 }
 
 struct CSVImportReport: Equatable {
     let id: String
     let importedCount: Int
+    let updatedCount: Int
     let skippedCount: Int
     let duplicateKeptCount: Int
     let invalidCount: Int
+    let sourceBasename: String
+    let mappingSummary: String
     let createdAt: Date
+    init(id: String, importedCount: Int, updatedCount: Int = 0, skippedCount: Int, duplicateKeptCount: Int, invalidCount: Int, sourceBasename: String = "", mappingSummary: String = "", createdAt: Date) { self.id = id; self.importedCount = importedCount; self.updatedCount = updatedCount; self.skippedCount = skippedCount; self.duplicateKeptCount = duplicateKeptCount; self.invalidCount = invalidCount; self.sourceBasename = sourceBasename; self.mappingSummary = mappingSummary; self.createdAt = createdAt }
+}
+
+enum CSVImportError: LocalizedError { case unreadableFile, malformedCSV, missingRequiredColumns, duplicateMappedColumn, validationBlocked
+    var errorDescription: String? { switch self { case .unreadableFile: "The CSV must be UTF-8."; case .malformedCSV: "The CSV contains an unmatched quote."; case .missingRequiredColumns: "Map both Job title and Company before validating."; case .duplicateMappedColumn: "A source column can only be mapped once."; case .validationBlocked: "Fix the mapping before validating." } }
 }
 
 enum CSVOpportunityImporter {
-    static func preview(data: Data) throws -> CSVImportPreview {
+    static func preview(data: Data, sourceBasename: String = "CSV import") throws -> CSVImportPreview {
         guard let text = String(data: data, encoding: .utf8) else { throw CSVImportError.unreadableFile }
-        let lines = text.split(whereSeparator: \.isNewline).map(String.init)
-        guard let headerLine = lines.first else { throw CSVImportError.missingRequiredColumns }
-        let headers = parseLine(headerLine).map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-        guard let titleIndex = headers.firstIndex(of: "title"), let companyIndex = headers.firstIndex(of: "company") else { throw CSVImportError.missingRequiredColumns }
-        var rows: [CSVImportRow] = []
-        var invalidRowCount = 0
-        for (offset, line) in lines.dropFirst().enumerated() {
-            let fields = parseLine(line)
-            let title = fields.indices.contains(titleIndex) ? fields[titleIndex] : ""
-            let company = fields.indices.contains(companyIndex) ? fields[companyIndex] : ""
-            guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !company.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { invalidRowCount += 1; continue }
-            rows.append(CSVImportRow(id: offset + 2, opportunity: CreateOpportunity(title: title, company: company)))
-        }
-        return CSVImportPreview(rows: rows, invalidRowCount: invalidRowCount)
+        let records = try parse(text)
+        guard let header = records.first, !header.isEmpty else { throw CSVImportError.missingRequiredColumns }
+        let normalized = header.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        var mapping: [CSVImportField: Int] = [:]
+        for (index, item) in normalized.enumerated() { if let field = CSVImportField.suggested(for: item), mapping[field] == nil { mapping[field] = index } }
+        return CSVImportPreview(headers: normalized, sourceBasename: sourceBasename, rawRows: Array(records.dropFirst()), mapping: mapping)
     }
 
-    private static func parseLine(_ line: String) -> [String] {
-        var fields: [String] = [""]
-        var inQuotes = false
-        for character in line {
-            if character == "\"" { inQuotes.toggle() }
-            else if character == ",", !inQuotes { fields.append("") }
-            else { fields[fields.count - 1].append(character) }
+    static func validate(rawRows: [[String]], mapping: [CSVImportField: Int]) -> [CSVImportRow] {
+        rawRows.enumerated().map { offset, source in
+            let values = Dictionary(uniqueKeysWithValues: mapping.map { field, index in (field, source.indices.contains(index) ? source[index].trimmingCharacters(in: .whitespacesAndNewlines) : "") })
+            var reasons: [String] = []
+            guard mapping[.title] != nil, mapping[.company] != nil else { return CSVImportRow(id: offset + 2, sourceRow: offset + 2, values: values, reasons: ["Map Job title and Company."], opportunity: nil) }
+            if values[.title, default: ""].isEmpty { reasons.append("Job title is required.") }
+            if values[.company, default: ""].isEmpty { reasons.append("Company is required.") }
+            if let url = values[.jobURL], !url.isEmpty, !(URL(string: url)?.scheme == "http" || URL(string: url)?.scheme == "https") { reasons.append("Job URL must begin with http:// or https://.") }
+            if let raw = values[.workArrangement], !raw.isEmpty, WorkArrangement(rawValue: raw) == nil { reasons.append("Work arrangement is not recognized.") }
+            if let raw = values[.stage], !raw.isEmpty, PipelineStage(rawValue: raw) == nil { reasons.append("Pipeline stage is not recognized.") }
+            if let raw = values[.responseState], !raw.isEmpty, ResponseState(rawValue: raw) == nil { reasons.append("Response state is not recognized.") }
+            let parsed: (CSVImportField) -> Date? = { parseDate(values[$0] ?? "") }
+            for field in [.dueDate, .applicationDate, .responseDate, .stageDate] as [CSVImportField] { if let value = values[field], !value.isEmpty, parsed(field) == nil { reasons.append("\(field.label) must use YYYY-MM-DD.") } }
+            if let due = values[.dueDate], !due.isEmpty, values[.nextAction, default: ""].isEmpty { reasons.append("Due date requires a Next action.") }
+            let response = ResponseState(rawValue: values[.responseState] ?? "") ?? .noResponseRecorded
+            if response != .noResponseRecorded && parsed(.responseDate) == nil { reasons.append("A response status date is required for this response.") }
+            let opportunity = reasons.isEmpty ? CreateOpportunity(title: values[.title]!, company: values[.company]!, stage: PipelineStage(rawValue: values[.stage] ?? "") ?? .saved, nextAction: values[.nextAction] ?? "", dueAt: parsed(.dueDate), jobURL: values[.jobURL] ?? "", jobDescription: values[.jobDescription] ?? "", notes: values[.notes] ?? "", compensation: values[.compensation], location: values[.location], workArrangement: WorkArrangement(rawValue: values[.workArrangement] ?? "") ?? .notSpecified, applicationDate: parsed(.applicationDate), responseState: response, responseEffectiveDate: parsed(.responseDate), stageChangedAt: parsed(.stageDate)) : nil
+            return CSVImportRow(id: offset + 2, sourceRow: offset + 2, values: values, reasons: reasons, opportunity: opportunity)
         }
-        return fields
     }
+
+    static func mappingIsValid(_ mapping: [CSVImportField: Int]) -> Bool { mapping[.title] != nil && mapping[.company] != nil && Set(mapping.values).count == mapping.values.count }
+    static func parseDate(_ value: String) -> Date? { guard !value.isEmpty else { return nil }; let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX"); formatter.calendar = Calendar(identifier: .gregorian); formatter.timeZone = TimeZone(secondsFromGMT: 0); formatter.dateFormat = "yyyy-MM-dd"; return formatter.date(from: value).map { Calendar(identifier: .gregorian).startOfDay(for: $0) } }
+    private static func parse(_ text: String) throws -> [[String]] { var records:[[String]] = [[]], field = "", quoted = false; var index = text.startIndex; while index < text.endIndex { let c = text[index]; if c == "\"" { let next = text.index(after: index); if quoted && next < text.endIndex && text[next] == "\"" { field.append("\""); index = next } else { quoted.toggle() } } else if c == "," && !quoted { records[records.count-1].append(field); field = "" } else if (c == "\n" || c == "\r") && !quoted { if c == "\r", text.index(after: index) < text.endIndex, text[text.index(after: index)] == "\n" { index = text.index(after: index) }; records[records.count-1].append(field); field=""; records.append([]) } else { field.append(c) }; index = text.index(after: index) }; if quoted { throw CSVImportError.malformedCSV }; if !records.last!.isEmpty || !field.isEmpty { records[records.count-1].append(field) } else { records.removeLast() }; return records }
 }
-
-enum CSVImportError: Error { case unreadableFile, missingRequiredColumns }
