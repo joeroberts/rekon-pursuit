@@ -82,8 +82,9 @@ Work arrangement picker, Applied date toggle/date picker, current response
 picker, and a response-effective-date picker whenever the selected response
 differs from the persisted response—including a reset to `No response
 recorded`. Label that control **Response received date** when `Response
-received` is selected and **Response status date** otherwise. Each response
-transition uses its selected date for the history/event. Include a **Stage
+received` is selected and **Response status date** otherwise. Each selected
+response date applies to response history; its activity event uses actual save
+time. Include a **Stage
 changed date** picker. Default stage date for a new record is
 today; the user can change it before saving. The stage-date control affects
 only pipeline stage history; response dates affect only response history. Show the selected record’s
