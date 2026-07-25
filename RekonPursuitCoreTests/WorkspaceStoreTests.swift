@@ -414,6 +414,7 @@ final class WorkspaceStoreTests: XCTestCase {
         )))
 
         XCTAssertEqual(try store.contactInteractions(forContactID: contact.id), [])
+        XCTAssertEqual(try store.opportunityInteractions(forOpportunityID: opportunity.id), [])
         XCTAssertEqual(try store.activityEvents().count, activityCount)
     }
 
@@ -470,6 +471,36 @@ final class WorkspaceStoreTests: XCTestCase {
 
         XCTAssertEqual(try store.contactInteractions(forContactID: contact.id), [])
         XCTAssertEqual(try database.rows("SELECT contact_id, summary FROM interactions"), [[.text(contact.id), .text("Private note")]])
+    }
+
+    func testOpportunityRelationshipHistoryRetainsInteractionAfterCurrentLinkIsRemoved() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let contact = try store.createContact(CreateContact(name: "Alex Morgan"))
+        try store.linkContact(contactID: contact.id, toOpportunityID: opportunity.id)
+        _ = try store.recordContactInteraction(CreateContactInteraction(contactID: contact.id, opportunityID: opportunity.id, kind: .call, summary: "Recruiter screen", occurredAt: now))
+
+        try store.unlinkContact(contactID: contact.id, fromOpportunityID: opportunity.id)
+
+        let history = try store.opportunityInteractions(forOpportunityID: opportunity.id)
+        XCTAssertEqual(history.map(\.contactID), [contact.id])
+        XCTAssertEqual(history.map(\.contactName), [contact.name])
+        XCTAssertEqual(history.map(\.kind), [.call])
+        XCTAssertEqual(history.map(\.summary), ["Recruiter screen"])
+        XCTAssertEqual(try store.contacts(forOpportunityID: opportunity.id), [])
+    }
+
+    func testOpportunityRelationshipHistoryKeepsLegacyNoteReadableWithoutInventingAContact() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        let store = try WorkspaceStore(database: database, now: now, actorID: "local-user", correlationID: "fixture-correlation")
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        try database.execute("INSERT INTO interactions (id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at) VALUES ('legacy-note', NULL, ?, 'Note', 'Prior note', ?, NULL)", values: [.text(opportunity.id), .real(now.timeIntervalSince1970)])
+
+        let history = try store.opportunityInteractions(forOpportunityID: opportunity.id)
+        XCTAssertEqual(history.map(\.contactID), [nil])
+        XCTAssertEqual(history.map(\.contactName), [nil])
+        XCTAssertEqual(history.map(\.kind), [.note])
+        XCTAssertEqual(history.map(\.summary), ["Prior note"])
     }
 
     func testDeletingOpportunityHidesItAndLeavesOnlyRedactedAuditEvidence() throws {

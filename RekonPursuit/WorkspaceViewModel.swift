@@ -45,6 +45,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var contacts: [Contact] = []
     @Published private(set) var selectedContacts: [Contact] = []
     @Published private(set) var selectedSameEmployerContacts: [Contact] = []
+    @Published private(set) var selectedOpportunityInteractions: [OpportunityInteraction] = []
     @Published private(set) var selectedContactInteractions: [ContactInteraction] = []
     @Published private(set) var selectedContactOpportunities: [Opportunity] = []
     @Published private(set) var selectedContactLastTouch: Date?
@@ -440,6 +441,7 @@ final class WorkspaceViewModel: ObservableObject {
         do {
             selectedContacts = selectedOpportunityID.isEmpty ? [] : try store?.contacts(forOpportunityID: selectedOpportunityID) ?? []
             selectedSameEmployerContacts = selectedOpportunityID.isEmpty ? [] : try store?.sameEmployerContacts(forOpportunityID: selectedOpportunityID) ?? []
+            selectedOpportunityInteractions = selectedOpportunityID.isEmpty ? [] : try store?.opportunityInteractions(forOpportunityID: selectedOpportunityID) ?? []
         } catch {
             statusMessage = "The relationship history could not be read."
         }

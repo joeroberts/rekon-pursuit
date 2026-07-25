@@ -213,6 +213,26 @@ struct ContentView: View {
                             }
                         }
                     }
+                    GroupBox("Relationship history") {
+                        if model.selectedOpportunityInteractions.isEmpty {
+                            Text("No contact interactions are recorded for this opportunity yet.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(model.selectedOpportunityInteractions, id: \.id) { interaction in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(interaction.contactName ?? "Prior note") · \(interaction.kind.rawValue) · \(interaction.occurredAt.formatted(date: .abbreviated, time: .shortened))")
+                                        .font(.caption.bold())
+                                    Text(interaction.summary)
+                                    if let nextTouchAt = interaction.nextTouchAt {
+                                        Text("Next touch: \(nextTouchAt.formatted(date: .abbreviated, time: .shortened))")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                    }
                 }
             }
             }
@@ -313,6 +333,28 @@ struct ContentView: View {
                     }
                 }
                 if model.selectedContact != nil {
+                    GroupBox("Linked opportunities") {
+                        if model.selectedContactOpportunities.isEmpty {
+                            Text("This contact is not linked to an active opportunity.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(model.selectedContactOpportunities, id: \.id) { opportunity in
+                                Button {
+                                    model.select(opportunity)
+                                    page = .pipeline
+                                } label: {
+                                    VStack(alignment: .leading) {
+                                        Text(opportunity.title)
+                                        Text("\(opportunity.company) · \(opportunity.stage.rawValue)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
                     GroupBox("Interaction history") {
                         HStack {
                             LabeledContent("Last touch", value: model.selectedContactLastTouch?.formatted(date: .abbreviated, time: .shortened) ?? "None yet")

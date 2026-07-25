@@ -392,6 +392,13 @@ final class WorkspaceStore {
         }
     }
 
+    func opportunityInteractions(forOpportunityID opportunityID: String) throws -> [OpportunityInteraction] {
+        try synchronized {
+            guard try isActiveOpportunity(opportunityID) else { return [] }
+            return try database.rows("SELECT interactions.id, interactions.contact_id, contacts.name, interactions.kind, interactions.summary, interactions.occurred_at, interactions.next_touch_at FROM interactions LEFT JOIN contacts ON contacts.id = interactions.contact_id WHERE interactions.opportunity_id = ? AND (interactions.contact_id IS NULL OR contacts.deleted_at IS NULL) ORDER BY interactions.occurred_at DESC, interactions.id DESC", values: [.text(opportunityID)]).map(opportunityInteraction(from:))
+        }
+    }
+
     func lastTouch(forContactID contactID: String) throws -> Date? {
         try contactInteractions(forContactID: contactID).map(\.occurredAt).max()
     }
@@ -522,6 +529,22 @@ final class WorkspaceStore {
         let nextTouchAt: Date?
         if case let .real(value) = row[6] { nextTouchAt = Date(timeIntervalSince1970: value) } else { nextTouchAt = nil }
         return ContactInteraction(id: id, contactID: contactID, opportunityID: opportunityID, kind: kind, summary: summary, occurredAt: Date(timeIntervalSince1970: occurredAt), nextTouchAt: nextTouchAt)
+    }
+
+    private func opportunityInteraction(from row: [DatabaseValue]) throws -> OpportunityInteraction {
+        guard row.count == 7,
+              case let .text(id) = row[0], case let .text(kindValue) = row[3],
+              let kind = InteractionKind(rawValue: kindValue), case let .text(summary) = row[4],
+              case let .real(occurredAt) = row[5] else {
+            throw WorkspaceStoreError.unexpectedDatabaseValue
+        }
+        let contactID: String?
+        if case let .text(value) = row[1] { contactID = value } else { contactID = nil }
+        let contactName: String?
+        if case let .text(value) = row[2] { contactName = value } else { contactName = nil }
+        let nextTouchAt: Date?
+        if case let .real(value) = row[6] { nextTouchAt = Date(timeIntervalSince1970: value) } else { nextTouchAt = nil }
+        return OpportunityInteraction(id: id, contactID: contactID, contactName: contactName, kind: kind, summary: summary, occurredAt: Date(timeIntervalSince1970: occurredAt), nextTouchAt: nextTouchAt)
     }
 
     private func activityEvent(from row: [DatabaseValue]) throws -> ActivityEvent {

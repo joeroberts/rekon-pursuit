@@ -100,6 +100,16 @@ struct ContactInteraction: Equatable {
     let nextTouchAt: Date?
 }
 
+struct OpportunityInteraction: Equatable {
+    let id: String
+    let contactID: String?
+    let contactName: String?
+    let kind: InteractionKind
+    let summary: String
+    let occurredAt: Date
+    let nextTouchAt: Date?
+}
+
 struct CreateContactInteraction {
     let contactID: String
     let opportunityID: String?
