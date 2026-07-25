@@ -1,8 +1,45 @@
 # Rekon Pursuit — MVP remediation ledger
 
-**Status:** `RP-R0`, `RP-R1a`, `RP-R1b`, and `RP-R2` are accepted. `RP-R3` is the sole released remediation task. `RP-R3a` and `RP-R4`–`RP-R10` remain blocked or deferred by their stated dependencies and gates.
+**Status:** The current product-owner-directed operational baseline is:
+`RP-R0`, `RP-R1a`, and `RP-R1b` Accepted; `RP-R2` In progress — Corrective
+pass / verification required; `RP-R3` Next up; `RP-R4`–`RP-R10` Backlog; and
+no task Blocked. Earlier acceptance/release rows below are retained as
+historical evidence, not the current active queue.
 
-**Authority:** This is the canonical status record for the current MVP remediation. It supersedes “MVP shipped” language in the roadmap and candidate handoff. The PRD, architecture specification, ADR-001, and approved mockups remain controlling requirements.
+**Authority:** [dashboard-status.json](dashboard-status.json) is the canonical
+machine-readable operational view for the current remediation queue. This
+ledger is its detailed audit/evidence record; meaningful future transitions
+must update both records together and regenerate the local dashboard. It
+supersedes “MVP shipped” language in the roadmap and candidate handoff. The
+PRD, architecture specification, ADR-001, and approved mockups remain
+controlling requirements.
+
+## Dashboard operational-baseline decision
+
+**Date:** 2026-07-25
+
+**Decision owner:** Product owner, recorded by Delivery Manager
+
+**Decision:** Establish the status sequence above as the current operational
+queue used by the repository-local delivery dashboard. This is an intentional
+operational reset for remediation management: it does not erase or revise the
+historical R2 acceptance, R3 release, or prior review evidence below. From
+this decision forward, `dashboard-status.json` governs each current task
+status; this ledger records the reason, evidence, and release condition for
+the same transition. The only normal path is Backlog → Next up → In progress
+→ Accepted. Blocked is reserved for a genuine material impediment requiring
+intervention, not ordinary sequencing.
+
+### RP-DASH-001 — Local delivery dashboard
+
+| Role | Decision | Evidence / boundary |
+| --- | --- | --- |
+| Planning | Approved | The task brief defines one operational JSON source, exact lane semantics, a static local projection, and the coupled JSON/ledger update contract. |
+| Architect | Approved | The static renderer embeds source state for `file://`, adds no network or app boundary, and restricts evidence links to repository-local paths. |
+| TPM | Approved | The operational-baseline reset preserves prior records as history, keeps R2/R3 sequencing explicit, and does not alter the macOS product roadmap. |
+| QA | Approved | Focused checks cover the source contract, deterministic generated page, 30-second refresh marker, required lanes/counts/cards, attention semantics, and local evidence links. |
+| Code Reviewer | Approved after P1 remediation | URL-encoded traversal, separators, and control characters are rejected before local-link resolution; generated attention items use valid list markup. |
+| Delivery Manager | **Accepted — RP-DASH-001 complete** | Independent plan, implementation, and QA gates approved. The local dashboard is generated from `dashboard-status.json`; this ledger remains the detailed evidence record. The seeded operational queue is verified, and future meaningful transitions update JSON, ledger, and generated HTML together. |
 
 ## Verified gaps
 

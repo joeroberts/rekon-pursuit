@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="30">
+  <title>Rekon Pursuit — Delivery dashboard</title>
+  <style>
+    :root { color-scheme: dark; --ink:#f3f6fb; --muted:#a6b2c7; --surface:#0d1423; --panel:#151f32; --line:#2b3850; --cyan:#20c9ef; --violet:#9a6cff; --amber:#e4a843; --emerald:#5cae85; --coral:#e6746b; }
+    * { box-sizing:border-box; } body { margin:0; min-width:960px; background:radial-gradient(circle at top right,#172b4d 0,#0a0f1a 44rem); color:var(--ink); font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { max-width:1780px; margin:0 auto; padding:32px; } .eyebrow { color:var(--cyan); font-size:12px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; } h1 { margin:6px 0 8px; font-size:30px; } .subhead { color:var(--muted); margin:0; }
+    .summary { display:grid; grid-template-columns:1.35fr 1.35fr repeat(3,.55fr); gap:12px; margin:24px 0 18px; } .summary-item,.attention { background:rgba(21,31,50,.93); border:1px solid var(--line); border-radius:12px; padding:14px; } .summary-label,dt { color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; } .summary-value { display:block; margin-top:3px; font-weight:700; }
+    .attention { margin-bottom:18px; border-left:3px solid var(--violet); } .attention h2 { margin:0 0 8px; font-size:16px; } .attention ul { margin:0; padding-left:20px; } .attention-empty { margin:0; color:var(--muted); }
+    .board { display:grid; grid-template-columns:repeat(5,minmax(260px,1fr)); gap:14px; align-items:start; overflow-x:auto; padding-bottom:14px; } .lane { min-height:280px; background:rgba(13,20,35,.82); border:1px solid var(--line); border-top:4px solid var(--lane); border-radius:12px; padding:13px; } .lane-backlog { --lane:var(--amber); } .lane-next_up { --lane:var(--violet); } .lane-in_progress { --lane:var(--cyan); } .lane-accepted { --lane:var(--emerald); } .lane-blocked { --lane:var(--coral); } .lane header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; } .lane h2 { font-size:17px; margin:0; } .lane-count { color:var(--lane); font-weight:700; }
+    .task-card { background:var(--panel); border:1px solid #34425a; border-radius:9px; padding:13px; margin-top:10px; } .card-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; } .task-id { color:var(--cyan); font-size:12px; font-weight:800; letter-spacing:.08em; } .status-pill { color:var(--lane); border:1px solid currentColor; border-radius:999px; font-size:11px; padding:2px 7px; white-space:nowrap; } .task-card h3 { margin:9px 0 12px; font-size:16px; line-height:1.3; } dl { margin:0; } dl div { margin:9px 0; } dd { margin:2px 0 0; color:#d3dbea; } .action { color:var(--muted); margin:14px 0 0; } .action.required { color:#f0cdfc; } .evidence { display:inline-block; color:var(--cyan); font-weight:600; margin-top:10px; text-decoration:none; } .evidence:hover { text-decoration:underline; } .empty { color:var(--muted); font-style:italic; }
+    footer { color:var(--muted); font-size:12px; margin-top:20px; } @media (max-width:1000px) { body { min-width:0; } main { padding:20px; } .summary { grid-template-columns:repeat(2,1fr); } }
+  </style>
+</head>
+<body>
+  <main>
+    <header><div class="eyebrow">Rekon Pursuit</div><h1>Delivery dashboard</h1><p class="subhead">Local operational view. This page refreshes every 30 seconds.</p></header>
+    <section class="summary" aria-label="Delivery summary">
+      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">RP-R2 — Corrective pass / verification required</span></div>
+      <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">RP-R3 — CSV mapping and atomic import</span></div>
+      <div class="summary-item"><span class="summary-label">Accepted</span><span class="summary-value">3</span></div>
+      <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">8</span></div>
+      <div class="summary-item"><span class="summary-label">Blocked</span><span class="summary-value">0</span></div>
+    </section>
+    <section class="attention" aria-label="Attention queue"><h2>Attention queue</h2><ul><li><strong>RP-R2:</strong> Hands-on verification is required before RP-R2 can be accepted.</li></ul></section>
+    <section class="board" aria-label="Delivery status board"><section class="lane lane-backlog"><header><h2>Backlog</h2><span class="lane-count">8</span></header>
+      <article class="task-card status-backlog">
+        <div class="card-heading"><span class="task-id">RP-R4</span><span class="status-pill">Backlog</span></div>
+        <h3>Reconciliation contract and local states</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Release after predecessor work and the required privacy/network contract approval.</dd></div>
+          <div><dt>Latest transition</dt><dd>Planned remediation work.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
+      </article>
+
+      <article class="task-card status-backlog">
+        <div class="card-heading"><span class="task-id">RP-R5</span><span class="status-pill">Backlog</span></div>
+        <h3>User-initiated public URL check</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Release after RP-R4 and privacy/network approval.</dd></div>
+          <div><dt>Latest transition</dt><dd>Planned remediation work.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
+      </article>
+
+      <article class="task-card status-backlog">
+        <div class="card-heading"><span class="task-id">RP-R6</span><span class="status-pill">Backlog</span></div>
+        <h3>Durable document references</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Release in serial order after the active corrective work is accepted.</dd></div>
+          <div><dt>Latest transition</dt><dd>Planned remediation work.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
+      </article>
+
+      <article class="task-card status-backlog">
+        <div class="card-heading"><span class="task-id">RP-R7a</span><span class="status-pill">Backlog</span></div>
+        <h3>Portable recovery and encrypted export</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Requires recovery design and Architect plus Security/Privacy approval.</dd></div>
+          <div><dt>Latest transition</dt><dd>Planned remediation work.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
+      </article>
+
+      <article class="task-card status-backlog">
+        <div class="card-heading"><span class="task-id">RP-R7b</span><span class="status-pill">Backlog</span></div>
+        <h3>Backup expiry and retained-data purge</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Release after RP-R7a and the high-risk lifecycle approval.</dd></div>
+          <div><dt>Latest transition</dt><dd>Planned remediation work.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
+      </article>
+
+      <article class="task-card status-backlog">
+        <div class="card-heading"><span class="task-id">RP-R8</span><span class="status-pill">Backlog</span></div>
+        <h3>Searchable local AI ledger</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Release in serial order after the active corrective work is accepted.</dd></div>
+          <div><dt>Latest transition</dt><dd>Planned remediation work.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
+      </article>
+
+      <article class="task-card status-backlog">
+        <div class="card-heading"><span class="task-id">RP-R9</span><span class="status-pill">Backlog</span></div>
+        <h3>Lifecycle-aware settings</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Release after document, recovery, and AI-ledger predecessors are accepted.</dd></div>
+          <div><dt>Latest transition</dt><dd>Planned remediation work.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
+      </article>
+
+      <article class="task-card status-backlog">
+        <div class="card-heading"><span class="task-id">RP-R10</span><span class="status-pill">Backlog</span></div>
+        <h3>Clean-state remediation acceptance</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Release after RP-R1a through RP-R9 are accepted.</dd></div>
+          <div><dt>Latest transition</dt><dd>Planned remediation work.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
+      </article></section><section class="lane lane-next_up"><header><h2>Next up</h2><span class="lane-count">1</span></header>
+      <article class="task-card status-next_up">
+        <div class="card-heading"><span class="task-id">RP-R3</span><span class="status-pill">Next up</span></div>
+        <h3>CSV mapping and atomic import</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Eligible only after RP-R2 is accepted.</dd></div>
+          <div><dt>Latest transition</dt><dd>Queued as the next eligible corrective task.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="evidence" href="../task-briefs/RP-R3-csv-mapping-and-import.md">R3 task brief</a>
+      </article></section><section class="lane lane-in_progress"><header><h2>In progress</h2><span class="lane-count">1</span></header>
+      <article class="task-card status-in_progress">
+        <div class="card-heading"><span class="task-id">RP-R2</span><span class="status-pill">In progress</span></div>
+        <h3>Corrective pass / verification required</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Complete the corrective pass and record hands-on verification before acceptance.</dd></div>
+          <div><dt>Latest transition</dt><dd>Corrective pass entered verification.</dd></div>
+        </dl>
+        <p class="action required">Action needed: Hands-on verification is required before RP-R2 can be accepted.</p>
+        <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
+      </article></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">3</span></header>
+      <article class="task-card status-accepted">
+        <div class="card-heading"><span class="task-id">RP-R0</span><span class="status-pill">Accepted</span></div>
+        <h3>Evidence-only remediation baseline</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Accepted baseline evidence remains the foundation for remediation work.</dd></div>
+          <div><dt>Latest transition</dt><dd>Accepted as the amended remediation baseline.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
+      </article>
+
+      <article class="task-card status-accepted">
+        <div class="card-heading"><span class="task-id">RP-R1a</span><span class="status-pill">Accepted</span></div>
+        <h3>Workspace initialization and recovery</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Workspace creation and recovery gate accepted.</dd></div>
+          <div><dt>Latest transition</dt><dd>Accepted after independent review and hands-on workspace/CSV verification.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
+      </article>
+
+      <article class="task-card status-accepted">
+        <div class="card-heading"><span class="task-id">RP-R1b</span><span class="status-pill">Accepted</span></div>
+        <h3>Reactive application shell</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Reactive desktop shell gate accepted.</dd></div>
+          <div><dt>Latest transition</dt><dd>Accepted after independent review and compact-window verification.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
+      </article></section><section class="lane lane-blocked"><header><h2>Blocked</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section></section>
+    <footer>Source: <code>docs/delivery/dashboard-status.json</code> · Generated locally · No server required</footer>
+  </main>
+</body>
+</html>
