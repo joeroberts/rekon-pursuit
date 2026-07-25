@@ -47,6 +47,34 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertNotEqual(model.stageChangedAt, priorDate)
     }
 
+    func testSecondSuccessfulCreatePersistsFreshDatesAfterDraftReset() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let priorDate = Date(timeIntervalSince1970: 1_704_067_200)
+        model.start()
+        model.title = "First opportunity"
+        model.company = "Rekon Labs"
+        model.applicationDate = priorDate
+        model.hasApplicationDate = true
+        model.responseState = .awaitingResponse
+        model.responseEffectiveDate = priorDate
+        model.stageChangedAt = priorDate
+        model.createOpportunity()
+
+        model.title = "Second opportunity"
+        model.company = "Rekon Labs"
+        model.hasApplicationDate = true
+        model.responseState = .awaitingResponse
+        model.createOpportunity()
+
+        let second = try XCTUnwrap((try store.opportunities()).first { $0.title == "Second opportunity" })
+        let response = try XCTUnwrap(try store.responseHistory(forOpportunityID: second.id).first)
+        let stage = try XCTUnwrap(try store.stageHistory(forOpportunityID: second.id).first)
+        XCTAssertNotEqual(second.applicationDate, priorDate)
+        XCTAssertNotEqual(response.occurredAt, priorDate)
+        XCTAssertNotEqual(stage.occurredAt, priorDate)
+    }
+
     func testCreatePersistsJobDescriptionAndNotes() throws {
         let store = try makeStore()
         let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })

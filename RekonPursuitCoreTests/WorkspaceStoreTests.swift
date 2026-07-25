@@ -229,6 +229,55 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.latestTask(forOpportunityID: opportunity.id)?.title, "Follow up")
     }
 
+    func testFailedUpdateRollsBackOpportunityTaskHistoriesAndActivity() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        var identifier = 0
+        let store = try WorkspaceStore(
+            database: database,
+            now: now,
+            nextIdentifier: { defer { identifier += 1 }; return "rollback-id-\(identifier)" },
+            actorID: "local-user",
+            correlationID: "rollback-test"
+        )
+        let opportunity = try store.create(CreateOpportunity(
+            title: "Product Manager", company: "Rekon Labs", nextAction: "Send follow-up", dueAt: now
+        ))
+        let baselineOpportunity = try XCTUnwrap(store.opportunities().first)
+        let baselineTask = try store.latestTask(forOpportunityID: opportunity.id)
+        let baselineStages = try store.stageHistory(forOpportunityID: opportunity.id)
+        let baselineResponses = try store.responseHistory(forOpportunityID: opportunity.id)
+        let baselineActivity = try store.activityEvents()
+        try store.close()
+
+        let failingDatabase = try EncryptedDatabase.open(url: databaseURL, key: key, createIfMissing: false)
+        let failingStore = try WorkspaceStore(
+            database: failingDatabase,
+            now: now,
+            nextIdentifier: { defer { identifier += 1 }; return "rollback-id-\(identifier)" },
+            actorID: "local-user",
+            correlationID: "rollback-test",
+            failBeforeActivityInsert: true
+        )
+
+        XCTAssertThrowsError(try failingStore.updateOpportunity(
+            id: opportunity.id,
+            title: "Senior Product Manager",
+            company: "Rekon Labs",
+            stage: .screening,
+            nextAction: "Prepare recruiter call",
+            dueAt: now.addingTimeInterval(3_600),
+            responseState: .responseReceived,
+            responseEffectiveDate: now,
+            stageChangedAt: now
+        ))
+
+        XCTAssertEqual(try failingStore.opportunities(), [baselineOpportunity])
+        XCTAssertEqual(try failingStore.latestTask(forOpportunityID: opportunity.id), baselineTask)
+        XCTAssertEqual(try failingStore.stageHistory(forOpportunityID: opportunity.id), baselineStages)
+        XCTAssertEqual(try failingStore.responseHistory(forOpportunityID: opportunity.id), baselineResponses)
+        XCTAssertEqual(try failingStore.activityEvents(), baselineActivity)
+    }
+
     func testMultiRowCSVImportUsesOneCurrentCommandTimestamp() throws {
         let database = try EncryptedDatabase.open(url: databaseURL, key: key)
         var current = now
