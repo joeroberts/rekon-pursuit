@@ -101,7 +101,7 @@ final class WorkspaceStore {
                 let urlCandidates = canonicalURL.isEmpty ? [] : all.filter { !$0.jobURL.isEmpty && $0.jobURL.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == canonicalURL }.sorted { $0.id < $1.id }
                 let titleCandidates = all.filter { normalizedOpportunityKey(title: command.title, company: command.company) == normalizedOpportunityKey(title: $0.title, company: $0.company) }.sorted { $0.id < $1.id }
                 let candidate = (urlCandidates.isEmpty ? titleCandidates : urlCandidates).first
-                let rationale: String? = candidate.map { !command.jobURL.isEmpty && command.jobURL.lowercased() == $0.jobURL.lowercased() ? "Exact job URL" : "Matching title and company" }
+                let rationale: String? = candidate.map { !canonicalURL.isEmpty && canonicalURL == $0.jobURL.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ? "Exact job URL" : "Matching title and company" }
                 let values: [CSVImportField: String] = candidate.map { [.jobURL: $0.jobURL, .jobDescription: $0.jobDescription, .notes: $0.notes, .compensation: $0.compensation ?? "", .location: $0.location ?? "", .workArrangement: $0.workArrangement.rawValue, .stage: $0.stage.rawValue, .stageDate: $0.stageChangedAt?.ISO8601Format().prefix(10).description ?? "", .nextAction: $0.nextAction, .dueDate: $0.dueAt?.ISO8601Format().prefix(10).description ?? "", .applicationDate: $0.applicationDate?.ISO8601Format().prefix(10).description ?? "", .responseState: $0.responseState.rawValue] } ?? [:]
                 return CSVImportPlanRow(row: row, candidateID: candidate?.id, duplicateRationale: rationale, candidateTitle: candidate?.title, candidateCompany: candidate?.company, candidateValues: values, decision: candidate == nil ? .create : nil)
             }
@@ -124,7 +124,7 @@ final class WorkspaceStore {
             let summary = mapping.sorted { $0.key.rawValue < $1.key.rawValue }.map { "\($0.key.rawValue)=\($0.value)" }.joined(separator: ",")
             let report = CSVImportReport(id: nextIdentifier(), importedCount: created, updatedCount: updated, skippedCount: skipped, duplicateKeptCount: kept, invalidCount: invalidCount, sourceBasename: sourceBasename, mappingSummary: summary, createdAt: commandNow)
             try database.transaction {
-                try database.execute("INSERT INTO import_reports (id, imported_count, updated_count, skipped_count, duplicate_kept_count, invalid_count, source_basename, mapping_summary, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", values: [.text(report.id), .integer(Int64(report.importedCount)), .integer(Int64(report.updatedCount)), .integer(Int64(report.skippedCount)), .integer(Int64(report.duplicateKeptCount)), .integer(Int64(report.invalidCount)), .text(report.sourceBasename), .text(report.mappingSummary), .real(commandNow.timeIntervalSince1970)])
+                try database.execute("INSERT INTO import_reports (id, imported_count, updated_count, skipped_count, duplicate_kept_count, invalid_count, failed_count, source_basename, mapping_summary, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", values: [.text(report.id), .integer(Int64(report.importedCount)), .integer(Int64(report.updatedCount)), .integer(Int64(report.skippedCount)), .integer(Int64(report.duplicateKeptCount)), .integer(Int64(report.invalidCount)), .integer(Int64(report.failedCount)), .text(report.sourceBasename), .text(report.mappingSummary), .real(commandNow.timeIntervalSince1970)])
                 for planRow in rows {
                     if planRow.decision == .skip {
                         if failBeforeActivityInsert { throw WorkspaceStoreError.injectedFailure }
@@ -160,7 +160,7 @@ final class WorkspaceStore {
 
     func importReports() throws -> [CSVImportReport] {
         try synchronized {
-            try database.rows("SELECT id, imported_count, updated_count, skipped_count, duplicate_kept_count, invalid_count, source_basename, mapping_summary, created_at FROM import_reports ORDER BY created_at, id").map(importReport(from:))
+            try database.rows("SELECT id, imported_count, updated_count, skipped_count, duplicate_kept_count, invalid_count, failed_count, source_basename, mapping_summary, created_at FROM import_reports ORDER BY created_at, id").map(importReport(from:))
         }
     }
 
@@ -847,8 +847,8 @@ final class WorkspaceStore {
     }
 
     private func importReport(from row: [DatabaseValue]) throws -> CSVImportReport {
-        guard row.count == 9, case let .text(id) = row[0], case let .integer(imported) = row[1], case let .integer(updated) = row[2], case let .integer(skipped) = row[3], case let .integer(duplicateKept) = row[4], case let .integer(invalid) = row[5], case let .text(source) = row[6], case let .text(mapping) = row[7], case let .real(createdAt) = row[8] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
-        return CSVImportReport(id: id, importedCount: Int(imported), updatedCount: Int(updated), skippedCount: Int(skipped), duplicateKeptCount: Int(duplicateKept), invalidCount: Int(invalid), sourceBasename: source, mappingSummary: mapping, createdAt: Date(timeIntervalSince1970: createdAt))
+        guard row.count == 10, case let .text(id) = row[0], case let .integer(imported) = row[1], case let .integer(updated) = row[2], case let .integer(skipped) = row[3], case let .integer(duplicateKept) = row[4], case let .integer(invalid) = row[5], case let .integer(failed) = row[6], case let .text(source) = row[7], case let .text(mapping) = row[8], case let .real(createdAt) = row[9] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+        return CSVImportReport(id: id, importedCount: Int(imported), updatedCount: Int(updated), skippedCount: Int(skipped), duplicateKeptCount: Int(duplicateKept), invalidCount: Int(invalid), failedCount: Int(failed), sourceBasename: source, mappingSummary: mapping, createdAt: Date(timeIntervalSince1970: createdAt))
     }
 
     private func importReportRow(from row: [DatabaseValue]) throws -> CSVImportReportRow {

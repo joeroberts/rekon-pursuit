@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 enum WorkspaceMigrations {
-    static let currentVersion = 17
+    static let currentVersion = 18
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
@@ -17,6 +17,7 @@ enum WorkspaceMigrations {
     static let versionFifteenChecksum = checksum(for: "15|opportunities.job_description.notes")
     static let versionSixteenChecksum = checksum(for: "16|opportunities.core_tracker_fields|opportunity_response_history")
     static let versionSeventeenChecksum = checksum(for: "17|import_reports.completed_detail|import_report_rows")
+    static let versionEighteenChecksum = checksum(for: "18|import_reports.failed_count")
 
     static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false, failVersionSixteen: Bool = false, failVersionSeventeen: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
@@ -268,6 +269,13 @@ enum WorkspaceMigrations {
                 }
                 database.removeMigrationSnapshot()
             } catch { throw error }
+        }
+        if version < 18 {
+            try database.transaction {
+                try database.execute("ALTER TABLE import_reports ADD COLUMN failed_count INTEGER NOT NULL DEFAULT 0")
+                try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(18), .text(versionEighteenChecksum)])
+                try database.execute("UPDATE schema_migrations SET version = 18")
+            }
         }
     }
 

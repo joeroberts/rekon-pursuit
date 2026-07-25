@@ -95,7 +95,7 @@ enum CSVOpportunityImporter {
             guard mapping[.title] != nil, mapping[.company] != nil else { return CSVImportRow(id: offset + 2, sourceRow: offset + 2, values: values, reasons: ["Map Job title and Company."], opportunity: nil) }
             if values[.title, default: ""].isEmpty { reasons.append("Job title is required.") }
             if values[.company, default: ""].isEmpty { reasons.append("Company is required.") }
-            if let url = values[.jobURL], !url.isEmpty, !(URL(string: url)?.scheme == "http" || URL(string: url)?.scheme == "https") { reasons.append("Job URL must begin with http:// or https://.") }
+            if let url = values[.jobURL], !url.isEmpty, !(["http", "https"].contains(URL(string: url)?.scheme?.lowercased() ?? "")) { reasons.append("Job URL must begin with http:// or https://.") }
             if let raw = values[.workArrangement], !raw.isEmpty, WorkArrangement(rawValue: raw) == nil { reasons.append("Work arrangement is not recognized.") }
             if let raw = values[.stage], !raw.isEmpty, PipelineStage(rawValue: raw) == nil { reasons.append("Pipeline stage is not recognized.") }
             if let raw = values[.responseState], !raw.isEmpty, ResponseState(rawValue: raw) == nil { reasons.append("Response state is not recognized.") }
@@ -103,7 +103,7 @@ enum CSVOpportunityImporter {
             for field in [.dueDate, .applicationDate, .responseDate, .stageDate] as [CSVImportField] { if let value = values[field], !value.isEmpty, parsed(field) == nil { reasons.append("\(field.label) must use YYYY-MM-DD.") } }
             if let due = values[.dueDate], !due.isEmpty, values[.nextAction, default: ""].isEmpty { reasons.append("Due date requires a Next action.") }
             let response = ResponseState(rawValue: values[.responseState] ?? "") ?? .noResponseRecorded
-            if !(values[.responseState] ?? "").isEmpty && parsed(.responseDate) == nil { reasons.append("A response status date is required for this response.") }
+            if response != .noResponseRecorded && parsed(.responseDate) == nil { reasons.append("A response status date is required for this response.") }
             let opportunity = reasons.isEmpty ? CreateOpportunity(title: values[.title]!, company: values[.company]!, stage: PipelineStage(rawValue: values[.stage] ?? "") ?? .saved, nextAction: values[.nextAction] ?? "", dueAt: parsed(.dueDate), jobURL: values[.jobURL] ?? "", jobDescription: values[.jobDescription] ?? "", notes: values[.notes] ?? "", compensation: values[.compensation], location: values[.location], workArrangement: WorkArrangement(rawValue: values[.workArrangement] ?? "") ?? .notSpecified, applicationDate: parsed(.applicationDate), responseState: response, responseEffectiveDate: parsed(.responseDate), stageChangedAt: parsed(.stageDate)) : nil
             return CSVImportRow(id: offset + 2, sourceRow: offset + 2, values: values, reasons: reasons, opportunity: opportunity)
         }

@@ -668,6 +668,30 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.latestTask(forOpportunityID: existing.id)?.dueAt, now)
     }
 
+    func testCSVURLCandidateUsesTrimmedLowercaseURLBeforeTitleCompanyAndIDTie() throws {
+        let store = try makeStore()
+        _ = try store.create(CreateOpportunity(title: "Title Match", company: "Rekon", jobURL: "https://other.example"))
+        _ = try store.create(CreateOpportunity(title: "Other", company: "Co", jobURL: "https://jobs.example/role"))
+        let preview = try CSVOpportunityImporter.preview(data: Data("title,company,url\nTitle Match,Rekon, HTTPS://JOBS.EXAMPLE/ROLE \n".utf8))
+        let plan = try store.csvImportPlan(for: preview)
+        let candidate = try XCTUnwrap(plan.first)
+        XCTAssertEqual(candidate.duplicateRationale, "Exact job URL")
+        XCTAssertEqual(candidate.candidateTitle, "Other")
+    }
+
+    func testCSVDefaultResponseDateIsOptionalForCreateButRequiredForResetUpdate() throws {
+        let preview = try CSVOpportunityImporter.preview(data: Data("title,company,response\nNew,Rekon,No response recorded\n".utf8))
+        XCTAssertTrue(preview.rows[0].isValid)
+        let store = try makeStore()
+        let existing = try store.create(CreateOpportunity(title: "Existing", company: "Rekon", responseState: .responseReceived, responseEffectiveDate: now))
+        let update = try CSVOpportunityImporter.preview(data: Data("title,company,response\nExisting,Rekon,No response recorded\n".utf8))
+        var plan = try store.csvImportPlan(for: update)
+        plan[0].decision = .updateSelectedFields
+        plan[0].selectedFields = [.responseState]
+        XCTAssertThrowsError(try store.importCSV(plan, invalidCount: 0))
+        XCTAssertEqual(try store.opportunities().first(where: { $0.id == existing.id })?.responseState, .responseReceived)
+    }
+
     func testContactInteractionIsStoredWithAnExplicitlyLinkedOpportunityAndActivityEvent() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
