@@ -86,6 +86,7 @@
 | Code Reviewer | Approved | Navigation and workspace-gate tests assert real stable accessibility elements; focused UI suite passed. No persistence, file-access, or R2+ scope change was found. |
 | QA | Approved | Focused UI/model checks, Debug build, and isolated harness passed. The 900×640 temporary-app sequence is recorded as direct user evidence, not automation. |
 | Architect | Approved | The new shell preserves R1a workspace/recovery, native CSV ownership, local-only boundaries, and existing persistence; no ADR change is required. |
+| TPM | Approved for acceptance | R1b stayed shell-only. Release exactly `RP-R2` next; later direct successors remain blocked to avoid shared persistence/UI work. |
 | Product owner | Completed manual smoke | At 900×640 in the isolated temporary app: workspace create; synthetic record create/edit; Pipeline and Activity & AI navigation; native CSV chooser and fixture preview all passed. |
 | Delivery Manager | Pending final acceptance | Must verify this record and decide whether to accept R1b and release only its dependency-safe successor. |
 
