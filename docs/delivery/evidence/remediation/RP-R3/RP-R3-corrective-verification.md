@@ -4,4 +4,11 @@ Date: 2026-07-25
 
 Corrective pass adds deterministic local-Gregorian date parsing, strict duplicate/selected-field decision validation, coupled task/stage/response selection guards, per-row and batch redacted activity, and reopenable completed-report mapping and row details.
 
-Focused build and CSV verification is recorded after the corrective commit. Deferred scope remains RP-R3a only: raw-file drafts and Undo Import.
+Focused verification passed:
+
+- Debug build with `xcodebuild`.
+- `testVersionSixteenToSeventeenMigrationAndFailureKeepSnapshot`: real v16 schema migrates to v17; injected v17 failure leaves the v16 schema/data and verified snapshot.
+- `testMixedImportFailureLeavesPriorReportAndOpportunityAfterReopen`: injected import failure rolls back the new batch; a prior opportunity and completed report survive close/reopen unchanged.
+- CSV selected-field decision tests remain green.
+
+Deferred scope remains RP-R3a only: raw-file drafts and Undo Import.

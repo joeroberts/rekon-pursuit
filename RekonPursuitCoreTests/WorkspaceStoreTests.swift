@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 16)
+        XCTAssertEqual(try store.schemaVersion(), 17)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -39,7 +39,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 16)
+        XCTAssertEqual(try store.schemaVersion(), 17)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -56,6 +56,7 @@ final class WorkspaceStoreTests: XCTestCase {
                 [.integer(14), .text(WorkspaceMigrations.versionFourteenChecksum)],
                 [.integer(15), .text(WorkspaceMigrations.versionFifteenChecksum)]
                 , [.integer(16), .text(WorkspaceMigrations.versionSixteenChecksum)]
+                , [.integer(17), .text(WorkspaceMigrations.versionSeventeenChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
@@ -83,7 +84,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 16)
+        XCTAssertEqual(try store.schemaVersion(), 17)
         XCTAssertEqual(try database.rows("SELECT id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at FROM interactions"), [[.text("interaction-1"), .null, .text("opportunity-1"), .text("Note"), .text("Legacy note"), .real(1_704_067_200), .null]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
@@ -142,6 +143,38 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(15)]])
         XCTAssertEqual(try database.rows("SELECT title, company, job_description, notes FROM opportunities WHERE id = 'legacy-r2'"), [[.text("Legacy role"), .text("Legacy employer"), .text("Legacy description"), .text("Legacy notes")]])
         XCTAssertTrue(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
+    }
+
+    func testVersionSixteenToSeventeenMigrationAndFailureKeepSnapshot() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        try database.execute("CREATE TABLE schema_migrations (version INTEGER NOT NULL)")
+        try database.execute("INSERT INTO schema_migrations VALUES (16)")
+        try database.execute("CREATE TABLE import_reports (id TEXT PRIMARY KEY NOT NULL, imported_count INTEGER NOT NULL, skipped_count INTEGER NOT NULL, duplicate_kept_count INTEGER NOT NULL, invalid_count INTEGER NOT NULL, created_at REAL NOT NULL)")
+        try database.execute("INSERT INTO import_reports VALUES ('prior', 1, 0, 0, 0, ?)", values: [.real(now.timeIntervalSince1970)])
+        XCTAssertThrowsError(try WorkspaceMigrations.apply(to: database, failVersionSeventeen: true))
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(16)]])
+        XCTAssertEqual(try database.rows("SELECT id FROM import_reports"), [[.text("prior")]])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
+        try WorkspaceMigrations.apply(to: database)
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(17)]])
+        XCTAssertEqual(try database.rows("SELECT updated_count, source_basename FROM import_reports"), [[.integer(0), .text("")]])
+    }
+
+    func testMixedImportFailureLeavesPriorReportAndOpportunityAfterReopen() throws {
+        let store = try makeStore()
+        let prior = try store.create(CreateOpportunity(title: "Prior", company: "Rekon"))
+        let seed = try CSVOpportunityImporter.preview(data: Data("title,company\nSeed,Rekon\n".utf8))
+        let seedReport = try store.importCSV(try store.csvImportPlan(for: seed), invalidCount: 0)
+        try store.close()
+        let failingDatabase = try EncryptedDatabase.open(url: databaseURL, key: key, createIfMissing: false)
+        let failing = try WorkspaceStore(database: failingDatabase, now: now, actorID: "local-user", correlationID: "rollback", failBeforeActivityInsert: true)
+        let next = try CSVOpportunityImporter.preview(data: Data("title,company\nNew,Rekon\n".utf8))
+        XCTAssertThrowsError(try failing.importCSV(try failing.csvImportPlan(for: next), invalidCount: 0))
+        try failing.close()
+        let reopened = try makeStore()
+        XCTAssertEqual(try reopened.opportunities().map(\.id).contains(prior.id), true)
+        XCTAssertEqual(try reopened.importReports().map(\.id), [seedReport.id])
+        XCTAssertFalse(try reopened.opportunities().contains { $0.title == "New" })
     }
 
     func testCreateOpportunityAddsOneMatchingActivityEvent() throws {

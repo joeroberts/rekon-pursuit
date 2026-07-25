@@ -18,7 +18,7 @@ enum WorkspaceMigrations {
     static let versionSixteenChecksum = checksum(for: "16|opportunities.core_tracker_fields|opportunity_response_history")
     static let versionSeventeenChecksum = checksum(for: "17|import_reports.completed_detail|import_report_rows")
 
-    static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false, failVersionSixteen: Bool = false) throws {
+    static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false, failVersionSixteen: Bool = false, failVersionSeventeen: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
         let versions = try database.rows("SELECT version FROM schema_migrations LIMIT 1")
         if versions.isEmpty {
@@ -262,6 +262,7 @@ enum WorkspaceMigrations {
                     try database.execute("ALTER TABLE import_reports ADD COLUMN mapping_summary TEXT NOT NULL DEFAULT ''")
                     try database.execute("CREATE TABLE import_report_rows (id TEXT PRIMARY KEY NOT NULL, report_id TEXT NOT NULL REFERENCES import_reports(id), source_row INTEGER NOT NULL, outcome TEXT NOT NULL, reason TEXT NOT NULL, duplicate_rationale TEXT NOT NULL, opportunity_id TEXT)")
                     try database.execute("CREATE INDEX import_report_rows_report_row ON import_report_rows(report_id, source_row)")
+                    if failVersionSeventeen { throw WorkspaceStoreError.injectedFailure }
                     try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(17), .text(versionSeventeenChecksum)])
                     try database.execute("UPDATE schema_migrations SET version = 17")
                 }
