@@ -29,6 +29,24 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.statusMessage, "Saved locally.")
     }
 
+    func testSuccessfulCreateResetsDateDraftsBeforeTheNextOpportunity() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let priorDate = Date(timeIntervalSince1970: 1_704_067_200)
+        model.start()
+        model.title = "First opportunity"
+        model.company = "Rekon Labs"
+        model.applicationDate = priorDate
+        model.responseEffectiveDate = priorDate
+        model.stageChangedAt = priorDate
+
+        model.createOpportunity()
+
+        XCTAssertNotEqual(model.applicationDate, priorDate)
+        XCTAssertNotEqual(model.responseEffectiveDate, priorDate)
+        XCTAssertNotEqual(model.stageChangedAt, priorDate)
+    }
+
     func testCreatePersistsJobDescriptionAndNotes() throws {
         let store = try makeStore()
         let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })

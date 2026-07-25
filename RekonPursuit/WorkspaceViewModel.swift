@@ -152,8 +152,11 @@ final class WorkspaceViewModel: ObservableObject {
             compensation = ""
             location = ""
             workArrangement = .notSpecified
+            applicationDate = .now
             hasApplicationDate = false
             responseState = .noResponseRecorded
+            responseEffectiveDate = .now
+            stageChangedAt = .now
             nextAction = ""
             hasDueDate = false
             refreshCounts()

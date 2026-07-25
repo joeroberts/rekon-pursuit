@@ -120,13 +120,27 @@ final class WorkspaceStoreTests: XCTestCase {
 
     func testFailedVersionSixteenMigrationKeepsVerifiedSnapshot() throws {
         let database = try EncryptedDatabase.open(url: databaseURL, key: key)
-        try WorkspaceMigrations.apply(to: database)
-        try database.execute("UPDATE schema_migrations SET version = 15")
-        try database.execute("DELETE FROM migration_history WHERE version = 16")
+        try database.execute("CREATE TABLE schema_migrations (version INTEGER NOT NULL)")
+        try database.execute("INSERT INTO schema_migrations (version) VALUES (15)")
+        try database.execute("CREATE TABLE migration_history (version INTEGER PRIMARY KEY NOT NULL, checksum TEXT NOT NULL)")
+        for version in 4...15 {
+            let checksum = [
+                4: WorkspaceMigrations.baselineChecksum, 5: WorkspaceMigrations.versionFiveChecksum,
+                6: WorkspaceMigrations.versionSixChecksum, 7: WorkspaceMigrations.versionSevenChecksum,
+                8: WorkspaceMigrations.versionEightChecksum, 9: WorkspaceMigrations.versionNineChecksum,
+                10: WorkspaceMigrations.versionTenChecksum, 11: WorkspaceMigrations.versionElevenChecksum,
+                12: WorkspaceMigrations.versionTwelveChecksum, 13: WorkspaceMigrations.versionThirteenChecksum,
+                14: WorkspaceMigrations.versionFourteenChecksum, 15: WorkspaceMigrations.versionFifteenChecksum
+            ][version]!
+            try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(Int64(version)), .text(checksum)])
+        }
+        try database.execute("CREATE TABLE opportunities (id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, company TEXT NOT NULL, created_at REAL NOT NULL, stage TEXT NOT NULL DEFAULT 'Saved', next_action TEXT NOT NULL DEFAULT '', due_at REAL, deleted_at REAL, job_url TEXT NOT NULL DEFAULT '', job_description TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '')")
+        try database.execute("INSERT INTO opportunities (id, title, company, created_at, stage, next_action, job_url, job_description, notes) VALUES ('legacy-r2', 'Legacy role', 'Legacy employer', ?, 'Applied', '', '', 'Legacy description', 'Legacy notes')", values: [.real(now.timeIntervalSince1970)])
 
         XCTAssertThrowsError(try WorkspaceMigrations.apply(to: database, failVersionSixteen: true))
 
         XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(15)]])
+        XCTAssertEqual(try database.rows("SELECT title, company, job_description, notes FROM opportunities WHERE id = 'legacy-r2'"), [[.text("Legacy role"), .text("Legacy employer"), .text("Legacy description"), .text("Legacy notes")]])
         XCTAssertTrue(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
 
@@ -146,6 +160,55 @@ final class WorkspaceStoreTests: XCTestCase {
                 occurredAt: now
             )
         ])
+    }
+
+    func testCommandsUseTheInjectedCurrentClockRatherThanStoreConstructionTime() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        var current = now
+        var identifier = 0
+        let store = try WorkspaceStore(
+            database: database,
+            clock: { current },
+            nextIdentifier: { defer { identifier += 1 }; return "clock-id-\(identifier)" },
+            actorID: "local-user",
+            correlationID: "clock-test"
+        )
+
+        current = now.addingTimeInterval(60)
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", nextAction: "Follow up", dueAt: current))
+        XCTAssertEqual(opportunity.createdAt, current)
+
+        current = now.addingTimeInterval(120)
+        try store.changeStage(opportunityID: opportunity.id, to: .screening)
+        XCTAssertEqual(try store.opportunities().first?.stageChangedAt, current)
+        XCTAssertEqual(try store.stageHistory(forOpportunityID: opportunity.id).last?.occurredAt, current)
+        XCTAssertEqual(try store.activityEvents().last?.occurredAt, current)
+
+        current = now.addingTimeInterval(180)
+        try store.snoozeTask(id: "clock-id-2")
+        XCTAssertEqual(try store.needsAttention().first?.dueAt, current.addingTimeInterval(86_400))
+        XCTAssertEqual(try store.activityEvents().last?.occurredAt, current)
+    }
+
+    func testCreateRejectsNonDefaultResponseWithoutExplicitDateAtomically() throws {
+        let store = try makeStore()
+
+        XCTAssertThrowsError(try store.create(CreateOpportunity(
+            title: "Product Manager", company: "Rekon Labs", responseState: .responseReceived
+        )))
+        XCTAssertTrue(try store.opportunities().isEmpty)
+        XCTAssertTrue(try store.activityEvents().isEmpty)
+    }
+
+    func testHistoriesUseExplicitDateThenIdentifierForDeterministicTies() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+
+        try store.updateOpportunity(id: opportunity.id, title: opportunity.title, company: opportunity.company, stage: .applied, nextAction: "", dueAt: nil, responseState: .awaitingResponse, responseEffectiveDate: now, stageChangedAt: now)
+        try store.updateOpportunity(id: opportunity.id, title: opportunity.title, company: opportunity.company, stage: .screening, nextAction: "", dueAt: nil, responseState: .responseReceived, responseEffectiveDate: now, stageChangedAt: now)
+
+        XCTAssertEqual(try store.stageHistory(forOpportunityID: opportunity.id).map(\.id), ["fixture-id-2", "fixture-id-4", "fixture-id-8"])
+        XCTAssertEqual(try store.responseHistory(forOpportunityID: opportunity.id).map(\.id), ["fixture-id-9", "fixture-id-5"])
     }
 
     func testOpportunityDetailsAndExplicitResponseTransitionPersist() throws {
