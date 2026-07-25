@@ -131,6 +131,15 @@ struct ContentView: View {
                     Button("Choose CSV file…") { showsCSVImporter = true }
                         .disabled(!model.workspaceReady)
                         .accessibilityIdentifier("choose-csv-file")
+                        .fileImporter(
+                            isPresented: $showsCSVImporter,
+                            allowedContentTypes: [.commaSeparatedText, .plainText],
+                            allowsMultipleSelection: false
+                        ) { result in
+                            if case let .success(urls) = result, let url = urls.first {
+                                model.previewCSV(at: url)
+                            }
+                        }
                     if !model.workspaceReady {
                         Text("Create or recover the local workspace before choosing a CSV file.")
                             .font(.caption)
@@ -690,15 +699,6 @@ struct ContentView: View {
         .padding(28)
         .frame(minWidth: 760, minHeight: 520, alignment: .topLeading)
         .onAppear { model.start() }
-        .fileImporter(
-            isPresented: $showsCSVImporter,
-            allowedContentTypes: [.commaSeparatedText, .plainText],
-            allowsMultipleSelection: false
-        ) { result in
-            if case let .success(urls) = result, let url = urls.first {
-                model.previewCSV(at: url)
-            }
-        }
         .fileImporter(
             isPresented: $showsBackupImporter,
             allowedContentTypes: [.data],
