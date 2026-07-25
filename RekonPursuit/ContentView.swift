@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum BootstrapCopy {
     nonisolated static let status = "Local-only foundation"
@@ -8,6 +9,7 @@ private enum TrackerPage: String, CaseIterable {
     case home = "Needs Attention"
     case pipeline = "Pipeline"
     case add = "Add opportunity"
+    case csvImport = "Import CSV"
     case contacts = "Contacts"
 }
 
@@ -18,6 +20,7 @@ struct ContentView: View {
     @State private var taskToReschedule: TaskReminder?
     @State private var rescheduledDueAt = Date.now
     @State private var showsPipelineBoard = false
+    @State private var showsCSVImporter = false
     @State private var page: TrackerPage = .home
 
     var body: some View {
@@ -66,6 +69,54 @@ struct ContentView: View {
                     model.createWorkspaceIfNeeded()
                 }
                 .accessibilityIdentifier("create-local-workspace")
+            }
+
+            if page == .csvImport {
+                GroupBox("Import opportunities") {
+                    Text("Use a UTF-8 CSV with title and company columns. Imported rows stay on this Mac.")
+                        .foregroundStyle(.secondary)
+                    Button("Choose CSV file…") { showsCSVImporter = true }
+                        .disabled(!model.workspaceReady)
+                        .accessibilityIdentifier("choose-csv-file")
+
+                    if let preview = model.csvPreview {
+                        Text("\(preview.rows.count) valid row\(preview.rows.count == 1 ? "" : "s") · \(preview.invalidRowCount) invalid row\(preview.invalidRowCount == 1 ? "" : "s") skipped")
+                            .font(.headline)
+                        if preview.rows.isEmpty {
+                            Text("No importable rows were found. Check the title and company values.")
+                                .foregroundStyle(.secondary)
+                        }
+                        ForEach(model.csvImportPlan) { row in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Row \(row.id): \(row.row.opportunity.title) · \(row.row.opportunity.company)")
+                                if row.isDuplicate {
+                                    Text("Possible duplicate — exact title and company match. Choose what to do.")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Picker("Duplicate decision for row \(row.id)", selection: Binding(
+                                        get: { row.decision },
+                                        set: { decision in if let decision { model.setCSVDecision(decision, for: row.id) } }
+                                    )) {
+                                        Text("Choose a decision").tag(CSVDuplicateDecision?.none)
+                                        Text("Skip this row").tag(CSVDuplicateDecision?.some(.skip))
+                                        Text("Keep as separate opportunity").tag(CSVDuplicateDecision?.some(.keepSeparate))
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        Button("Import reviewed rows") { model.importCSVPreview() }
+                            .disabled(!model.workspaceReady || model.csvImportPlan.isEmpty || model.csvImportPlan.contains { $0.isDuplicate && $0.decision == nil })
+                            .accessibilityIdentifier("import-reviewed-csv")
+                    }
+                    if let report = model.csvImportReport, model.csvPreview == nil {
+                        Divider()
+                        Text("Last import report")
+                            .font(.headline)
+                        Text("Created \(report.importedCount) · skipped \(report.skippedCount) · kept separate \(report.duplicateKeptCount) · invalid \(report.invalidCount)")
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             if page == .pipeline {
@@ -431,6 +482,15 @@ struct ContentView: View {
         .padding(28)
         .frame(minWidth: 760, minHeight: 520, alignment: .topLeading)
         .onAppear { model.start() }
+        .fileImporter(
+            isPresented: $showsCSVImporter,
+            allowedContentTypes: [.commaSeparatedText, .plainText],
+            allowsMultipleSelection: false
+        ) { result in
+            if case let .success(urls) = result, let url = urls.first {
+                model.previewCSV(at: url)
+            }
+        }
         .alert("Delete opportunity?", isPresented: Binding(
             get: { pendingDeletion != nil },
             set: { if !$0 { pendingDeletion = nil } }
