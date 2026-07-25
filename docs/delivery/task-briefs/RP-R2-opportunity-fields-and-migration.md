@@ -48,7 +48,9 @@ state set is fixed for MVP: `No response recorded`, `Awaiting response`,
 `Response received`, and `Declined`. Response state never changes pipeline
 stage, tasks, or next action. The response effective date is explicitly
 provided by the user when changing response state; it is not inferred from
-the save time.
+the save time and applies **only** to response-history `occurred_at`.
+The corresponding local activity event always uses the actual save/action
+`now`, preserving an honest audit timestamp.
 
 `Opportunity` and `CreateOpportunity` gain default-safe properties for these
 fields. The create/update store command trims text, preserves absent optional
@@ -65,6 +67,12 @@ current event time as the identical value for `stage_changed_at`, the
 stage-history row, and the stage-change activity event; CSV-created
 opportunities use `CreateOpportunity`'s R2
 defaults only and do not acquire mapping/update behavior.
+
+The Add form's persisted-response baseline is `No response recorded`. If a
+new opportunity is saved with any other response state, show the response
+effective-date control and atomically write exactly one transition from that
+baseline plus one `opportunity_response_changed` activity event at actual
+save time; the normal `opportunity_created` event remains the creation audit.
 
 ## UI decisions
 
@@ -94,10 +102,12 @@ are. The data is local-only and uses plain-language labels, not color alone.
    contact-opportunity query so no projection drops fields.
 2. **Atomic editing and history.** First add failing store tests that create
    and update every new field, change response state twice with explicit
-   response effective dates (including a reset to `No response recorded` and
-   identical-date IDs/tie ordering), and
+   response effective dates (including a reset to `No response recorded`, a
+   create-from-baseline non-default response, and identical-date IDs/tie
+   ordering), and
    change stage with an explicit stage date. Assert exact response-history order,
-   stage-history date, expected activity kinds, preserved task behavior, and
+   stage-history date, actual-now activity timestamps distinct from selected
+   response effective dates, expected activity kinds, preserved task behavior, and
    rollback leaves neither field change nor history/event on an injected
    failure. Implement the smallest command/store changes to pass.
 3. **View-model and forms.** First add focused view-model tests covering new
@@ -131,6 +141,9 @@ are. The data is local-only and uses plain-language labels, not color alone.
   stage edit uses its selected Stage changed date, while one-click quick stage
   change uses the same current timestamp for current stage, stage history, and
   stage activity.
+- Creating with a non-default response writes exactly one history transition
+  from `No response recorded`; its history date is the selected response date
+  while its response activity event uses actual save time.
 - Both forms expose the fields and history with usable empty/default states.
 - Evidence is committed under
   `docs/delivery/evidence/remediation/RP-R2/`; include focused command
