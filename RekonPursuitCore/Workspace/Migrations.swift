@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 enum WorkspaceMigrations {
-    static let currentVersion = 10
+    static let currentVersion = 11
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
@@ -10,6 +10,7 @@ enum WorkspaceMigrations {
     static let versionEightChecksum = checksum(for: "8|activity_events.opportunity_id nullable")
     static let versionNineChecksum = checksum(for: "9|import_reports")
     static let versionTenChecksum = checksum(for: "10|opportunity_stage_history")
+    static let versionElevenChecksum = checksum(for: "11|contacts.details.deleted_at|activity_events.contact_id")
 
     static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
@@ -131,6 +132,34 @@ enum WorkspaceMigrations {
                     try database.execute("INSERT INTO opportunity_stage_history (id, opportunity_id, from_stage, to_stage, occurred_at) SELECT lower(hex(randomblob(16))), id, NULL, stage, created_at FROM opportunities")
                     try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(10), .text(versionTenChecksum)])
                     try database.execute("UPDATE schema_migrations SET version = 10")
+                }
+                database.removeMigrationSnapshot()
+            } catch {
+                throw error
+            }
+        }
+        if version < 11 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    try database.execute("CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, employer TEXT NOT NULL)")
+                    try database.execute("CREATE TABLE IF NOT EXISTS contact_opportunities (contact_id TEXT NOT NULL REFERENCES contacts(id), opportunity_id TEXT NOT NULL REFERENCES opportunities(id), PRIMARY KEY (contact_id, opportunity_id))")
+                    let contactColumns = Set(try database.rows("PRAGMA table_info(contacts)").compactMap { row -> String? in
+                        guard row.count > 1, case let .text(name) = row[1] else { return nil }
+                        return name
+                    })
+                    if !contactColumns.contains("title") { try database.execute("ALTER TABLE contacts ADD COLUMN title TEXT NOT NULL DEFAULT ''") }
+                    if !contactColumns.contains("email") { try database.execute("ALTER TABLE contacts ADD COLUMN email TEXT NOT NULL DEFAULT ''") }
+                    if !contactColumns.contains("profile_url") { try database.execute("ALTER TABLE contacts ADD COLUMN profile_url TEXT NOT NULL DEFAULT ''") }
+                    if !contactColumns.contains("relationship_context") { try database.execute("ALTER TABLE contacts ADD COLUMN relationship_context TEXT NOT NULL DEFAULT ''") }
+                    if !contactColumns.contains("notes") { try database.execute("ALTER TABLE contacts ADD COLUMN notes TEXT NOT NULL DEFAULT ''") }
+                    if !contactColumns.contains("deleted_at") { try database.execute("ALTER TABLE contacts ADD COLUMN deleted_at REAL") }
+                    try database.execute("ALTER TABLE activity_events RENAME TO activity_events_v10")
+                    try database.execute("CREATE TABLE activity_events (id TEXT PRIMARY KEY NOT NULL, kind TEXT NOT NULL, opportunity_id TEXT REFERENCES opportunities(id), contact_id TEXT, actor_id TEXT NOT NULL, correlation_id TEXT NOT NULL, occurred_at REAL NOT NULL)")
+                    try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, contact_id, actor_id, correlation_id, occurred_at) SELECT id, kind, opportunity_id, NULL, actor_id, correlation_id, occurred_at FROM activity_events_v10")
+                    try database.execute("DROP TABLE activity_events_v10")
+                    try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(11), .text(versionElevenChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 11")
                 }
                 database.removeMigrationSnapshot()
             } catch {

@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 10)
+        XCTAssertEqual(try store.schemaVersion(), 11)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -39,7 +39,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 10)
+        XCTAssertEqual(try store.schemaVersion(), 11)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -49,7 +49,8 @@ final class WorkspaceStoreTests: XCTestCase {
                 [.integer(7), .text(WorkspaceMigrations.versionSevenChecksum)],
                 [.integer(8), .text(WorkspaceMigrations.versionEightChecksum)],
                 [.integer(9), .text(WorkspaceMigrations.versionNineChecksum)],
-                [.integer(10), .text(WorkspaceMigrations.versionTenChecksum)]
+                [.integer(10), .text(WorkspaceMigrations.versionTenChecksum)],
+                [.integer(11), .text(WorkspaceMigrations.versionElevenChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
@@ -260,6 +261,74 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.contacts(forOpportunityID: second.id), [contact])
         XCTAssertEqual(try store.activityEvents().map(\.kind), ["opportunity_created", "opportunity_created", "contact_created", "contact_linked", "contact_linked"])
         XCTAssertNil(try store.activityEvents().first { $0.kind == "contact_created" }?.opportunityID)
+    }
+
+    func testContactFoundationPersistsDetailsAndFindsSameEmployerDiscovery() throws {
+        let store = try makeStore()
+        let first = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let second = try store.create(CreateOpportunity(title: "Director", company: "Rekon Labs"))
+
+        let contact = try store.createContact(CreateContact(
+            name: "Alex Morgan",
+            employer: "Rekon Labs",
+            title: "Recruiter",
+            email: "alex@example.com",
+            profileURL: "https://example.com/alex",
+            relationshipContext: "Met at conference",
+            notes: "Prefers email."
+        ))
+        try store.linkContact(contactID: contact.id, toOpportunityID: first.id)
+
+        XCTAssertEqual(try store.contacts(), [contact])
+        XCTAssertEqual(try store.contacts(forOpportunityID: first.id), [contact])
+        XCTAssertEqual(try store.sameEmployerContacts(forOpportunityID: second.id), [contact])
+        XCTAssertEqual(try store.activityEvents().last?.contactID, contact.id)
+    }
+
+    func testContactUpdateUnlinkAndDeletionAreSafeAndRedacted() throws {
+        let store = try makeStore()
+        let first = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let second = try store.create(CreateOpportunity(title: "Director", company: "Rekon Labs"))
+        let contact = try store.createContact(CreateContact(name: "Alex Morgan", employer: "Rekon Labs", email: "alex@example.com"))
+
+        try store.linkContact(contactID: contact.id, toOpportunityID: first.id)
+        try store.linkContact(contactID: contact.id, toOpportunityID: second.id)
+        try store.unlinkContact(contactID: contact.id, fromOpportunityID: first.id)
+        try store.unlinkContact(contactID: contact.id, fromOpportunityID: first.id)
+        let updated = try store.updateContact(id: contact.id, command: CreateContact(name: "Alex Morgan", employer: "New Co", title: "Director"))
+        try store.deleteContact(id: contact.id)
+
+        XCTAssertEqual(updated.title, "Director")
+        XCTAssertEqual(try store.contacts(forOpportunityID: first.id), [])
+        XCTAssertEqual(try store.contacts(forOpportunityID: second.id), [])
+        XCTAssertEqual(try store.contacts(), [])
+        XCTAssertEqual(try store.sameEmployerContacts(forOpportunityID: second.id), [])
+        XCTAssertTrue(try store.activityEvents().filter { $0.kind.hasPrefix("contact_") }.allSatisfy { $0.contactID == contact.id })
+        XCTAssertFalse(try store.tombstones().contains { $0.displayValue.contains("Alex") || $0.displayValue.contains("New Co") })
+        XCTAssertThrowsError(try store.linkContact(contactID: contact.id, toOpportunityID: second.id))
+        XCTAssertEqual(try store.activityEvents().last?.kind, "contact_deleted")
+    }
+
+    func testDeletingContactKeepsItsRelationshipRowsForRecovery() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        var identifier = 0
+        let store = try WorkspaceStore(
+            database: database,
+            now: now,
+            nextIdentifier: {
+                defer { identifier += 1 }
+                return "fixture-id-\(identifier)"
+            },
+            actorID: "local-user",
+            correlationID: "fixture-correlation"
+        )
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let contact = try store.createContact(CreateContact(name: "Alex Morgan", employer: "Rekon Labs"))
+        try store.linkContact(contactID: contact.id, toOpportunityID: opportunity.id)
+
+        try store.deleteContact(id: contact.id)
+
+        XCTAssertEqual(try database.rows("SELECT contact_id, opportunity_id FROM contact_opportunities"), [[.text(contact.id), .text(opportunity.id)]])
     }
 
     func testCSVPreviewMapsTitleAndCompanyAndRejectsIncompleteRows() throws {

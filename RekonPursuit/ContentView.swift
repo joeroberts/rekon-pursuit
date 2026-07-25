@@ -8,11 +8,13 @@ private enum TrackerPage: String, CaseIterable {
     case home = "Needs Attention"
     case pipeline = "Pipeline"
     case add = "Add opportunity"
+    case contacts = "Contacts"
 }
 
 struct ContentView: View {
     @StateObject private var model = WorkspaceViewModel()
     @State private var pendingDeletion: Opportunity?
+    @State private var pendingContactDeletion: Contact?
     @State private var taskToReschedule: TaskReminder?
     @State private var rescheduledDueAt = Date.now
     @State private var showsPipelineBoard = false
@@ -180,6 +182,37 @@ struct ContentView: View {
                                 .font(.caption)
                         }
                     }
+                    GroupBox("Contacts") {
+                        if model.selectedContacts.isEmpty {
+                            Text("No contacts are linked to this opportunity.").foregroundStyle(.secondary)
+                        } else {
+                            ForEach(model.selectedContacts, id: \.id) { contact in
+                                HStack {
+                                    VStack(alignment: .leading) {
+                                        Text(contact.name)
+                                        Text([contact.title, contact.employer].filter { !$0.isEmpty }.joined(separator: " · "))
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Button("Unlink") { model.unlink(contact) }
+                                }
+                            }
+                        }
+                        if !model.selectedSameEmployerContacts.isEmpty {
+                            Text("At this employer").font(.headline)
+                            ForEach(model.selectedSameEmployerContacts, id: \.id) { contact in
+                                HStack {
+                                    VStack(alignment: .leading) {
+                                        Text(contact.name)
+                                        Text(contact.title.isEmpty ? contact.employer : "\(contact.title) · \(contact.employer)")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Button("Link") { model.link(contact) }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             }
@@ -219,7 +252,66 @@ struct ContentView: View {
                     }
                 }
             }
-            .accessibilityIdentifier("needs-attention-home")
+            }
+
+            if page == .contacts {
+                GroupBox("Contacts") {
+                    if model.contacts.isEmpty {
+                        Text("No contacts yet. Add a person you want to remember.").foregroundStyle(.secondary)
+                    } else {
+                        HStack {
+                            TextField("Search contacts", text: $model.contactSearch)
+                                .accessibilityIdentifier("contact-search")
+                            Picker("Employer", selection: $model.contactEmployerFilter) {
+                                Text("All employers").tag("All employers")
+                                ForEach(model.contactEmployers, id: \.self) { employer in
+                                    Text(employer).tag(employer)
+                                }
+                            }
+                        }
+                        if model.filteredContacts.isEmpty {
+                            Text("No contacts match that filter.").foregroundStyle(.secondary)
+                        }
+                        ForEach(model.filteredContacts, id: \.id) { contact in
+                            HStack {
+                                Button { model.selectContact(contact) } label: {
+                                    VStack(alignment: .leading) {
+                                        Text(contact.name)
+                                        Text([contact.title, contact.employer].filter { !$0.isEmpty }.joined(separator: " · "))
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                Spacer()
+                                Button("Delete", role: .destructive) { pendingContactDeletion = contact }
+                            }
+                        }
+                    }
+                }
+                GroupBox(model.selectedContact == nil ? "New contact" : "Contact record") {
+                    Form {
+                        TextField("Name", text: $model.contactName)
+                            .accessibilityIdentifier("contact-name")
+                        TextField("Current employer (optional)", text: $model.contactEmployer)
+                        TextField("Title (optional)", text: $model.contactTitle)
+                        TextField("Email (optional)", text: $model.contactEmail)
+                        TextField("Profile URL (optional)", text: $model.contactProfileURL)
+                        TextField("Relationship context (optional)", text: $model.contactRelationshipContext)
+                        TextField("Notes (optional)", text: $model.contactNotes, axis: .vertical)
+                        HStack {
+                            Button("New contact") { model.beginNewContact() }
+                            Spacer()
+                            if model.selectedContact == nil {
+                                Button("Save contact locally") { model.createContact() }
+                                    .disabled(!model.workspaceReady || model.contactName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                    .accessibilityIdentifier("save-contact")
+                            } else {
+                                Button("Save changes locally") { model.saveSelectedContact() }
+                                    .disabled(!model.workspaceReady || model.contactName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            }
+                        }
+                    }
+                }
             }
 
             if page == .home {
@@ -258,6 +350,18 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) { pendingDeletion = nil }
         } message: {
             Text("This removes the opportunity and its pending actions from the active tracker. A redacted local deletion record is retained.")
+        }
+        .alert("Delete contact?", isPresented: Binding(
+            get: { pendingContactDeletion != nil },
+            set: { if !$0 { pendingContactDeletion = nil } }
+        )) {
+            Button("Delete", role: .destructive) {
+                if let pendingContactDeletion { model.deleteContact(pendingContactDeletion) }
+                pendingContactDeletion = nil
+            }
+            Button("Cancel", role: .cancel) { pendingContactDeletion = nil }
+        } message: {
+            Text("This removes the contact from active lists and links. A redacted local deletion record is retained.")
         }
         .sheet(isPresented: Binding(
             get: { taskToReschedule != nil },

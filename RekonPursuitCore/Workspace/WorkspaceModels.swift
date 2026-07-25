@@ -49,11 +49,31 @@ struct Contact: Equatable {
     let id: String
     let name: String
     let employer: String
+    let title: String
+    let email: String
+    let profileURL: String
+    let relationshipContext: String
+    let notes: String
 }
 
 struct CreateContact {
     let name: String
     let employer: String
+    let title: String
+    let email: String
+    let profileURL: String
+    let relationshipContext: String
+    let notes: String
+
+    init(name: String, employer: String = "", title: String = "", email: String = "", profileURL: String = "", relationshipContext: String = "", notes: String = "") {
+        self.name = name
+        self.employer = employer
+        self.title = title
+        self.email = email
+        self.profileURL = profileURL
+        self.relationshipContext = relationshipContext
+        self.notes = notes
+    }
 }
 
 struct Interaction: Equatable {
@@ -72,9 +92,20 @@ struct ActivityEvent: Equatable {
     let id: String
     let kind: String
     let opportunityID: String?
+    let contactID: String?
     let actorID: String
     let correlationID: String
     let occurredAt: Date
+
+    init(id: String, kind: String, opportunityID: String?, contactID: String? = nil, actorID: String, correlationID: String, occurredAt: Date) {
+        self.id = id
+        self.kind = kind
+        self.opportunityID = opportunityID
+        self.contactID = contactID
+        self.actorID = actorID
+        self.correlationID = correlationID
+        self.occurredAt = occurredAt
+    }
 }
 
 struct DeletionTombstone: Equatable {
@@ -105,6 +136,7 @@ enum WorkspaceStoreError: Error, LocalizedError {
     case injectedFailure
     case unexpectedDatabaseValue
     case unresolvedImportDecision
+    case invalidContact
 
     var errorDescription: String? {
         switch self {
@@ -116,6 +148,8 @@ enum WorkspaceStoreError: Error, LocalizedError {
             return "The workspace contains unreadable data."
         case .unresolvedImportDecision:
             return "Choose Skip or Keep separate for each duplicate CSV row."
+        case .invalidContact:
+            return "Enter a contact name."
         }
     }
 }

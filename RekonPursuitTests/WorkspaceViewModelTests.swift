@@ -170,6 +170,26 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.selectedStageHistory.map(\.toStage), [.saved, .screening])
     }
 
+    func testContactsCanBeFilteredAndShownAsLinkedOrSameEmployerDiscovery() throws {
+        let store = try makeStore()
+        let first = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let second = try store.create(CreateOpportunity(title: "Director", company: "Rekon Labs"))
+        let linked = try store.createContact(CreateContact(name: "Alex Morgan", employer: "Rekon Labs", title: "Recruiter"))
+        let discovery = try store.createContact(CreateContact(name: "Jordan Lee", employer: "Rekon Labs", title: "VP People"))
+        try store.linkContact(contactID: linked.id, toOpportunityID: first.id)
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+
+        model.start()
+        model.contactSearch = "Jordan"
+        XCTAssertEqual(model.filteredContacts, [discovery])
+
+        model.select(first)
+        XCTAssertEqual(model.selectedContacts, [linked])
+        XCTAssertEqual(model.selectedSameEmployerContacts, [discovery])
+        XCTAssertEqual(model.selectedOpportunity?.id, first.id)
+        XCTAssertEqual(model.opportunities.map(\.id), [first.id, second.id])
+    }
+
     private func makeStore() throws -> WorkspaceStore {
         let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent("rekon-view-model-\(UUID().uuidString).sqlite")
         let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 5, count: 32))

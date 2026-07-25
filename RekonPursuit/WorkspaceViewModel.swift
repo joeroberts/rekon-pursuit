@@ -27,10 +27,19 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var selectedHasDueDate = false
     @Published var contactName = ""
     @Published var contactEmployer = ""
+    @Published var contactTitle = ""
+    @Published var contactEmail = ""
+    @Published var contactProfileURL = ""
+    @Published var contactRelationshipContext = ""
+    @Published var contactNotes = ""
+    @Published var contactSearch = ""
+    @Published var contactEmployerFilter = "All employers"
+    @Published var selectedContactID = ""
     @Published var selectedOpportunityID = ""
     @Published var interactionSummary = ""
     @Published private(set) var contacts: [Contact] = []
     @Published private(set) var selectedContacts: [Contact] = []
+    @Published private(set) var selectedSameEmployerContacts: [Contact] = []
     @Published private(set) var selectedInteractions: [Interaction] = []
     @Published private(set) var csvPreview: CSVImportPreview?
     @Published private(set) var csvImportPlan: [CSVImportPlanRow] = []
@@ -163,6 +172,23 @@ final class WorkspaceViewModel: ObservableObject {
         activityEvents.filter { $0.opportunityID == selectedOpportunityID }
     }
 
+    var filteredContacts: [Contact] {
+        let query = contactSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        return contacts.filter { contact in
+            let matchesEmployer = contactEmployerFilter == "All employers" || contact.employer == contactEmployerFilter
+            let matchesSearch = query.isEmpty || [contact.name, contact.employer, contact.title, contact.email].contains { $0.localizedCaseInsensitiveContains(query) }
+            return matchesEmployer && matchesSearch
+        }
+    }
+
+    var contactEmployers: [String] {
+        Array(Set(contacts.map(\.employer).filter { !$0.isEmpty })).sorted()
+    }
+
+    var selectedContact: Contact? {
+        contacts.first { $0.id == selectedContactID }
+    }
+
     func open(_ task: TaskReminder) {
         do {
             try store?.openTask(id: task.id)
@@ -179,6 +205,7 @@ final class WorkspaceViewModel: ObservableObject {
         loadSelectedOpportunity()
         refreshStageHistory()
         refreshSelectedTask()
+        refreshRelationshipMemory()
     }
 
     func saveSelectedOpportunity() {
@@ -217,15 +244,53 @@ final class WorkspaceViewModel: ObservableObject {
 
     func createContact() {
         do {
-            _ = try store?.createContact(CreateContact(name: contactName, employer: contactEmployer))
-            contactName = ""
-            contactEmployer = ""
+            _ = try store?.createContact(contactCommand())
+            clearContactDraft()
             refreshCounts()
             statusMessage = "Contact saved locally."
         } catch let error as LocalizedError {
             statusMessage = error.errorDescription ?? "The contact could not be saved."
         } catch {
             statusMessage = "The contact could not be saved."
+        }
+    }
+
+    func selectContact(_ contact: Contact) {
+        selectedContactID = contact.id
+        contactName = contact.name
+        contactEmployer = contact.employer
+        contactTitle = contact.title
+        contactEmail = contact.email
+        contactProfileURL = contact.profileURL
+        contactRelationshipContext = contact.relationshipContext
+        contactNotes = contact.notes
+    }
+
+    func beginNewContact() {
+        clearContactDraft()
+    }
+
+    func saveSelectedContact() {
+        guard let store, !selectedContactID.isEmpty else { return }
+        do {
+            _ = try store.updateContact(id: selectedContactID, command: contactCommand())
+            refreshCounts()
+            statusMessage = "Contact updated locally."
+        } catch let error as LocalizedError {
+            statusMessage = error.errorDescription ?? "The contact could not be updated."
+        } catch {
+            statusMessage = "The contact could not be updated."
+        }
+    }
+
+    func deleteContact(_ contact: Contact) {
+        do {
+            try store?.deleteContact(id: contact.id)
+            if selectedContactID == contact.id { clearContactDraft() }
+            refreshCounts()
+            statusMessage = "Contact deleted locally."
+        } catch {
+            statusMessage = "The contact could not be deleted."
         }
     }
 
@@ -237,6 +302,17 @@ final class WorkspaceViewModel: ObservableObject {
             statusMessage = "Contact linked locally."
         } catch {
             statusMessage = "The contact could not be linked."
+        }
+    }
+
+    func unlink(_ contact: Contact) {
+        guard !selectedOpportunityID.isEmpty else { return }
+        do {
+            try store?.unlinkContact(contactID: contact.id, fromOpportunityID: selectedOpportunityID)
+            refreshCounts()
+            statusMessage = "Contact unlinked locally."
+        } catch {
+            statusMessage = "The contact could not be unlinked."
         }
     }
 
@@ -346,10 +422,26 @@ final class WorkspaceViewModel: ObservableObject {
     func refreshRelationshipMemory() {
         do {
             selectedContacts = selectedOpportunityID.isEmpty ? [] : try store?.contacts(forOpportunityID: selectedOpportunityID) ?? []
+            selectedSameEmployerContacts = selectedOpportunityID.isEmpty ? [] : try store?.sameEmployerContacts(forOpportunityID: selectedOpportunityID) ?? []
             selectedInteractions = selectedOpportunityID.isEmpty ? [] : try store?.interactions(forOpportunityID: selectedOpportunityID) ?? []
         } catch {
             statusMessage = "The relationship history could not be read."
         }
+    }
+
+    private func contactCommand() -> CreateContact {
+        CreateContact(name: contactName, employer: contactEmployer, title: contactTitle, email: contactEmail, profileURL: contactProfileURL, relationshipContext: contactRelationshipContext, notes: contactNotes)
+    }
+
+    private func clearContactDraft() {
+        selectedContactID = ""
+        contactName = ""
+        contactEmployer = ""
+        contactTitle = ""
+        contactEmail = ""
+        contactProfileURL = ""
+        contactRelationshipContext = ""
+        contactNotes = ""
     }
 
     private func loadSelectedOpportunity() {

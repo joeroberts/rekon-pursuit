@@ -1,6 +1,6 @@
 # M3 — Relationship Memory MVP Brief
 
-**State:** M3-C1, Contacts foundation, is released for implementation. It is not M3 acceptance. M3-C2 owns contact interactions; M3-C3 owns cross-record timelines and the full Workstream-C gate. M4 remains frozen.
+**State:** M3-C1, Contacts foundation, is complete. It is not M3 acceptance. M3-C2 owns contact interactions; M3-C3 owns cross-record timelines and the full Workstream-C gate. M4 remains frozen.
 
 ## M3-C1 — Contacts foundation
 
