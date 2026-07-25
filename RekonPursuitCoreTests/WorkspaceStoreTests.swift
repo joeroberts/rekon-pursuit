@@ -686,6 +686,7 @@ final class WorkspaceStoreTests: XCTestCase {
         let existing = try store.create(CreateOpportunity(title: "Existing", company: "Rekon", responseState: .responseReceived, responseEffectiveDate: now))
         let update = try CSVOpportunityImporter.preview(data: Data("title,company,response\nExisting,Rekon,No response recorded\n".utf8))
         var plan = try store.csvImportPlan(for: update)
+        XCTAssertEqual(plan[0].candidateValues[.responseDate], now.ISO8601Format().prefix(10).description)
         plan[0].decision = .updateSelectedFields
         plan[0].selectedFields = [.responseState]
         XCTAssertThrowsError(try store.importCSV(plan, invalidCount: 0))

@@ -102,7 +102,11 @@ final class WorkspaceStore {
                 let titleCandidates = all.filter { normalizedOpportunityKey(title: command.title, company: command.company) == normalizedOpportunityKey(title: $0.title, company: $0.company) }.sorted { $0.id < $1.id }
                 let candidate = (urlCandidates.isEmpty ? titleCandidates : urlCandidates).first
                 let rationale: String? = candidate.map { !canonicalURL.isEmpty && canonicalURL == $0.jobURL.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ? "Exact job URL" : "Matching title and company" }
-                let values: [CSVImportField: String] = candidate.map { [.jobURL: $0.jobURL, .jobDescription: $0.jobDescription, .notes: $0.notes, .compensation: $0.compensation ?? "", .location: $0.location ?? "", .workArrangement: $0.workArrangement.rawValue, .stage: $0.stage.rawValue, .stageDate: $0.stageChangedAt?.ISO8601Format().prefix(10).description ?? "", .nextAction: $0.nextAction, .dueDate: $0.dueAt?.ISO8601Format().prefix(10).description ?? "", .applicationDate: $0.applicationDate?.ISO8601Format().prefix(10).description ?? "", .responseState: $0.responseState.rawValue] } ?? [:]
+                let responseDate: String
+                if let candidate, case let .real(value)? = try database.rows("SELECT occurred_at FROM opportunity_response_history WHERE opportunity_id = ? ORDER BY occurred_at DESC, id DESC LIMIT 1", values: [.text(candidate.id)]).first?.first {
+                    responseDate = Date(timeIntervalSince1970: value).ISO8601Format().prefix(10).description
+                } else { responseDate = "" }
+                let values: [CSVImportField: String] = candidate.map { [.jobURL: $0.jobURL, .jobDescription: $0.jobDescription, .notes: $0.notes, .compensation: $0.compensation ?? "", .location: $0.location ?? "", .workArrangement: $0.workArrangement.rawValue, .stage: $0.stage.rawValue, .stageDate: $0.stageChangedAt?.ISO8601Format().prefix(10).description ?? "", .nextAction: $0.nextAction, .dueDate: $0.dueAt?.ISO8601Format().prefix(10).description ?? "", .applicationDate: $0.applicationDate?.ISO8601Format().prefix(10).description ?? "", .responseState: $0.responseState.rawValue, .responseDate: responseDate] } ?? [:]
                 return CSVImportPlanRow(row: row, candidateID: candidate?.id, duplicateRationale: rationale, candidateTitle: candidate?.title, candidateCompany: candidate?.company, candidateValues: values, decision: candidate == nil ? .create : nil)
             }
         }
