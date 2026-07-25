@@ -86,6 +86,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var csvPreview: CSVImportPreview?
     @Published private(set) var csvImportPlan: [CSVImportPlanRow] = []
     @Published private(set) var csvImportReport: CSVImportReport?
+    @Published private(set) var csvImportReportRows: [CSVImportReportRow] = []
     @Published private(set) var statusMessage = "Opening local workspace…"
     @Published private(set) var canCreateWorkspace = false
     @Published private(set) var workspaceReady = false
@@ -572,6 +573,7 @@ final class WorkspaceViewModel: ObservableObject {
         guard let store = readyStore(), let preview = csvPreview else { return }
         do {
             csvImportReport = try store.importCSV(csvImportPlan, invalidCount: preview.invalidRowCount, invalidRows: preview.rows.filter { !$0.isValid }, sourceBasename: preview.sourceBasename, mapping: preview.mapping)
+            csvImportReportRows = try store.importReportRows(for: csvImportReport!.id)
             csvPreview = nil
             csvImportPlan = []
             refreshCounts()
@@ -695,6 +697,7 @@ final class WorkspaceViewModel: ObservableObject {
         csvPreview = nil
         csvImportPlan = []
         csvImportReport = nil
+        csvImportReportRows = []
     }
 
     private func refreshCounts() {
@@ -718,6 +721,7 @@ final class WorkspaceViewModel: ObservableObject {
             needsAttention = try store?.needsAttention() ?? []
             needsAttentionCount = needsAttention.count
             csvImportReport = try store?.importReports().last
+            csvImportReportRows = try csvImportReport.map { try store?.importReportRows(for: $0.id) ?? [] } ?? []
         } catch {
             statusMessage = "The local workspace could not be read."
         }

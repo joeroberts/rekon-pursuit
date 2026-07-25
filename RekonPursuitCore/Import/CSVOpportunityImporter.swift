@@ -59,6 +59,15 @@ struct CSVImportReport: Equatable {
     init(id: String, importedCount: Int, updatedCount: Int = 0, skippedCount: Int, duplicateKeptCount: Int, invalidCount: Int, sourceBasename: String = "", mappingSummary: String = "", createdAt: Date) { self.id = id; self.importedCount = importedCount; self.updatedCount = updatedCount; self.skippedCount = skippedCount; self.duplicateKeptCount = duplicateKeptCount; self.invalidCount = invalidCount; self.sourceBasename = sourceBasename; self.mappingSummary = mappingSummary; self.createdAt = createdAt }
 }
 
+struct CSVImportReportRow: Equatable, Identifiable {
+    let id: String
+    let sourceRow: Int
+    let outcome: String
+    let reason: String
+    let duplicateRationale: String
+    let opportunityID: String?
+}
+
 enum CSVImportError: LocalizedError { case unreadableFile, malformedCSV, missingRequiredColumns, duplicateMappedColumn, validationBlocked
     var errorDescription: String? { switch self { case .unreadableFile: "The CSV must be UTF-8."; case .malformedCSV: "The CSV contains an unmatched quote."; case .missingRequiredColumns: "Map both Job title and Company before validating."; case .duplicateMappedColumn: "A source column can only be mapped once."; case .validationBlocked: "Fix the mapping before validating." } }
 }
@@ -96,6 +105,6 @@ enum CSVOpportunityImporter {
     }
 
     static func mappingIsValid(_ mapping: [CSVImportField: Int]) -> Bool { mapping[.title] != nil && mapping[.company] != nil && Set(mapping.values).count == mapping.values.count }
-    static func parseDate(_ value: String) -> Date? { guard !value.isEmpty else { return nil }; let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX"); formatter.calendar = Calendar(identifier: .gregorian); formatter.timeZone = TimeZone(secondsFromGMT: 0); formatter.dateFormat = "yyyy-MM-dd"; return formatter.date(from: value).map { Calendar(identifier: .gregorian).startOfDay(for: $0) } }
+    static func parseDate(_ value: String) -> Date? { guard !value.isEmpty else { return nil }; let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX"); formatter.calendar = Calendar(identifier: .gregorian); formatter.timeZone = .current; formatter.dateFormat = "yyyy-MM-dd"; guard let date = formatter.date(from: value) else { return nil }; var calendar = Calendar(identifier: .gregorian); calendar.timeZone = .current; return calendar.startOfDay(for: date) }
     private static func parse(_ text: String) throws -> [[String]] { var records:[[String]] = [[]], field = "", quoted = false; var index = text.startIndex; while index < text.endIndex { let c = text[index]; if c == "\"" { let next = text.index(after: index); if quoted && next < text.endIndex && text[next] == "\"" { field.append("\""); index = next } else { quoted.toggle() } } else if c == "," && !quoted { records[records.count-1].append(field); field = "" } else if (c == "\n" || c == "\r") && !quoted { if c == "\r", text.index(after: index) < text.endIndex, text[text.index(after: index)] == "\n" { index = text.index(after: index) }; records[records.count-1].append(field); field=""; records.append([]) } else { field.append(c) }; index = text.index(after: index) }; if quoted { throw CSVImportError.malformedCSV }; if !records.last!.isEmpty || !field.isEmpty { records[records.count-1].append(field) } else { records.removeLast() }; return records }
 }

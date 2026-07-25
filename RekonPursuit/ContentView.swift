@@ -138,7 +138,8 @@ struct ContentView: View {
                                         Text("Skip this row").tag(CSVDuplicateDecision?.some(.skip))
                                     }
                                     if row.decision == .updateSelectedFields {
-                                        ForEach(CSVImportField.allCases.filter { !$0.required && row.row.values[$0]?.isEmpty == false }) { field in
+                                        Text("Before → CSV (select every field you intend to replace)").font(.caption).foregroundStyle(.secondary)
+                                        ForEach(CSVImportField.allCases.filter { !$0.required && (row.row.values[$0]?.isEmpty == false || [.stageDate, .responseDate, .dueDate].contains($0)) }) { field in
                                             Toggle("Update \(field.label)", isOn: Binding(get: { row.selectedFields.contains(field) }, set: { model.setCSVSelectedField(field, selected: $0, for: row.id) }))
                                         }
                                     }
@@ -157,6 +158,15 @@ struct ContentView: View {
                             .font(.headline)
                         Text("\(report.sourceBasename) · Created \(report.importedCount) · updated \(report.updatedCount) · skipped \(report.skippedCount) · kept separate \(report.duplicateKeptCount) · invalid \(report.invalidCount)")
                             .foregroundStyle(.secondary)
+                        Text("Mapping: \(report.mappingSummary)").font(.caption).foregroundStyle(.secondary)
+                        ForEach(model.csvImportReportRows) { row in
+                            VStack(alignment: .leading) {
+                                Text("Row \(row.sourceRow): \(row.outcome)")
+                                if !row.reason.isEmpty { Text(row.reason).font(.caption).foregroundStyle(.secondary) }
+                                if !row.duplicateRationale.isEmpty { Text(row.duplicateRationale).font(.caption).foregroundStyle(.secondary) }
+                                if let opportunityID = row.opportunityID { Text("Local opportunity: \(opportunityID)").font(.caption).foregroundStyle(.secondary) }
+                            }
+                        }
                     }
                 }
             }

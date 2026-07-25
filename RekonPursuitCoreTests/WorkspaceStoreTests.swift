@@ -611,6 +611,18 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(updated.notes, "Keep this")
     }
 
+    func testCSVCandidateCannotBeSilentlyCreatedAndUpdateNeedsCoupledFields() throws {
+        let store = try makeStore()
+        _ = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let preview = try CSVOpportunityImporter.preview(data: Data("title,company,stage,stage date\nProduct Manager,Rekon Labs,Screening,2026-08-01\n".utf8))
+        var plan = try store.csvImportPlan(for: preview)
+        plan[0].decision = .create
+        XCTAssertThrowsError(try store.importCSV(plan, invalidCount: 0))
+        plan[0].decision = .updateSelectedFields
+        plan[0].selectedFields = [.stage]
+        XCTAssertThrowsError(try store.importCSV(plan, invalidCount: 0))
+    }
+
     func testContactInteractionIsStoredWithAnExplicitlyLinkedOpportunityAndActivityEvent() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
