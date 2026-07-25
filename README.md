@@ -4,7 +4,7 @@ Rekon Pursuit is a local-first macOS job tracker from RekonLabs. This MVP stores
 
 ## MVP limitations
 
-This build has no portable backup, restore, purge, Gmail, Calendar, cloud AI, or external research. It can export active opportunities as an explicitly warned, unencrypted CSV, and it records PDF/DOCX document references by filename, size, and SHA-256 hash without copying or processing their contents. Do not rely on this MVP as a recoverable archive.
+This build has no portable recovery, purge, Gmail, Calendar, cloud AI, or external research. It can export active opportunities as an explicitly warned, unencrypted CSV, create and restore encrypted same-Mac workspace backups, and record PDF/DOCX document references by filename, size, and SHA-256 hash without copying or processing their contents. Do not rely on this MVP for cross-Mac recovery.
 
 ## Repository map
 
