@@ -1,9 +1,8 @@
 # Rekon Pursuit — MVP remediation ledger
 
 **Status:** The current evidence-backed operational state is: `RP-R0`,
-`RP-R1a`, `RP-R1b`, and `RP-R2` Accepted; `RP-R3` Next up; `RP-R4`–`RP-R10`
-Backlog; and no task Blocked. There is no active implementation task until
-the next R3 delivery transition.
+`RP-R1a`, `RP-R1b`, and `RP-R2` Accepted; `RP-R3` In progress; `RP-R4`–`RP-R10`
+Backlog; and no task Blocked. R3 is the sole active implementation task.
 
 **Authority:** [dashboard-status.json](dashboard-status.json) is the canonical
 machine-readable operational view for the current remediation queue. This
@@ -40,6 +39,7 @@ ordinary sequencing.
 | Code Reviewer | Approved after P1 remediation | URL-encoded traversal, separators, and control characters are rejected before local-link resolution; generated attention items use valid list markup. |
 | Delivery Manager | **Accepted — RP-DASH-001 complete** | Independent plan, implementation, and QA gates approved. The local dashboard is generated from `dashboard-status.json`; this ledger remains the detailed evidence record. The seeded operational queue is verified, and future meaningful transitions update JSON, ledger, and generated HTML together. |
 | Product owner | **Corrected operational state** | The initial dashboard seed incorrectly retriggered R2 verification despite accepted evidence. R2 remains Accepted; R3 is Next up; the attention queue is empty. |
+| Product owner | **Released R3** | R3 moved from Next up to In progress. Scope is limited to the approved core CSV mapping/import workflow; no successor is released. |
 
 ## Verified gaps
 
