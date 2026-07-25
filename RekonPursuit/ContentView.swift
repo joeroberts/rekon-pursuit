@@ -312,6 +312,56 @@ struct ContentView: View {
                         }
                     }
                 }
+                if model.selectedContact != nil {
+                    GroupBox("Interaction history") {
+                        HStack {
+                            LabeledContent("Last touch", value: model.selectedContactLastTouch?.formatted(date: .abbreviated, time: .shortened) ?? "None yet")
+                            Spacer()
+                            LabeledContent("Next touch", value: model.selectedContactNextTouch?.formatted(date: .abbreviated, time: .shortened) ?? "Not scheduled")
+                        }
+                        if model.selectedContactInteractions.isEmpty {
+                            Text("No local interactions yet. Log a call, email, meeting, or note.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(model.selectedContactInteractions, id: \.id) { interaction in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(interaction.kind.rawValue) · \(interaction.occurredAt.formatted(date: .abbreviated, time: .shortened))")
+                                        .font(.caption.bold())
+                                    Text(interaction.summary)
+                                    if let nextTouchAt = interaction.nextTouchAt {
+                                        Text("Next touch: \(nextTouchAt.formatted(date: .abbreviated, time: .shortened))")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                        Form {
+                            Picker("Type", selection: $model.interactionKind) {
+                                ForEach(InteractionKind.allCases, id: \.self) { kind in
+                                    Text(kind.rawValue).tag(kind)
+                                }
+                            }
+                            TextField("What happened?", text: $model.interactionSummary, axis: .vertical)
+                                .accessibilityIdentifier("interaction-summary")
+                            DatePicker("Occurred", selection: $model.interactionOccurredAt, displayedComponents: [.date, .hourAndMinute])
+                            Picker("Linked opportunity", selection: $model.interactionOpportunityID) {
+                                Text("None").tag("")
+                                ForEach(model.selectedContactOpportunities, id: \.id) { opportunity in
+                                    Text("\(opportunity.title) · \(opportunity.company)").tag(opportunity.id)
+                                }
+                            }
+                            Toggle("Schedule next touch", isOn: $model.interactionHasNextTouch)
+                            if model.interactionHasNextTouch {
+                                DatePicker("Next touch", selection: $model.interactionNextTouchAt, displayedComponents: [.date, .hourAndMinute])
+                            }
+                            Button("Save interaction locally") { model.recordSelectedContactInteraction() }
+                                .disabled(!model.workspaceReady || model.interactionSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                .accessibilityIdentifier("save-contact-interaction")
+                        }
+                    }
+                }
             }
 
             if page == .home {

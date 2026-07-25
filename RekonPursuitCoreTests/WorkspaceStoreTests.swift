@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 11)
+        XCTAssertEqual(try store.schemaVersion(), 12)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -39,7 +39,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 11)
+        XCTAssertEqual(try store.schemaVersion(), 12)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -50,13 +50,31 @@ final class WorkspaceStoreTests: XCTestCase {
                 [.integer(8), .text(WorkspaceMigrations.versionEightChecksum)],
                 [.integer(9), .text(WorkspaceMigrations.versionNineChecksum)],
                 [.integer(10), .text(WorkspaceMigrations.versionTenChecksum)],
-                [.integer(11), .text(WorkspaceMigrations.versionElevenChecksum)]
+                [.integer(11), .text(WorkspaceMigrations.versionElevenChecksum)],
+                [.integer(12), .text(WorkspaceMigrations.versionTwelveChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotArtifactURLs[1].path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotArtifactURLs[2].path))
+    }
+
+    func testVersionElevenInteractionRowsAreRetainedAsLegacyRowsDuringContactInteractionMigration() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        try database.execute("CREATE TABLE schema_migrations (version INTEGER NOT NULL)")
+        try database.execute("INSERT INTO schema_migrations (version) VALUES (11)")
+        try database.execute("CREATE TABLE contacts (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, employer TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', profile_url TEXT NOT NULL DEFAULT '', relationship_context TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', deleted_at REAL)")
+        try database.execute("CREATE TABLE opportunities (id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, company TEXT NOT NULL, created_at REAL NOT NULL, stage TEXT NOT NULL DEFAULT 'Saved', next_action TEXT NOT NULL DEFAULT '', due_at REAL, deleted_at REAL)")
+        try database.execute("CREATE TABLE interactions (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), summary TEXT NOT NULL, occurred_at REAL NOT NULL)")
+        try database.execute("INSERT INTO opportunities (id, title, company, created_at) VALUES ('opportunity-1', 'Product Manager', 'Rekon Labs', 1704067200)")
+        try database.execute("INSERT INTO interactions (id, opportunity_id, summary, occurred_at) VALUES ('interaction-1', 'opportunity-1', 'Legacy note', 1704067200)")
+
+        let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
+
+        XCTAssertEqual(try store.schemaVersion(), 12)
+        XCTAssertEqual(try database.rows("SELECT id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at FROM interactions"), [[.text("interaction-1"), .null, .text("opportunity-1"), .text("Note"), .text("Legacy note"), .real(1_704_067_200), .null]])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
 
     func testFailedVersionFiveMigrationKeepsVerifiedRecoverySnapshot() throws {
@@ -357,14 +375,101 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents().suffix(2).map(\.kind), ["csv_duplicate_skipped", "csv_imported"])
     }
 
-    func testInteractionIsStoredWithAnOpportunityAndActivityEvent() throws {
+    func testContactInteractionIsStoredWithAnExplicitlyLinkedOpportunityAndActivityEvent() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let contact = try store.createContact(CreateContact(name: "Alex Morgan", employer: "Rekon Labs"))
+        try store.linkContact(contactID: contact.id, toOpportunityID: opportunity.id)
+        let nextTouch = now.addingTimeInterval(86_400)
 
-        let interaction = try store.recordInteraction(CreateInteraction(opportunityID: opportunity.id, summary: "Spoke with hiring manager."))
+        let interaction = try store.recordContactInteraction(CreateContactInteraction(
+            contactID: contact.id,
+            opportunityID: opportunity.id,
+            kind: .call,
+            summary: "Spoke with hiring manager.",
+            occurredAt: now,
+            nextTouchAt: nextTouch
+        ))
 
-        XCTAssertEqual(try store.interactions(forOpportunityID: opportunity.id), [interaction])
+        XCTAssertEqual(try store.contactInteractions(forContactID: contact.id), [interaction])
+        XCTAssertEqual(try store.lastTouch(forContactID: contact.id), now)
+        XCTAssertEqual(try store.nextTouch(forContactID: contact.id), nextTouch)
         XCTAssertEqual(try store.activityEvents().last?.kind, "interaction_recorded")
+        XCTAssertEqual(try store.activityEvents().last?.contactID, contact.id)
+        XCTAssertEqual(try store.activityEvents().last?.opportunityID, opportunity.id)
+    }
+
+    func testContactInteractionRejectsAnOpportunityThatIsNotExplicitlyLinked() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let contact = try store.createContact(CreateContact(name: "Alex Morgan"))
+        let activityCount = try store.activityEvents().count
+
+        XCTAssertThrowsError(try store.recordContactInteraction(CreateContactInteraction(
+            contactID: contact.id,
+            opportunityID: opportunity.id,
+            kind: .meeting,
+            summary: "Met at an event.",
+            occurredAt: now
+        )))
+
+        XCTAssertEqual(try store.contactInteractions(forContactID: contact.id), [])
+        XCTAssertEqual(try store.activityEvents().count, activityCount)
+    }
+
+    func testContactInteractionRejectsADeletedOpportunityWithoutWritingDataOrActivity() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let contact = try store.createContact(CreateContact(name: "Alex Morgan"))
+        try store.linkContact(contactID: contact.id, toOpportunityID: opportunity.id)
+        try store.deleteOpportunity(id: opportunity.id)
+        let activityCount = try store.activityEvents().count
+
+        XCTAssertThrowsError(try store.recordContactInteraction(CreateContactInteraction(
+            contactID: contact.id,
+            opportunityID: opportunity.id,
+            kind: .email,
+            summary: "Followed up after closure.",
+            occurredAt: now
+        )))
+
+        XCTAssertEqual(try store.contactInteractions(forContactID: contact.id), [])
+        XCTAssertEqual(try store.activityEvents().count, activityCount)
+    }
+
+    func testContactInteractionAndDerivedTouchDatesPersistAfterRelaunch() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        let firstStore = try WorkspaceStore(database: database, now: now, actorID: "local-user", correlationID: "fixture-correlation")
+        let contact = try firstStore.createContact(CreateContact(name: "Alex Morgan"))
+        let nextTouch = now.addingTimeInterval(86_400)
+        _ = try firstStore.recordContactInteraction(CreateContactInteraction(contactID: contact.id, kind: .meeting, summary: "Intro meeting", occurredAt: now, nextTouchAt: nextTouch))
+        try firstStore.close()
+
+        let reopenedDatabase = try EncryptedDatabase.open(url: databaseURL, key: key)
+        let reopenedStore = try WorkspaceStore(database: reopenedDatabase, actorID: "local-user", correlationID: "fixture-correlation")
+
+        XCTAssertEqual(try reopenedStore.contactInteractions(forContactID: contact.id).map(\.summary), ["Intro meeting"])
+        XCTAssertEqual(try reopenedStore.lastTouch(forContactID: contact.id), now)
+        XCTAssertEqual(try reopenedStore.nextTouch(forContactID: contact.id), nextTouch)
+    }
+
+    func testDeletingContactHidesItsInteractionWithoutDiscardingTheRetainedRow() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        var identifier = 0
+        let store = try WorkspaceStore(
+            database: database,
+            now: now,
+            nextIdentifier: { defer { identifier += 1 }; return "fixture-id-\(identifier)" },
+            actorID: "local-user",
+            correlationID: "fixture-correlation"
+        )
+        let contact = try store.createContact(CreateContact(name: "Alex Morgan"))
+        _ = try store.recordContactInteraction(CreateContactInteraction(contactID: contact.id, kind: .note, summary: "Private note", occurredAt: now))
+
+        try store.deleteContact(id: contact.id)
+
+        XCTAssertEqual(try store.contactInteractions(forContactID: contact.id), [])
+        XCTAssertEqual(try database.rows("SELECT contact_id, summary FROM interactions"), [[.text(contact.id), .text("Private note")]])
     }
 
     func testDeletingOpportunityHidesItAndLeavesOnlyRedactedAuditEvidence() throws {

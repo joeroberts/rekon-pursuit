@@ -349,18 +349,10 @@ final class WorkspaceStore {
         }
     }
 
-    func recordInteraction(_ command: CreateInteraction) throws -> Interaction {
-        let summary = command.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !summary.isEmpty else { throw WorkspaceStoreError.invalidOpportunity }
-        return try synchronized {
-            guard try isActiveOpportunity(command.opportunityID) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
-            let interaction = Interaction(id: nextIdentifier(), opportunityID: command.opportunityID, summary: summary, occurredAt: now)
-            let event = ActivityEvent(id: nextIdentifier(), kind: "interaction_recorded", opportunityID: command.opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: now)
-            try database.transaction {
-                try database.execute("INSERT INTO interactions (id, opportunity_id, summary, occurred_at) VALUES (?, ?, ?, ?)", values: [.text(interaction.id), .text(interaction.opportunityID), .text(interaction.summary), .real(interaction.occurredAt.timeIntervalSince1970)])
-                try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), event.opportunityID.map(DatabaseValue.text) ?? .null, .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
-            }
-            return interaction
+    func opportunities(forContactID contactID: String) throws -> [Opportunity] {
+        try synchronized {
+            guard try isActiveContact(contactID) else { return [] }
+            return try database.rows("SELECT opportunities.id, opportunities.title, opportunities.company, opportunities.created_at, opportunities.stage, opportunities.next_action, opportunities.due_at FROM opportunities JOIN contact_opportunities ON opportunities.id = contact_opportunities.opportunity_id WHERE contact_opportunities.contact_id = ? AND opportunities.deleted_at IS NULL ORDER BY opportunities.company, opportunities.title, opportunities.id", values: [.text(contactID)]).map(opportunity(from:))
         }
     }
 
@@ -369,6 +361,43 @@ final class WorkspaceStore {
             guard try isActiveOpportunity(opportunityID) else { return [] }
             return try database.rows("SELECT id, opportunity_id, summary, occurred_at FROM interactions WHERE opportunity_id = ? ORDER BY occurred_at, id", values: [.text(opportunityID)]).map(interaction(from:))
         }
+    }
+
+    func recordContactInteraction(_ command: CreateContactInteraction) throws -> ContactInteraction {
+        let summary = command.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !summary.isEmpty, command.nextTouchAt.map({ $0 >= command.occurredAt }) ?? true else {
+            throw WorkspaceStoreError.invalidInteraction
+        }
+        return try synchronized {
+            guard try isActiveContact(command.contactID) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+            if let opportunityID = command.opportunityID {
+                guard try isActiveOpportunity(opportunityID),
+                      !(try database.rows("SELECT contact_id FROM contact_opportunities WHERE contact_id = ? AND opportunity_id = ?", values: [.text(command.contactID), .text(opportunityID)])).isEmpty else {
+                    throw WorkspaceStoreError.invalidInteraction
+                }
+            }
+            let interaction = ContactInteraction(id: nextIdentifier(), contactID: command.contactID, opportunityID: command.opportunityID, kind: command.kind, summary: summary, occurredAt: command.occurredAt, nextTouchAt: command.nextTouchAt)
+            try database.transaction {
+                try database.execute("INSERT INTO interactions (id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at) VALUES (?, ?, ?, ?, ?, ?, ?)", values: [.text(interaction.id), .text(interaction.contactID), interaction.opportunityID.map(DatabaseValue.text) ?? .null, .text(interaction.kind.rawValue), .text(interaction.summary), .real(interaction.occurredAt.timeIntervalSince1970), interaction.nextTouchAt.map { .real($0.timeIntervalSince1970) } ?? .null])
+                try appendActivity(kind: "interaction_recorded", opportunityID: interaction.opportunityID, contactID: interaction.contactID)
+            }
+            return interaction
+        }
+    }
+
+    func contactInteractions(forContactID contactID: String) throws -> [ContactInteraction] {
+        try synchronized {
+            guard try isActiveContact(contactID) else { return [] }
+            return try database.rows("SELECT id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at FROM interactions WHERE contact_id = ? ORDER BY occurred_at DESC, id DESC", values: [.text(contactID)]).map(contactInteraction(from:))
+        }
+    }
+
+    func lastTouch(forContactID contactID: String) throws -> Date? {
+        try contactInteractions(forContactID: contactID).map(\.occurredAt).max()
+    }
+
+    func nextTouch(forContactID contactID: String) throws -> Date? {
+        try contactInteractions(forContactID: contactID).compactMap(\.nextTouchAt).min()
     }
 
     func activityEvents() throws -> [ActivityEvent] {
@@ -479,6 +508,20 @@ final class WorkspaceStore {
     private func interaction(from row: [DatabaseValue]) throws -> Interaction {
         guard row.count == 4, case let .text(id) = row[0], case let .text(opportunityID) = row[1], case let .text(summary) = row[2], case let .real(occurredAt) = row[3] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
         return Interaction(id: id, opportunityID: opportunityID, summary: summary, occurredAt: Date(timeIntervalSince1970: occurredAt))
+    }
+
+    private func contactInteraction(from row: [DatabaseValue]) throws -> ContactInteraction {
+        guard row.count == 7,
+              case let .text(id) = row[0], case let .text(contactID) = row[1],
+              case let .text(kindValue) = row[3], let kind = InteractionKind(rawValue: kindValue),
+              case let .text(summary) = row[4], case let .real(occurredAt) = row[5] else {
+            throw WorkspaceStoreError.unexpectedDatabaseValue
+        }
+        let opportunityID: String?
+        if case let .text(value) = row[2] { opportunityID = value } else { opportunityID = nil }
+        let nextTouchAt: Date?
+        if case let .real(value) = row[6] { nextTouchAt = Date(timeIntervalSince1970: value) } else { nextTouchAt = nil }
+        return ContactInteraction(id: id, contactID: contactID, opportunityID: opportunityID, kind: kind, summary: summary, occurredAt: Date(timeIntervalSince1970: occurredAt), nextTouchAt: nextTouchAt)
     }
 
     private func activityEvent(from row: [DatabaseValue]) throws -> ActivityEvent {

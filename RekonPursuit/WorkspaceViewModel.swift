@@ -37,10 +37,18 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var selectedContactID = ""
     @Published var selectedOpportunityID = ""
     @Published var interactionSummary = ""
+    @Published var interactionKind: InteractionKind = .note
+    @Published var interactionOccurredAt = Date.now
+    @Published var interactionHasNextTouch = false
+    @Published var interactionNextTouchAt = Date.now
+    @Published var interactionOpportunityID = ""
     @Published private(set) var contacts: [Contact] = []
     @Published private(set) var selectedContacts: [Contact] = []
     @Published private(set) var selectedSameEmployerContacts: [Contact] = []
-    @Published private(set) var selectedInteractions: [Interaction] = []
+    @Published private(set) var selectedContactInteractions: [ContactInteraction] = []
+    @Published private(set) var selectedContactOpportunities: [Opportunity] = []
+    @Published private(set) var selectedContactLastTouch: Date?
+    @Published private(set) var selectedContactNextTouch: Date?
     @Published private(set) var csvPreview: CSVImportPreview?
     @Published private(set) var csvImportPlan: [CSVImportPlanRow] = []
     @Published private(set) var csvImportReport: CSVImportReport?
@@ -264,6 +272,7 @@ final class WorkspaceViewModel: ObservableObject {
         contactProfileURL = contact.profileURL
         contactRelationshipContext = contact.relationshipContext
         contactNotes = contact.notes
+        refreshSelectedContactInteraction()
     }
 
     func beginNewContact() {
@@ -316,11 +325,18 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
-    func recordInteraction() {
-        guard !selectedOpportunityID.isEmpty else { return }
+    func recordSelectedContactInteraction() {
+        guard let store, !selectedContactID.isEmpty else { return }
         do {
-            _ = try store?.recordInteraction(CreateInteraction(opportunityID: selectedOpportunityID, summary: interactionSummary))
-            interactionSummary = ""
+            _ = try store.recordContactInteraction(CreateContactInteraction(
+                contactID: selectedContactID,
+                opportunityID: interactionOpportunityID.isEmpty ? nil : interactionOpportunityID,
+                kind: interactionKind,
+                summary: interactionSummary,
+                occurredAt: interactionOccurredAt,
+                nextTouchAt: interactionHasNextTouch ? interactionNextTouchAt : nil
+            ))
+            clearInteractionDraft()
             refreshCounts()
             statusMessage = "Interaction saved locally."
         } catch let error as LocalizedError {
@@ -409,6 +425,7 @@ final class WorkspaceViewModel: ObservableObject {
             refreshSelectedTask()
             refreshRelationshipMemory()
             contacts = try store?.contacts() ?? []
+            refreshSelectedContactInteraction()
             activityCount = try store?.activityEvents().count ?? 0
             activityEvents = try store?.activityEvents() ?? []
             needsAttention = try store?.needsAttention() ?? []
@@ -423,7 +440,6 @@ final class WorkspaceViewModel: ObservableObject {
         do {
             selectedContacts = selectedOpportunityID.isEmpty ? [] : try store?.contacts(forOpportunityID: selectedOpportunityID) ?? []
             selectedSameEmployerContacts = selectedOpportunityID.isEmpty ? [] : try store?.sameEmployerContacts(forOpportunityID: selectedOpportunityID) ?? []
-            selectedInteractions = selectedOpportunityID.isEmpty ? [] : try store?.interactions(forOpportunityID: selectedOpportunityID) ?? []
         } catch {
             statusMessage = "The relationship history could not be read."
         }
@@ -442,6 +458,37 @@ final class WorkspaceViewModel: ObservableObject {
         contactProfileURL = ""
         contactRelationshipContext = ""
         contactNotes = ""
+        clearInteractionDraft()
+    }
+
+    private func clearInteractionDraft() {
+        interactionSummary = ""
+        interactionKind = .note
+        interactionOccurredAt = Date.now
+        interactionHasNextTouch = false
+        interactionNextTouchAt = Date.now
+        interactionOpportunityID = ""
+    }
+
+    private func refreshSelectedContactInteraction() {
+        do {
+            guard let store, !selectedContactID.isEmpty else {
+                selectedContactInteractions = []
+                selectedContactOpportunities = []
+                selectedContactLastTouch = nil
+                selectedContactNextTouch = nil
+                return
+            }
+            selectedContactInteractions = try store.contactInteractions(forContactID: selectedContactID)
+            selectedContactOpportunities = try store.opportunities(forContactID: selectedContactID)
+            selectedContactLastTouch = try store.lastTouch(forContactID: selectedContactID)
+            selectedContactNextTouch = try store.nextTouch(forContactID: selectedContactID)
+            if !interactionOpportunityID.isEmpty && !selectedContactOpportunities.contains(where: { $0.id == interactionOpportunityID }) {
+                interactionOpportunityID = ""
+            }
+        } catch {
+            statusMessage = "The contact interaction history could not be read."
+        }
     }
 
     private func loadSelectedOpportunity() {

@@ -83,9 +83,39 @@ struct Interaction: Equatable {
     let occurredAt: Date
 }
 
-struct CreateInteraction {
-    let opportunityID: String
+enum InteractionKind: String, CaseIterable, Equatable {
+    case call = "Call"
+    case email = "Email"
+    case meeting = "Meeting"
+    case note = "Note"
+}
+
+struct ContactInteraction: Equatable {
+    let id: String
+    let contactID: String
+    let opportunityID: String?
+    let kind: InteractionKind
     let summary: String
+    let occurredAt: Date
+    let nextTouchAt: Date?
+}
+
+struct CreateContactInteraction {
+    let contactID: String
+    let opportunityID: String?
+    let kind: InteractionKind
+    let summary: String
+    let occurredAt: Date
+    let nextTouchAt: Date?
+
+    init(contactID: String, opportunityID: String? = nil, kind: InteractionKind, summary: String, occurredAt: Date = .now, nextTouchAt: Date? = nil) {
+        self.contactID = contactID
+        self.opportunityID = opportunityID
+        self.kind = kind
+        self.summary = summary
+        self.occurredAt = occurredAt
+        self.nextTouchAt = nextTouchAt
+    }
 }
 
 struct ActivityEvent: Equatable {
@@ -137,6 +167,7 @@ enum WorkspaceStoreError: Error, LocalizedError {
     case unexpectedDatabaseValue
     case unresolvedImportDecision
     case invalidContact
+    case invalidInteraction
 
     var errorDescription: String? {
         switch self {
@@ -150,6 +181,8 @@ enum WorkspaceStoreError: Error, LocalizedError {
             return "Choose Skip or Keep separate for each duplicate CSV row."
         case .invalidContact:
             return "Enter a contact name."
+        case .invalidInteraction:
+            return "Enter an interaction summary and choose a valid linked opportunity."
         }
     }
 }

@@ -190,6 +190,31 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.opportunities.map(\.id), [first.id, second.id])
     }
 
+    func testSelectedContactCanLogAndDisplayALocalInteraction() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let contact = try store.createContact(CreateContact(name: "Alex Morgan", employer: "Rekon Labs"))
+        try store.linkContact(contactID: contact.id, toOpportunityID: opportunity.id)
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+
+        model.start()
+        model.selectContact(contact)
+        model.interactionKind = .call
+        model.interactionSummary = "Discussed the product role."
+        model.interactionOccurredAt = Date(timeIntervalSince1970: 1_704_067_200)
+        model.interactionHasNextTouch = true
+        model.interactionNextTouchAt = Date(timeIntervalSince1970: 1_704_153_600)
+        model.interactionOpportunityID = opportunity.id
+        let occurredAt = model.interactionOccurredAt
+        let nextTouchAt = model.interactionNextTouchAt
+        model.recordSelectedContactInteraction()
+
+        XCTAssertEqual(model.selectedContactInteractions.map(\.summary), ["Discussed the product role."])
+        XCTAssertEqual(model.selectedContactLastTouch, occurredAt)
+        XCTAssertEqual(model.selectedContactNextTouch, nextTouchAt)
+        XCTAssertEqual(model.statusMessage, "Interaction saved locally.")
+    }
+
     private func makeStore() throws -> WorkspaceStore {
         let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent("rekon-view-model-\(UUID().uuidString).sqlite")
         let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 5, count: 32))
