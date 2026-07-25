@@ -21,9 +21,9 @@
 
 **Files:** Create `docs/delivery/evidence/remediation/RP-R0-baseline.md`; no production source changes.
 
-**Scope:** Use only a dedicated disposable test workspace and test app-data location; never delete, reset, or modify the user’s actual workspace or Keychain data. Record app build/commit, macOS version, window size, initial database/key state, actions, observed result, and redacted screenshot paths under `docs/delivery/evidence/remediation/RP-R0/`. Capture: (1) whether Create Workspace is visible and actionable on first launch; (2) before creation, whether CSV import is visibly unavailable with an explanation; (3) after successful test-workspace creation, whether CSV selection and preview are reachable; (4) whether each action refreshes without relaunch; and (5) mockup-shell comparison screenshots. No behavior change.
+**Scope:** Use only a dedicated disposable test workspace and test app-data location; never delete, reset, or modify the user’s actual workspace or Keychain data. Record app build/commit, macOS version, window size, initial database/key state, actions, observed result, and redacted screenshot paths under `docs/delivery/evidence/remediation/RP-R0/`. Capture: (1) whether Create Workspace is visible and actionable on first launch; (2) before creation, whether CSV import is visibly unavailable with an explanation; (3) whether the visible page change refreshes without relaunch; and (4) mockup-shell comparison screenshots. Runtime creation, post-create CSV preview, and post-create refresh belong to `RP-R1a`, which changes the workspace gate and CSV availability. No behavior change.
 
-**Acceptance:** Evidence establishes whether each action is reachable, why it is not, and whether UI state visibly updates; it distinguishes the expected pre-workspace disabled state from the post-workspace CSV path; it does not claim a fix.
+**Acceptance:** Evidence establishes whether default-page workspace access and pre-workspace CSV guidance are reachable, why they are not, and whether page state visibly updates; it does not claim a fix. `RP-R1a` owns the runtime create → CSV-preview verification.
 
 ### RP-R1a: Workspace session gate
 
