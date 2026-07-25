@@ -51,14 +51,22 @@ points.
 4. Update `RekonPursuitUITests/RekonPursuitUITests.swift` before the refactor:
    replace segmented-control assertions with accessibility-identified sidebar
    navigation and assert the workspace gate/default Needs attention destination
-   on launch. The UI-test harness must use a deterministic, isolated temporary
-   workspace and compiled Keychain namespace, then clean both up; it must not
-   read or write real app-data or the production Keychain namespace. Add the
-   smallest UI smoke that creates a workspace, creates one uniquely named
-   synthetic opportunity, edits and saves that same record, selects Pipeline,
-   and observes the edited record without relaunch. The UI test asserts only
-   that the CSV chooser is available after workspace-ready; it does not drive
-   the native chooser.
+   on launch. UI tests are non-mutating navigation/workspace-gate checks only;
+   they must not introduce a launch argument, preference, environment value,
+   or any production storage/Keychain configuration seam. They do not create a
+   workspace or drive the native chooser.
+5. Use the existing R1a generated temporary-app harness
+   (`scripts/remediation/run_r1a_isolated_smoke.sh`) for the mutating manual
+   smoke. A minimal harness extension is allowed only to keep its compiled
+   temporary bundle, app-data container, and Keychain namespace isolated and
+   cleaned up; it must not change production storage or Keychain configuration.
+   The manual smoke owns workspace creation, create/edit/Pipeline refresh, and
+   native panel/fixture preview verification.
+6. Validate recovery in a **separate** R1a isolated fixture/harness launch.
+   The existing generated bundle ID already yields a distinct sandbox container
+   workspace root; do not add test injection/configuration. Assert that a
+   recovery-required state shows only **Recheck** or **Retry** as applicable,
+   never Create, overwrite, replacement, or automatic cleanup.
 
 ## Acceptance criteria
 
@@ -66,12 +74,15 @@ points.
   controls are reachable; long page content scrolls rather than clipping.
 - First launch shows Needs attention plus the R1a workspace-create or recovery
   state. Recovery-required never exposes replacement/overwrite behavior.
-- Creating a workspace, creating a unique synthetic opportunity, editing and
-  saving that same record, and navigating to Pipeline visibly refreshes the
-  edited record without relaunch. The recovery-required gate is separately
-  observed and never exposes replacement/overwrite behavior.
-- Existing native CSV selection remains available only after workspace-ready
-  and still opens the native single-file dialog.
+- The isolated R1a temporary-app smoke creates a workspace, creates a unique
+  synthetic opportunity, edits/saves that same record, and navigates to
+  Pipeline where the edited record visibly refreshes without relaunch. The
+  separate isolated fixture/harness launch verifies the recovery-required gate
+  exposes only Recheck/Retry and never replacement/overwrite behavior.
+- The CSV chooser button is enabled only after workspace-ready. In the manual
+  isolated smoke, activating it opens the native single-file dialog and the
+  R1a synthetic fixture previews successfully; UI tests assert button
+  availability only.
 - The implementation remains local-only and creates no new persistence,
   external request, entitlement, or activity-event type.
 - Before/after screenshots at 900 × 640 show the approved sidebar/detail
@@ -81,13 +92,15 @@ points.
 
 1. Run the updated focused UI tests and existing workspace/view-model tests;
    run a Debug macOS build. No coverage target or hosted test expansion.
-2. Perform one isolated manual smoke at 900 × 640: first launch → create
-   workspace → create a unique synthetic opportunity → edit/save that same
-   record → select Pipeline and Activity & AI → select Import CSV → choose the
-   R1a synthetic CSV fixture (`RekonPursuitTests/Fixtures/r1a-smoke-import.csv`)
-   → confirm preview. Separately observe the
-   recovery-required gate. Verify visible immediate refresh and no clipped
-   primary action.
+2. Run the existing R1a generated isolated temporary-app harness at 900 × 640,
+   then manually verify: first launch → create workspace → create a unique
+   synthetic opportunity → edit/save that same record → select Pipeline and
+   Activity & AI → select Import CSV → activate the enabled CSV chooser button
+   → choose the R1a synthetic fixture
+   (`RekonPursuitTests/Fixtures/r1a-smoke-import.csv`) → confirm preview.
+   Run a separate isolated recovery fixture/harness launch and confirm only
+   Recheck/Retry appears—never Create or overwrite. Verify visible immediate
+   refresh and no clipped primary action.
 3. Record redacted screenshots and the build/test commands/results in
    `docs/delivery/evidence/remediation/RP-R1b/RP-R1b-shell-smoke.md`.
 
