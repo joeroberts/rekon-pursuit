@@ -1,6 +1,6 @@
 # Rekon Pursuit — MVP remediation ledger
 
-**Status:** `RP-R0` accepted after amended-gate review. `RP-R1a` is ready for final TPM and Delivery release; it is not yet released. `RP-R1b`–`RP-R10` remain blocked by their stated dependencies and gates.
+**Status:** `RP-R0` accepted after amended-gate review. `RP-R1a` is the sole released remediation implementation task. `RP-R1b`–`RP-R10` remain blocked by their stated dependencies and gates.
 
 **Authority:** This is the canonical status record for the current MVP remediation. It supersedes “MVP shipped” language in the roadmap and candidate handoff. The PRD, architecture specification, ADR-001, and approved mockups remain controlling requirements.
 
@@ -24,7 +24,7 @@
 | ID | Scope | Dependencies | State | Required evidence | Gate decision |
 | --- | --- | --- | --- | --- | --- |
 | `RP-R0` | Evidence-only baseline in a dedicated disposable test workspace/app-data location: first launch, default-page workspace access, pre-workspace CSV availability/explanation, page-state refresh, and mockup divergence. No behavior changes or modification of the user’s workspace/Keychain data. | None | **Accepted** | Redacted reproduction notes/screenshots, exact state transitions, build/OS/window details, and committed evidence path. | Amended boundary accepted. The evidence establishes the first-run/default-page, pre-workspace CSV guidance, page-refresh, and shell defects. Runtime create → CSV-preview/refresh is owned by `RP-R1a`. |
-| `RP-R1a` | Typed workspace gate: visible create/open/recover/retry states for database artifacts × no key, primary only, pending only, and both keys. Ambiguous combinations are recovery-required: no overwrite, promotion, ignored key, or automatic key deletion. A non-secret durable creation journal records staging/pending-written/database-promoted/primary-promoted/cleanup-pending phases. Creation never deletes a committed database on an open error. | `RP-R0` | **Ready for Delivery release** | Focused failure injection covers staging close, pending write, database promotion, primary promotion, pending cleanup, and reopen; every ambiguous state preserves artifacts. Fresh-launch runtime smoke records only a temporary namespace ID and redacted before/after unchanged assertions; it never persists absolute paths, Keychain item/account metadata, keys, or fixture content. This task does not accept visual shell alignment. | Planning, Architect, QA, and Security/Privacy approved the amended brief. Await TPM and Delivery release decision; no successor is released. |
+| `RP-R1a` | Typed workspace gate: visible create/open/recover/retry states for database artifacts × no key, primary only, pending only, and both keys. Ambiguous combinations are recovery-required: no overwrite, promotion, ignored key, or automatic key deletion. A non-secret durable creation journal records staging/pending-written/database-promoted/primary-promoted/cleanup-pending phases. Creation never deletes a committed database on an open error. | `RP-R0` | **Released — active** | Focused failure injection covers staging close, pending write, database promotion, primary promotion, pending cleanup, and reopen; every ambiguous state preserves artifacts. Fresh-launch runtime smoke records only a temporary namespace ID and redacted before/after unchanged assertions; it never persists absolute paths, Keychain item/account metadata, keys, or fixture content. This task does not accept visual shell alignment. | Released for implementation — R1a only. Implement the approved non-destructive workspace-session gate and focused local verification in an isolated temporary namespace. Do not inspect, modify, delete, reset, or recover the user’s workspace or production Keychain material. No successor is released. |
 | `RP-R1b` | Reactive `NavigationSplitView` shell aligned with approved mockup structure and usable in a small window. | `RP-R1a` | Blocked | Before/after mockup comparison at the recorded window size plus manual create/edit/navigation refresh smoke. | Pending `RP-R1a`. |
 | `RP-R2` | Migration plus editable compensation, location, response state/history, and application/status dates. | `RP-R1b` | Blocked | Existing-workspace migration and create/edit/relaunch activity evidence. | Pending `RP-R1b`. |
 | `RP-R3` | Map → validate → row decision → import report; field-selected update-existing with no silent overwrite. | `RP-R2` | Blocked | Standard-header, nonstandard-header, invalid-row, duplicate, and reimport workflows. | Pending `RP-R2`; allowed-field policy in brief. |
@@ -56,7 +56,7 @@
 | QA | Approved | Focused local state fixtures and one isolated runtime smoke cover preservation without a coverage/CI expansion. |
 | Security/Privacy | Approved | The compiled immutable Keychain namespace, non-destructive key handling, and redacted evidence rules prohibit paths, Keychain metadata, keys, and fixture content. |
 | TPM | Approved | The amended R1a scope is dependency-safe and remains limited to the non-destructive workspace gate and post-create CSV reachability. |
-| Delivery Manager | Pending final release decision | Review must follow TPM approval. |
+| Delivery Manager | Approved — released for implementation | R1a is the only active task; visual-shell alignment and every successor remain out of scope. |
 
 ## Release log
 
@@ -65,6 +65,7 @@
 | 2026-07-25 | `RP-R0` | **Approved — released** | It may create only redacted baseline evidence under `docs/delivery/evidence/remediation/RP-R0/` using a dedicated disposable test workspace and app-data location. It must not change production behavior, the user’s workspace, or Keychain data. `RP-R1a`–`RP-R10` remain blocked pending their stated dependencies and gates. |
 | 2026-07-25 | `RP-R0` | **Accepted — amended gate** | Evidence boundary approved; runtime create/CSV-preview/refresh transferred to `RP-R1a`. |
 | 2026-07-25 | `RP-R1a` | **Provisional release superseded** | The original release was withdrawn while the non-destructive workspace-state amendment was reviewed. The amended brief is ready for final TPM and Delivery release; no implementation began. |
+| 2026-07-25 | `RP-R1a` | **Released for implementation** | Implement the approved non-destructive workspace-session gate and focused local verification in an isolated temporary namespace. Do not inspect, modify, delete, reset, or recover the user’s workspace or production Keychain material. `RP-R1b`–`RP-R10` remain blocked. |
 
 ## Risks and decisions
 
