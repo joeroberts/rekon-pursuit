@@ -69,6 +69,16 @@
 | TPM | Approved for final gate | R1a stayed within workspace initialization/recovery and CSV-picker reachability. R1b+ scope did not enter the slice; the native dialog check remains documented as direct manual evidence. |
 | Delivery Manager | Approved — R1a accepted | Rechecked the final ledger, clean worktree, scoped implementation, isolated smoke, and user-observed native dialog. Released `RP-R1b` only. |
 
+### RP-R1b plan approval record
+
+| Role | Decision | Evidence |
+| --- | --- | --- |
+| Planning | Approved | [R1b shell brief](task-briefs/RP-R1b-reactive-application-shell.md) at `d9190a0`: reactive desktop shell only; existing isolated harness owns mutable smoke; R1a recovery tests remain authoritative. |
+| Architect | Approved | Parent-owned file/modal intents, unchanged native CSV and workspace boundaries, no test-injection seam, and an enforceable compact-window limit. No ADR change required. |
+| QA | Approved | Non-mutating UI checks plus the existing isolated temporary-app manual smoke cover 900×640 navigation/reactivity and the actual CSV preview without coverage or hosted-CI expansion. |
+| TPM | Approved | R1b is the sole dependency-safe successor; no R2+ scope or successor release is implied. |
+| Delivery Manager | Pending final plan-record recheck | Must confirm this durable record and release R1b only. |
+
 ## Release log
 
 | Date | Task | Delivery decision | Scope boundary |
