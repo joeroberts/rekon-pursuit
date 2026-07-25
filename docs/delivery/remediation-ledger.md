@@ -1,6 +1,6 @@
 # Rekon Pursuit — MVP remediation ledger
 
-**Status:** `RP-R0` accepted after amended-gate review. `RP-R1a` is the sole released remediation implementation task; `RP-R1b`–`RP-R10` remain blocked by their stated dependencies and gates.
+**Status:** `RP-R0` accepted after amended-gate review. `RP-R1a` is ready for final TPM and Delivery release; it is not yet released. `RP-R1b`–`RP-R10` remain blocked by their stated dependencies and gates.
 
 **Authority:** This is the canonical status record for the current MVP remediation. It supersedes “MVP shipped” language in the roadmap and candidate handoff. The PRD, architecture specification, ADR-001, and approved mockups remain controlling requirements.
 
@@ -64,7 +64,7 @@
 | --- | --- | --- | --- |
 | 2026-07-25 | `RP-R0` | **Approved — released** | It may create only redacted baseline evidence under `docs/delivery/evidence/remediation/RP-R0/` using a dedicated disposable test workspace and app-data location. It must not change production behavior, the user’s workspace, or Keychain data. `RP-R1a`–`RP-R10` remain blocked pending their stated dependencies and gates. |
 | 2026-07-25 | `RP-R0` | **Accepted — amended gate** | Evidence boundary approved; runtime create/CSV-preview/refresh transferred to `RP-R1a`. |
-| 2026-07-25 | `RP-R1a` | **Approved — released** | Only active implementation task; isolated smoke is a release condition. |
+| 2026-07-25 | `RP-R1a` | **Provisional release superseded** | The original release was withdrawn while the non-destructive workspace-state amendment was reviewed. The amended brief is ready for final TPM and Delivery release; no implementation began. |
 
 ## Risks and decisions
 
