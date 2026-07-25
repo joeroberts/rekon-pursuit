@@ -17,6 +17,9 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var opportunities: [Opportunity] = []
     @Published private(set) var activityEvents: [ActivityEvent] = []
     @Published var activitySearch = ""
+    @Published var showClosedOpportunities = UserDefaults.standard.object(forKey: "showClosedOpportunities") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(showClosedOpportunities, forKey: "showClosedOpportunities") }
+    }
     @Published private(set) var selectedStageHistory: [StageHistoryEntry] = []
     @Published private(set) var selectedTask: TaskReminder?
     @Published var opportunitySearch = ""
@@ -189,7 +192,7 @@ final class WorkspaceViewModel: ObservableObject {
             let matchesStage = stageFilter == "All stages" || opportunity.stage.rawValue == stageFilter
             let query = opportunitySearch.trimmingCharacters(in: .whitespacesAndNewlines)
             let matchesSearch = query.isEmpty || opportunity.title.localizedCaseInsensitiveContains(query) || opportunity.company.localizedCaseInsensitiveContains(query)
-            return matchesStage && matchesSearch
+            return matchesStage && matchesSearch && (showClosedOpportunities || opportunity.stage != .closed)
         }
     }
 

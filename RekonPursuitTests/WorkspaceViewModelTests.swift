@@ -32,6 +32,8 @@ final class WorkspaceViewModelTests: XCTestCase {
     func testCreatePersistsJobDescriptionAndNotes() throws {
         let store = try makeStore()
         let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        model.showClosedOpportunities = true
+        defer { model.showClosedOpportunities = true }
         model.start()
         model.title = "Product Manager"
         model.company = "Rekon Labs"
@@ -125,6 +127,25 @@ final class WorkspaceViewModelTests: XCTestCase {
         model.activitySearch = "rekon"
 
         XCTAssertEqual(model.filteredActivityEvents.map(\.kind), ["opportunity_created"])
+    }
+
+    func testPipelineVisibilitySettingCanHideClosedOpportunities() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        model.showClosedOpportunities = true
+        defer { model.showClosedOpportunities = true }
+        model.start()
+        model.title = "Active role"
+        model.company = "Rekon Labs"
+        model.createOpportunity()
+        model.title = "Closed role"
+        model.company = "Rekon Labs"
+        model.stage = .closed
+        model.createOpportunity()
+
+        model.showClosedOpportunities = false
+
+        XCTAssertEqual(model.filteredOpportunities.map(\.title), ["Active role"])
     }
 
     func testSavingSelectedOpportunityUpdatesItsVisibleRecord() throws {

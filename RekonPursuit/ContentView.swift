@@ -31,6 +31,7 @@ private enum TrackerPage: String, CaseIterable {
     case csvImport = "Import CSV"
     case contacts = "Contacts"
     case ledger = "Activity & AI"
+    case settings = "Settings"
 }
 
 struct ContentView: View {
@@ -601,6 +602,40 @@ struct ContentView: View {
                 }
             }
 
+            if page == .settings {
+                GroupBox("Workspace") {
+                    Text("Your workspace is encrypted and stays on this Mac. Active records are retained until you delete them.")
+                        .foregroundStyle(.secondary)
+                    Toggle("Show closed opportunities in the pipeline", isOn: $model.showClosedOpportunities)
+                        .accessibilityIdentifier("show-closed-opportunities")
+                }
+
+                GroupBox("Data and recovery") {
+                    Text("CSV exports are unencrypted. Encrypted backups can be restored on this Mac after a clear replacement confirmation.")
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Button("Export opportunities as CSV…") { showsUnencryptedExportWarning = true }
+                            .disabled(!model.workspaceReady || model.opportunities.isEmpty)
+                        Button("Create encrypted backup…") {
+                            let panel = NSSavePanel()
+                            panel.nameFieldStringValue = "rekon-pursuit-backup.rekonbackup"
+                            panel.canCreateDirectories = true
+                            if panel.runModal() == .OK, let url = panel.url {
+                                model.createEncryptedBackup(at: url)
+                            }
+                        }
+                        .disabled(!model.workspaceReady)
+                        Button("Restore encrypted backup…") { showsBackupImporter = true }
+                            .disabled(!model.workspaceReady)
+                    }
+                }
+
+                GroupBox("AI and connections") {
+                    Text("Cloud AI, local-model execution, Gmail, and Google Calendar are disabled in this MVP. No network connections are configured.")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             if page == .home {
             GroupBox("Local activity") {
                 if model.activityEvents.isEmpty {
@@ -612,31 +647,6 @@ struct ContentView: View {
                 }
             }
 
-            GroupBox("Export local data") {
-                Text("Export your active opportunities as a CSV you can open in Numbers or another spreadsheet app.")
-                    .foregroundStyle(.secondary)
-                Button("Export opportunities as CSV…") { showsUnencryptedExportWarning = true }
-                    .disabled(!model.workspaceReady || model.opportunities.isEmpty)
-                    .accessibilityIdentifier("export-opportunities-csv")
-            }
-
-            GroupBox("Encrypted workspace backup") {
-                Text("Create an encrypted copy of this workspace. This first MVP backup can be reopened only on this Mac, because its key remains in your Mac Keychain.")
-                    .foregroundStyle(.secondary)
-                Button("Create encrypted backup…") {
-                    let panel = NSSavePanel()
-                    panel.nameFieldStringValue = "rekon-pursuit-backup.rekonbackup"
-                    panel.canCreateDirectories = true
-                    if panel.runModal() == .OK, let url = panel.url {
-                        model.createEncryptedBackup(at: url)
-                    }
-                }
-                .disabled(!model.workspaceReady)
-                .accessibilityIdentifier("create-encrypted-backup")
-                Button("Restore encrypted backup…") { showsBackupImporter = true }
-                    .disabled(!model.workspaceReady)
-                    .accessibilityIdentifier("restore-encrypted-backup")
-            }
             }
 
             Text("This MVP keeps data on this Mac. CSV exports are unencrypted; encrypted backup is same-Mac only and replaces the current workspace after confirmation.")
