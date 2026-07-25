@@ -158,15 +158,32 @@ defects and missing focused coverage. This pass remains entirely inside R2;
 it neither opens R3 nor alters CSV mapping/import decisions.
 
 1. **Clock and date-command contract.** Replace the stored initialization
-   timestamp with an injected clock sampled once at the beginning of each
-   mutating store command. All audit, quick-stage, task, and import timestamps
-   produced by that one command use its one sampled value. The form save
-   command must reject a stage change with no `stageChangedAt`, and reject a
-   response-state change with no `responseEffectiveDate`; it must perform no
-   write in either case. Programmatic CSV creation remains on its existing
-   default-only path and receives no mapping behavior. Add focused tests with
-   a stepwise injected clock proving later commands do not reuse construction
-   time and that each command has internally identical audit timestamps.
+   timestamp with one injectable clock. Sample it exactly once at the beginning
+   of each mutating command and exactly once for each time-dependent read
+   (`needsAttention`); never retain an initialization-time value. All audit,
+   quick-stage, task, and import timestamps produced by one command use its
+   one sampled value. The form save command must reject a stage change with no
+   `stageChangedAt`, and reject a response-state change with no
+   `responseEffectiveDate`; it must perform no write in either case.
+   `CreateOpportunity` must likewise atomically reject a non-default response
+   with a missing `responseEffectiveDate`, leaving no opportunity, task,
+   stage/response history, or activity row. Programmatic CSV creation remains
+   on its existing default-only path and receives no mapping behavior. Add
+   focused tests with a stepwise injected clock proving later commands do not
+   reuse construction time, each command has internally identical audit
+   timestamps, and a later Needs Attention read classifies the same task using
+   its current read-time sample rather than an earlier mutation time. The
+   required regression sequence advances the injected clock after store
+   construction and after creation, then verifies: (a) a quick `changeStage`
+   writes the current command time identically to `stage_changed_at`, its
+   stage-history row, and its stage-change activity; (b) one task action
+   (`completeTask` or `snoozeTask`) writes its activity at the current command
+   time and, for snooze, derives the rescheduled due date from that same
+   sample; and (c) a multi-row existing CSV import writes the report,
+   every imported opportunity’s `created_at`/`stage_changed_at`, every
+   stage-history row, and every import activity at the one current import
+   command time. The CSV case retains existing literal-header and
+   Skip/Keep-separate behavior only—no column mapping or update-existing.
 2. **Form lifecycle and explicit effective dates.** After a successful Add
    save, reset `applicationDate`, `responseEffectiveDate`, and
    `stageChangedAt` to fresh current defaults in addition to resetting their
