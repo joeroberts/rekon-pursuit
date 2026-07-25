@@ -29,11 +29,12 @@ bundle identity, derived Keychain service, and App Sandbox container.
 **Result: Passed by direct user observation on 2026-07-25.** Desktop Computer
 Use repeatedly failed to read the isolated temporary app after launch, so it
 did not provide the observation. The product owner completed the visible
-sequence in the already-running temporary app and confirmed the import preview:
+sequence in the current native-picker temporary app and confirmed the import
+preview:
 
-1. **Add opportunity** → **Create new local workspace**.
+1. On the default workspace gate, select **Create local workspace**.
 2. **Import CSV** → **Choose CSV file…**.
-3. Select the repository's synthetic `r1a-smoke-import.csv` fixture.
+3. Select the synthetic `r1a-smoke-import.csv` fixture bundled with the repository.
 4. Observe the import preview.
 
 No screenshot or filesystem/Keychain identifier is retained from this manual
