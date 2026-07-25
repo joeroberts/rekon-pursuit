@@ -90,6 +90,16 @@
 | Product owner | Completed manual smoke | At 900×640 in the isolated temporary app: workspace create; synthetic record create/edit; Pipeline and Activity & AI navigation; native CSV chooser and fixture preview all passed. |
 | Delivery Manager | Approved — R1b accepted | Final independent gate complete. Released `RP-R2` only; `RP-R3`–`RP-R10` remain blocked to avoid overlapping persistence/UI work. |
 
+### RP-R2 plan approval record
+
+| Role | Decision | Evidence |
+| --- | --- | --- |
+| Planning | Approved | [R2 opportunity-fields brief](task-briefs/RP-R2-opportunity-fields-and-migration.md) at `9502268`: migration, core fields, explicit response/stage-date semantics, and R3 mapping exclusion. |
+| Architect | Approved | Coherent schema/default/migration contract; fixed work-arrangement values; stage and response audit semantics; existing CSV safe defaults without mapping scope. No ADR change required. |
+| QA | Approved | Deterministic focused migration/create/edit/relaunch/history checks include history ordering and optional-date clearing; no coverage/CI expansion. |
+| TPM | Approved | R2 is the sole released scope; all successors remain blocked. |
+| Delivery Manager | Pending final plan-record recheck | Must confirm the durable plan record before implementation begins. |
+
 ## Release log
 
 | Date | Task | Delivery decision | Scope boundary |
