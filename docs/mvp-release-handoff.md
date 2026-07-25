@@ -22,4 +22,4 @@ The active workspace remains on this Mac until records are deleted. CSV export i
 
 ## Verification and packaging
 
-Focused local workflow, migration, backup/restore, and build checks passed during the delivered slices. `scripts/m0/build_unsigned_archive.sh` creates an unsigned `.app`; the current package is placed in `a local release directory outside the repository` outside the repository.
+Focused local workflow, migration, backup/restore, and build checks passed during the delivered slices. `scripts/m0/build_unsigned_archive.sh` creates an unsigned `.app`; the package output is placed outside the repository in a local release directory.
