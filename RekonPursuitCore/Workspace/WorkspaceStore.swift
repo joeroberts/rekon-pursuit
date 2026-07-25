@@ -103,7 +103,8 @@ final class WorkspaceStore {
                     }
                 let candidate = candidates.first
                 let rationale: String? = candidate.map { !command.jobURL.isEmpty && command.jobURL.lowercased() == $0.jobURL.lowercased() ? "Exact job URL" : "Matching title and company" }
-                return CSVImportPlanRow(row: row, candidateID: candidate?.id, duplicateRationale: rationale, decision: candidate == nil ? .create : nil)
+                let values: [CSVImportField: String] = candidate.map { [.jobURL: $0.jobURL, .jobDescription: $0.jobDescription, .notes: $0.notes, .compensation: $0.compensation ?? "", .location: $0.location ?? "", .workArrangement: $0.workArrangement.rawValue, .stage: $0.stage.rawValue, .nextAction: $0.nextAction, .applicationDate: $0.applicationDate?.ISO8601Format().prefix(10).description ?? "", .responseState: $0.responseState.rawValue] } ?? [:]
+                return CSVImportPlanRow(row: row, candidateID: candidate?.id, duplicateRationale: rationale, candidateTitle: candidate?.title, candidateCompany: candidate?.company, candidateValues: values, decision: candidate == nil ? .create : nil)
             }
         }
     }
@@ -113,7 +114,7 @@ final class WorkspaceStore {
         return try synchronized {
             guard rows.allSatisfy({ row in
                 guard let decision = row.decision else { return false }
-                if decision == .updateSelectedFields { return row.candidateID != nil && !row.selectedFields.isEmpty && selectedFieldsAreCoupled(row.selectedFields) }
+                if decision == .updateSelectedFields { return row.candidateID != nil && !row.selectedFields.isEmpty && selectedFieldsAreCoupled(row.selectedFields) && row.selectedFields.allSatisfy { !(row.row.values[$0] ?? "").isEmpty } }
                 if decision == .create { return row.candidateID == nil }
                 return true
             }) else { throw WorkspaceStoreError.unresolvedImportDecision }
@@ -122,13 +123,12 @@ final class WorkspaceStore {
             let updated = rows.filter { $0.decision == .updateSelectedFields }.count
             let skipped = rows.filter { $0.decision == .skip }.count
             let summary = mapping.sorted { $0.key.rawValue < $1.key.rawValue }.map { "\($0.key.rawValue)=\($0.value)" }.joined(separator: ",")
-            let report = CSVImportReport(id: nextIdentifier(), importedCount: created + kept, updatedCount: updated, skippedCount: skipped, duplicateKeptCount: kept, invalidCount: invalidCount, sourceBasename: sourceBasename, mappingSummary: summary, createdAt: commandNow)
+            let report = CSVImportReport(id: nextIdentifier(), importedCount: created, updatedCount: updated, skippedCount: skipped, duplicateKeptCount: kept, invalidCount: invalidCount, sourceBasename: sourceBasename, mappingSummary: summary, createdAt: commandNow)
             try database.transaction {
                 try database.execute("INSERT INTO import_reports (id, imported_count, updated_count, skipped_count, duplicate_kept_count, invalid_count, source_basename, mapping_summary, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", values: [.text(report.id), .integer(Int64(report.importedCount)), .integer(Int64(report.updatedCount)), .integer(Int64(report.skippedCount)), .integer(Int64(report.duplicateKeptCount)), .integer(Int64(report.invalidCount)), .text(report.sourceBasename), .text(report.mappingSummary), .real(commandNow.timeIntervalSince1970)])
                 for planRow in rows {
                     if planRow.decision == .skip {
                         if failBeforeActivityInsert { throw WorkspaceStoreError.injectedFailure }
-                        try appendActivity(kind: "csv_duplicate_skipped", opportunityID: nil, occurredAt: commandNow)
                         try appendActivity(kind: "csv_import_row_\(planRow.row.sourceRow)_skipped", opportunityID: nil, occurredAt: commandNow)
                         try insertImportReportRow(reportID: report.id, planRow: planRow, outcome: "skipped", opportunityID: nil)
                         continue
@@ -136,7 +136,6 @@ final class WorkspaceStore {
                     if planRow.decision == .updateSelectedFields, let candidateID = planRow.candidateID {
                         try applyImportUpdate(id: candidateID, row: planRow, commandNow: commandNow)
                         if failBeforeActivityInsert { throw WorkspaceStoreError.injectedFailure }
-                        try appendActivity(kind: "csv_import_updated", opportunityID: candidateID, occurredAt: commandNow)
                         try appendActivity(kind: "csv_import_row_\(planRow.row.sourceRow)_updated", opportunityID: candidateID, occurredAt: commandNow)
                         try insertImportReportRow(reportID: report.id, planRow: planRow, outcome: "updated", opportunityID: candidateID)
                         continue
@@ -146,7 +145,6 @@ final class WorkspaceStore {
                     try database.execute("INSERT INTO opportunities (id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes, compensation, location, work_arrangement, application_date, response_state, stage_changed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", values: opportunityValues(opportunity))
                     if !opportunity.nextAction.isEmpty { try database.execute("INSERT INTO task_reminders (id, opportunity_id, title, due_at) VALUES (?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(opportunity.id), .text(opportunity.nextAction), opportunity.dueAt.map { .real($0.timeIntervalSince1970) } ?? .null]) }
                     if failBeforeActivityInsert { throw WorkspaceStoreError.injectedFailure }
-                    try appendActivity(kind: planRow.decision == .keepSeparate ? "csv_duplicate_kept" : "csv_imported", opportunityID: opportunity.id, occurredAt: commandNow)
                     try appendActivity(kind: "csv_import_row_\(planRow.row.sourceRow)_\(planRow.decision == .keepSeparate ? "kept_separate" : "created")", opportunityID: opportunity.id, occurredAt: commandNow)
                     try database.execute("INSERT INTO opportunity_stage_history (id, opportunity_id, from_stage, to_stage, occurred_at) VALUES (?, ?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(opportunity.id), .null, .text(opportunity.stage.rawValue), .real(opportunity.stageChangedAt!.timeIntervalSince1970)])
                     if opportunity.responseState != .noResponseRecorded, let responseDate = command.responseEffectiveDate { try database.execute("INSERT INTO opportunity_response_history (id, opportunity_id, from_state, to_state, occurred_at) VALUES (?, ?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(opportunity.id), .text(ResponseState.noResponseRecorded.rawValue), .text(opportunity.responseState.rawValue), .real(responseDate.timeIntervalSince1970)]) }
@@ -667,8 +665,10 @@ final class WorkspaceStore {
     }
 
     private func selectedFieldsAreCoupled(_ fields: Set<CSVImportField>) -> Bool {
-        let pairs: [(CSVImportField, CSVImportField)] = [(.stage, .stageDate), (.responseState, .responseDate), (.nextAction, .dueDate)]
-        return pairs.allSatisfy { fields.contains($0.0) == fields.contains($0.1) }
+        if fields.contains(.stageDate) && !fields.contains(.stage) { return false }
+        if fields.contains(.dueDate) && !fields.contains(.nextAction) { return false }
+        if fields.contains(.responseDate) != fields.contains(.responseState) { return false }
+        return true
     }
 
     private func applyImportUpdate(id: String, row: CSVImportPlanRow, commandNow: Date) throws {

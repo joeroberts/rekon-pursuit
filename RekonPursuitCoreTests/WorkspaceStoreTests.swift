@@ -626,7 +626,7 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(report.skippedCount, 1)
         XCTAssertEqual(try store.importReports(), [report])
         XCTAssertEqual(try store.opportunities().map(\.title), ["Product Manager", "Director"])
-        XCTAssertEqual(try store.activityEvents().suffix(2).map(\.kind), ["csv_duplicate_skipped", "csv_imported"])
+        XCTAssertEqual(try store.activityEvents().suffix(3).map(\.kind), ["csv_import_row_2_skipped", "csv_import_row_3_created", "csv_import_batch_completed"])
     }
 
     func testCSVSelectedFieldUpdatePreservesUnselectedExistingFields() throws {
@@ -644,7 +644,7 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(updated.notes, "Keep this")
     }
 
-    func testCSVCandidateCannotBeSilentlyCreatedAndUpdateNeedsCoupledFields() throws {
+    func testCSVCandidateCannotBeSilentlyCreatedAndRejectsDateOnlySelection() throws {
         let store = try makeStore()
         _ = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
         let preview = try CSVOpportunityImporter.preview(data: Data("title,company,stage,stage date\nProduct Manager,Rekon Labs,Screening,2026-08-01\n".utf8))
@@ -652,8 +652,20 @@ final class WorkspaceStoreTests: XCTestCase {
         plan[0].decision = .create
         XCTAssertThrowsError(try store.importCSV(plan, invalidCount: 0))
         plan[0].decision = .updateSelectedFields
-        plan[0].selectedFields = [.stage]
+        plan[0].selectedFields = [.stageDate]
         XCTAssertThrowsError(try store.importCSV(plan, invalidCount: 0))
+    }
+
+    func testCSVBlankMappedFieldCannotClearExistingValueOrTaskDueDate() throws {
+        let store = try makeStore()
+        let existing = try store.create(CreateOpportunity(title: "Role", company: "Rekon", nextAction: "Follow up", dueAt: now, notes: "Keep"))
+        let preview = try CSVOpportunityImporter.preview(data: Data("title,company,notes,next action,due date\nRole,Rekon,,,\n".utf8))
+        var plan = try store.csvImportPlan(for: preview)
+        plan[0].decision = .updateSelectedFields
+        plan[0].selectedFields = [.notes, .nextAction]
+        XCTAssertThrowsError(try store.importCSV(plan, invalidCount: 0))
+        XCTAssertEqual(try store.opportunities().first(where: { $0.id == existing.id })?.notes, "Keep")
+        XCTAssertEqual(try store.latestTask(forOpportunityID: existing.id)?.dueAt, now)
     }
 
     func testContactInteractionIsStoredWithAnExplicitlyLinkedOpportunityAndActivityEvent() throws {

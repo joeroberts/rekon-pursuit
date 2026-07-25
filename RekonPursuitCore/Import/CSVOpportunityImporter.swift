@@ -40,10 +40,14 @@ struct CSVImportPlanRow: Equatable, Identifiable {
     let row: CSVImportRow
     let candidateID: String?
     let duplicateRationale: String?
+    let candidateTitle: String?
+    let candidateCompany: String?
+    let candidateValues: [CSVImportField: String]
     var decision: CSVDuplicateDecision?
     var selectedFields: Set<CSVImportField> = []
     var id: Int { row.id }
     var isDuplicate: Bool { candidateID != nil }
+    init(row: CSVImportRow, candidateID: String?, duplicateRationale: String?, candidateTitle: String? = nil, candidateCompany: String? = nil, candidateValues: [CSVImportField: String] = [:], decision: CSVDuplicateDecision?) { self.row = row; self.candidateID = candidateID; self.duplicateRationale = duplicateRationale; self.candidateTitle = candidateTitle; self.candidateCompany = candidateCompany; self.candidateValues = candidateValues; self.decision = decision }
 }
 
 struct CSVImportReport: Equatable {

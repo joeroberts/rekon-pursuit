@@ -613,6 +613,13 @@ final class WorkspaceViewModel: ObservableObject {
         if selected { csvImportPlan[index].selectedFields.insert(field) } else { csvImportPlan[index].selectedFields.remove(field) }
     }
 
+    func openImportedOpportunity(_ id: String) {
+        guard opportunities.contains(where: { $0.id == id }) else { return }
+        selectedOpportunityID = id
+        loadSelectedOpportunity()
+        statusMessage = "Opened the local opportunity from the import report."
+    }
+
     private func apply(_ state: WorkspaceOpenState) {
         if case .ready = state {
             // A ready state replaces its store below.

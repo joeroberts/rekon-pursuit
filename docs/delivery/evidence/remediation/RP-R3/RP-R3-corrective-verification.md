@@ -10,5 +10,7 @@ Focused verification passed:
 - `testVersionSixteenToSeventeenMigrationAndFailureKeepSnapshot`: real v16 schema migrates to v17; injected v17 failure leaves the v16 schema/data and verified snapshot.
 - `testMixedImportFailureLeavesPriorReportAndOpportunityAfterReopen`: injected import failure rolls back the new batch; a prior opportunity and completed report survive close/reopen unchanged.
 - CSV selected-field decision tests remain green.
+- Blank mapped cells are rejected at both UI selection and store-command boundaries; they cannot clear an existing field or task due date.
+- The final R3 audit contains exactly one redacted source-row/outcome event for each material row plus one batch-completed event.
 
 Deferred scope remains RP-R3a only: raw-file drafts and Undo Import.

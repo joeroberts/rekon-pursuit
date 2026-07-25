@@ -125,7 +125,7 @@ struct ContentView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Row \(row.id): \(row.row.opportunity!.title) · \(row.row.opportunity!.company)")
                                 if row.isDuplicate {
-                                    Text("Possible duplicate — \(row.duplicateRationale ?? "local match").")
+                                    Text("Possible duplicate: \(row.candidateTitle ?? "") · \(row.candidateCompany ?? "") — \(row.duplicateRationale ?? "local match").")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                     Picker("Duplicate decision for row \(row.id)", selection: Binding(
@@ -139,8 +139,11 @@ struct ContentView: View {
                                     }
                                     if row.decision == .updateSelectedFields {
                                         Text("Before → CSV (select every field you intend to replace)").font(.caption).foregroundStyle(.secondary)
-                                        ForEach(CSVImportField.allCases.filter { !$0.required && (row.row.values[$0]?.isEmpty == false || [.stageDate, .responseDate, .dueDate].contains($0)) }) { field in
-                                            Toggle("Update \(field.label)", isOn: Binding(get: { row.selectedFields.contains(field) }, set: { model.setCSVSelectedField(field, selected: $0, for: row.id) }))
+                                        ForEach(CSVImportField.allCases.filter { !$0.required && row.row.values[$0]?.isEmpty == false }) { field in
+                                            VStack(alignment: .leading) {
+                                                Text("\(field.label): \(row.candidateValues[field] ?? "—") → \(row.row.values[field] ?? "—")").font(.caption)
+                                                Toggle("Update \(field.label)", isOn: Binding(get: { row.selectedFields.contains(field) }, set: { model.setCSVSelectedField(field, selected: $0, for: row.id) }))
+                                            }
                                         }
                                     }
                                 }
@@ -164,7 +167,7 @@ struct ContentView: View {
                                 Text("Row \(row.sourceRow): \(row.outcome)")
                                 if !row.reason.isEmpty { Text(row.reason).font(.caption).foregroundStyle(.secondary) }
                                 if !row.duplicateRationale.isEmpty { Text(row.duplicateRationale).font(.caption).foregroundStyle(.secondary) }
-                                if let opportunityID = row.opportunityID { Text("Local opportunity: \(opportunityID)").font(.caption).foregroundStyle(.secondary) }
+                                if let opportunityID = row.opportunityID { Button("Open resulting opportunity") { model.openImportedOpportunity(opportunityID) }.font(.caption) }
                             }
                         }
                     }
