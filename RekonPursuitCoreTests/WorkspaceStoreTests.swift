@@ -57,6 +57,7 @@ final class WorkspaceStoreTests: XCTestCase {
                 [.integer(15), .text(WorkspaceMigrations.versionFifteenChecksum)]
                 , [.integer(16), .text(WorkspaceMigrations.versionSixteenChecksum)]
                 , [.integer(17), .text(WorkspaceMigrations.versionSeventeenChecksum)]
+                , [.integer(18), .text(WorkspaceMigrations.versionEighteenChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
@@ -647,6 +648,9 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(updated.compensation, "150k")
         XCTAssertEqual(updated.jobURL, "https://jobs.example.com/old")
         XCTAssertEqual(updated.notes, "Keep this")
+        let reportRow = try XCTUnwrap(try store.importReportRows(for: report.id).first)
+        XCTAssertEqual(reportRow.outcome, "updated")
+        XCTAssertTrue(reportRow.reason.contains("Selected fields: Compensation"))
     }
 
     func testCSVCandidateCannotBeSilentlyCreatedAndRejectsDateOnlySelection() throws {
