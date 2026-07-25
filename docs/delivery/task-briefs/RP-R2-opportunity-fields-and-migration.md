@@ -31,36 +31,49 @@ Advance `WorkspaceMigrations.currentVersion` from 15 to 16 in one verified
 transaction/snapshot migration. Add nullable `compensation`, `location`, and
 `application_date`; add non-null `work_arrangement` defaulting to
 `Not specified`, non-null `response_state` defaulting to `No response
-recorded`, and nullable `stage_changed_at`. Backfill legacy
+recorded`, and nullable `stage_changed_at`. `work_arrangement` accepts only
+the persisted values `Not specified`, `On-site`, `Hybrid`, and `Remote`;
+unknown database values fail safely as unreadable data rather than silently
+becoming another value. Backfill legacy
 `stage_changed_at = created_at`; do not manufacture response-history or
 activity rows for legacy data. Record a version-16 checksum in
 `migration_history`; failed migration retains the existing verified snapshot
 and reports the existing safe-open failure state.
 
 Add `opportunity_response_history(id, opportunity_id, from_state,
-to_state, occurred_at)` with an opportunity/time index. It records only an
+to_state, occurred_at)` with index `(opportunity_id, occurred_at DESC, id
+DESC)` and query ordering `occurred_at DESC, id DESC`. It records only an
 explicit response-state change, never a view/load or migration. The response
 state set is fixed for MVP: `No response recorded`, `Awaiting response`,
 `Response received`, and `Declined`. Response state never changes pipeline
-stage, tasks, or next action.
+stage, tasks, or next action. The response effective date is explicitly
+provided by the user when changing response state; it is not inferred from
+the save time.
 
 `Opportunity` and `CreateOpportunity` gain default-safe properties for these
 fields. The create/update store command trims text, preserves absent optional
 dates, and commits the record change, stage history when the stage changes,
 response history when the response state changes, and corresponding activity
 events in one transaction. A stage change writes its user-selected
-`stage_changed_at`; a metadata-only edit preserves it. Use
+`stage_changed_at`; a metadata-only edit (including applying then clearing an
+application date) preserves it and writes no stage/response history. Use
 `opportunity_response_changed` for a response-state change and retain the
 existing `opportunity_stage_changed` / `opportunity_updated` meanings. One
-save may legitimately emit both distinct material-change events.
+save may legitimately emit both distinct material-change events. The existing
+quick `changeStage` path must call the same stage-effective-date/history logic
+with its `now` value; CSV-created opportunities use `CreateOpportunity`'s R2
+defaults only and do not acquire mapping/update behavior.
 
 ## UI decisions
 
 In the existing Add opportunity and selected-record forms, present a compact
 “Job details” group: Compensation (optional free text), Location (optional),
 Work arrangement picker, Applied date toggle/date picker, current response
-picker, and Status changed date picker. Default status date for a new record
-is today; the user can change it before saving. Show the selected record’s
+picker, a Response received date picker when `Response received` is selected
+(and a response-status date picker for the other non-default response states),
+and a **Stage changed date** picker. Default stage date for a new record is
+today; the user can change it before saving. The stage-date control affects
+only pipeline stage history; response dates affect only response history. Show the selected record’s
 response history, newest first, with state and date; its empty state says no
 response has been recorded. Keep stage and next-action controls where they
 are. The data is local-only and uses plain-language labels, not color alone.
@@ -75,20 +88,24 @@ are. The data is local-only and uses plain-language labels, not color alone.
    updates. Test fresh creation, relaunch/readback, and the existing
    contact-opportunity query so no projection drops fields.
 2. **Atomic editing and history.** First add failing store tests that create
-   and update every new field, change response state twice, and change stage
-   with an explicit status date. Assert exact response-history order,
+   and update every new field, change response state twice with explicit
+   response effective dates (including identical-date IDs/tie ordering), and
+   change stage with an explicit stage date. Assert exact response-history order,
    stage-history date, expected activity kinds, preserved task behavior, and
    rollback leaves neither field change nor history/event on an injected
    failure. Implement the smallest command/store changes to pass.
 3. **View-model and forms.** First add focused view-model tests covering new
-   draft defaults, selected-record loading, save, refresh/relaunch, and the
-   response-history empty/nonempty states. Add the bindings and fields to the
+   draft defaults, selected-record loading, save, application-date
+   save→clear→reopen, and the response-history empty/nonempty states. Assert
+   application-date clearing creates only the normal metadata-update activity,
+   never a response or stage-history row/event. Add the bindings and fields to the
    existing forms; no new page or shell API. Verify disabled workspace-gate
    behavior still prevents mutation.
 4. **Focused acceptance.** Build Debug macOS and run the focused core and
    view-model tests. In the existing isolated temporary app: create a
    synthetic opportunity with all fields; save; edit compensation, response,
-   and status date; relaunch; confirm values and response history persist;
+   Response received date, and Stage changed date; relaunch; confirm values
+   and response history persist;
    confirm Pipeline and Needs Attention still refresh. Record only synthetic
    data and no local paths.
 
@@ -98,8 +115,9 @@ are. The data is local-only and uses plain-language labels, not color alone.
   empty optional values, `Not specified`, `No response recorded`, a status
   date equal to creation date, and no invented response rows/events.
 - New and edited values persist through store reopen/relaunch. Response
-  history is chronological, immutable, and local; saving metadata alone
-  creates neither response nor stage history.
+  history is deterministically newest-first by `occurred_at DESC, id DESC`,
+  immutable, and local; saving metadata alone creates neither response nor
+  stage history.
 - Every material response/stage change has an atomic local activity event;
   existing stage/task/Needs Attention semantics remain unchanged.
 - Both forms expose the fields and history with usable empty/default states.
@@ -112,10 +130,11 @@ are. The data is local-only and uses plain-language labels, not color alone.
 
 - SQLite projections currently enumerate opportunity columns in several
   queries; the implementer must update every projection and mapper together.
-- “Status change date” is recorded as the effective date of the current
-  pipeline stage, not an invented response timestamp. This is the smallest
-  reversible interpretation of the approved “application/status dates”
-  requirement; response changes carry their own user-selected history date.
+- “Stage changed date” is the effective date of the current pipeline stage,
+  never a response timestamp. The separately explicit Response received date
+  is the user-selected effective date for that response-history event. This
+  is the smallest reversible interpretation of the approved
+  “application/status dates” requirement.
 - Fresh Implementer → separate Code Reviewer and QA verifier → Architect
   review → TPM/Delivery acceptance. Security/Privacy review is not required
   unless implementation expands storage scope, entitlements, or data egress.
