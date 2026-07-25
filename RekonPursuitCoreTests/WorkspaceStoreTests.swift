@@ -603,6 +603,18 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(preview.invalidRowCount, 1)
     }
 
+    func testCSVPreviewUsesOnlyTheCRLFHeaderRecordForMappingChoices() throws {
+        let csv = "Tier,Company,Title,Location,Resume Variant,Employer Job Board URL,Verification\r\nTier 1,Altana,Senior Director,Boston / Remote,Platform/Cloud Director,https://example.com/jobs/1,Exact employer posting\r\n"
+
+        let preview = try CSVOpportunityImporter.preview(data: Data(csv.utf8))
+
+        XCTAssertEqual(preview.headers, ["Tier", "Company", "Title", "Location", "Resume Variant", "Employer Job Board URL", "Verification"])
+        XCTAssertEqual(preview.rawRows.count, 1)
+        XCTAssertEqual(preview.rawRows[0], ["Tier 1", "Altana", "Senior Director", "Boston / Remote", "Platform/Cloud Director", "https://example.com/jobs/1", "Exact employer posting"])
+        XCTAssertEqual(preview.mapping[.title], 2)
+        XCTAssertEqual(preview.mapping[.company], 1)
+    }
+
     func testCSVPreviewSuggestsNonstandardHeadersAndValidatesDueDateCoupling() throws {
         let preview = try CSVOpportunityImporter.preview(data: Data("Role,Employer,Follow up,Due date\n\"Product, Platform\",Rekon Labs,Email recruiter,2026-08-01\nDirector,Rekon Labs,,2026-08-02\n".utf8))
         XCTAssertEqual(preview.mapping[.title], 0)
