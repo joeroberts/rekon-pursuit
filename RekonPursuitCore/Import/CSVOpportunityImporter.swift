@@ -57,10 +57,11 @@ struct CSVImportReport: Equatable {
     let skippedCount: Int
     let duplicateKeptCount: Int
     let invalidCount: Int
+    let failedCount: Int
     let sourceBasename: String
     let mappingSummary: String
     let createdAt: Date
-    init(id: String, importedCount: Int, updatedCount: Int = 0, skippedCount: Int, duplicateKeptCount: Int, invalidCount: Int, sourceBasename: String = "", mappingSummary: String = "", createdAt: Date) { self.id = id; self.importedCount = importedCount; self.updatedCount = updatedCount; self.skippedCount = skippedCount; self.duplicateKeptCount = duplicateKeptCount; self.invalidCount = invalidCount; self.sourceBasename = sourceBasename; self.mappingSummary = mappingSummary; self.createdAt = createdAt }
+    init(id: String, importedCount: Int, updatedCount: Int = 0, skippedCount: Int, duplicateKeptCount: Int, invalidCount: Int, failedCount: Int = 0, sourceBasename: String = "", mappingSummary: String = "", createdAt: Date) { self.id = id; self.importedCount = importedCount; self.updatedCount = updatedCount; self.skippedCount = skippedCount; self.duplicateKeptCount = duplicateKeptCount; self.invalidCount = invalidCount; self.failedCount = failedCount; self.sourceBasename = sourceBasename; self.mappingSummary = mappingSummary; self.createdAt = createdAt }
 }
 
 struct CSVImportReportRow: Equatable, Identifiable {
@@ -102,7 +103,7 @@ enum CSVOpportunityImporter {
             for field in [.dueDate, .applicationDate, .responseDate, .stageDate] as [CSVImportField] { if let value = values[field], !value.isEmpty, parsed(field) == nil { reasons.append("\(field.label) must use YYYY-MM-DD.") } }
             if let due = values[.dueDate], !due.isEmpty, values[.nextAction, default: ""].isEmpty { reasons.append("Due date requires a Next action.") }
             let response = ResponseState(rawValue: values[.responseState] ?? "") ?? .noResponseRecorded
-            if response != .noResponseRecorded && parsed(.responseDate) == nil { reasons.append("A response status date is required for this response.") }
+            if !(values[.responseState] ?? "").isEmpty && parsed(.responseDate) == nil { reasons.append("A response status date is required for this response.") }
             let opportunity = reasons.isEmpty ? CreateOpportunity(title: values[.title]!, company: values[.company]!, stage: PipelineStage(rawValue: values[.stage] ?? "") ?? .saved, nextAction: values[.nextAction] ?? "", dueAt: parsed(.dueDate), jobURL: values[.jobURL] ?? "", jobDescription: values[.jobDescription] ?? "", notes: values[.notes] ?? "", compensation: values[.compensation], location: values[.location], workArrangement: WorkArrangement(rawValue: values[.workArrangement] ?? "") ?? .notSpecified, applicationDate: parsed(.applicationDate), responseState: response, responseEffectiveDate: parsed(.responseDate), stageChangedAt: parsed(.stageDate)) : nil
             return CSVImportRow(id: offset + 2, sourceRow: offset + 2, values: values, reasons: reasons, opportunity: opportunity)
         }

@@ -12,5 +12,6 @@ Focused verification passed:
 - CSV selected-field decision tests remain green.
 - Blank mapped cells are rejected at both UI selection and store-command boundaries; they cannot clear an existing field or task due date.
 - The final R3 audit contains exactly one redacted source-row/outcome event for each material row plus one batch-completed event.
+- Exact canonicalized job URL deterministically takes precedence over title/company matching; ties use ascending local opportunity ID.
 
 Deferred scope remains RP-R3a only: raw-file drafts and Undo Import.

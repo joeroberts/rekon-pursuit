@@ -159,7 +159,7 @@ struct ContentView: View {
                         Divider()
                         Text("Last import report")
                             .font(.headline)
-                        Text("\(report.sourceBasename) · Created \(report.importedCount) · updated \(report.updatedCount) · skipped \(report.skippedCount) · kept separate \(report.duplicateKeptCount) · invalid \(report.invalidCount)")
+                        Text("\(report.sourceBasename) · Created \(report.importedCount) · updated \(report.updatedCount) · kept separate \(report.duplicateKeptCount) · skipped \(report.skippedCount) · invalid \(report.invalidCount) · failed \(report.failedCount)")
                             .foregroundStyle(.secondary)
                         Text("Mapping: \(report.mappingSummary)").font(.caption).foregroundStyle(.secondary)
                         ForEach(model.csvImportReportRows) { row in

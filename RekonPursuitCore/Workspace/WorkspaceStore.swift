@@ -96,14 +96,13 @@ final class WorkspaceStore {
         try synchronized {
             return try preview.rows.filter(\.isValid).map { row in
                 let command = row.opportunity!
-                let candidates = try database.rows(opportunitySelect + " FROM opportunities WHERE deleted_at IS NULL")
-                    .map(opportunity(from:)).filter { existing in
-                        if !command.jobURL.isEmpty, !existing.jobURL.isEmpty, command.jobURL.lowercased() == existing.jobURL.lowercased() { return true }
-                        return normalizedOpportunityKey(title: command.title, company: command.company) == normalizedOpportunityKey(title: existing.title, company: existing.company)
-                    }
-                let candidate = candidates.first
+                let all = try database.rows(opportunitySelect + " FROM opportunities WHERE deleted_at IS NULL").map(opportunity(from:))
+                let canonicalURL = command.jobURL.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                let urlCandidates = canonicalURL.isEmpty ? [] : all.filter { !$0.jobURL.isEmpty && $0.jobURL.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == canonicalURL }.sorted { $0.id < $1.id }
+                let titleCandidates = all.filter { normalizedOpportunityKey(title: command.title, company: command.company) == normalizedOpportunityKey(title: $0.title, company: $0.company) }.sorted { $0.id < $1.id }
+                let candidate = (urlCandidates.isEmpty ? titleCandidates : urlCandidates).first
                 let rationale: String? = candidate.map { !command.jobURL.isEmpty && command.jobURL.lowercased() == $0.jobURL.lowercased() ? "Exact job URL" : "Matching title and company" }
-                let values: [CSVImportField: String] = candidate.map { [.jobURL: $0.jobURL, .jobDescription: $0.jobDescription, .notes: $0.notes, .compensation: $0.compensation ?? "", .location: $0.location ?? "", .workArrangement: $0.workArrangement.rawValue, .stage: $0.stage.rawValue, .nextAction: $0.nextAction, .applicationDate: $0.applicationDate?.ISO8601Format().prefix(10).description ?? "", .responseState: $0.responseState.rawValue] } ?? [:]
+                let values: [CSVImportField: String] = candidate.map { [.jobURL: $0.jobURL, .jobDescription: $0.jobDescription, .notes: $0.notes, .compensation: $0.compensation ?? "", .location: $0.location ?? "", .workArrangement: $0.workArrangement.rawValue, .stage: $0.stage.rawValue, .stageDate: $0.stageChangedAt?.ISO8601Format().prefix(10).description ?? "", .nextAction: $0.nextAction, .dueDate: $0.dueAt?.ISO8601Format().prefix(10).description ?? "", .applicationDate: $0.applicationDate?.ISO8601Format().prefix(10).description ?? "", .responseState: $0.responseState.rawValue] } ?? [:]
                 return CSVImportPlanRow(row: row, candidateID: candidate?.id, duplicateRationale: rationale, candidateTitle: candidate?.title, candidateCompany: candidate?.company, candidateValues: values, decision: candidate == nil ? .create : nil)
             }
         }
