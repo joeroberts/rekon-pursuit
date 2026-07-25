@@ -1,6 +1,6 @@
 # RP-R2 — Opportunity fields and safe migration
 
-**State:** Released for implementation  
+**State:** Corrective pass required before acceptance
 **Depends on:** `RP-R1b` accepted  
 **Blocks:** `RP-R3` and `RP-R5`
 
@@ -150,6 +150,59 @@ are. The data is local-only and uses plain-language labels, not color alone.
   `docs/delivery/evidence/remediation/RP-R2/`; include focused command
   results and a redacted isolated manual-smoke record. No coverage target or
   hosted-test expansion is introduced.
+
+## Corrective pass — required before R2 acceptance
+
+Independent implementation review rejected `2851b84` for two correctness
+defects and missing focused coverage. This pass remains entirely inside R2;
+it neither opens R3 nor alters CSV mapping/import decisions.
+
+1. **Clock and date-command contract.** Replace the stored initialization
+   timestamp with an injected clock sampled once at the beginning of each
+   mutating store command. All audit, quick-stage, task, and import timestamps
+   produced by that one command use its one sampled value. The form save
+   command must reject a stage change with no `stageChangedAt`, and reject a
+   response-state change with no `responseEffectiveDate`; it must perform no
+   write in either case. Programmatic CSV creation remains on its existing
+   default-only path and receives no mapping behavior. Add focused tests with
+   a stepwise injected clock proving later commands do not reuse construction
+   time and that each command has internally identical audit timestamps.
+2. **Form lifecycle and explicit effective dates.** After a successful Add
+   save, reset `applicationDate`, `responseEffectiveDate`, and
+   `stageChangedAt` to fresh current defaults in addition to resetting their
+   toggles/state. Do not reset them on failed save. Add view-model tests that
+   create twice with different selected dates and prove the second draft does
+   not inherit the first. Add store/view-model tests for response reset to
+   `No response recorded` with its explicit status date; application-date
+   save → clear → reopen with only `opportunity_updated`; and a form stage
+   change that persists the selected date rather than action time.
+3. **Migration and atomicity fixtures.** Replace the synthetic
+   “migrate-to-16, then set the version back to 15” failure test with a real
+   encrypted version-15 fixture containing a legacy opportunity and its
+   version-15 migration history. Inject the version-16 failure against that
+   fixture; assert schema/version/data remain version 15 and the verified
+   snapshot is retained. Add an update-path injected-failure test that proves
+   the opportunity row, task replacement, stage/response history, and every
+   activity event all roll back together.
+4. **Deterministic histories.** Define stage history as chronological
+   effective-date order, `occurred_at ASC, id ASC`; response history remains
+   newest first, `occurred_at DESC, id DESC`. Add equal-effective-date tests
+   for both queries. This replaces reliance on SQLite `rowid` and makes a
+   user-selected historical stage date deterministic.
+5. **QA-failure disposition.** The stage-history ordering failure is
+   R2-caused: selected effective dates exposed the unstable `rowid` tie
+   behavior, so it is fixed by item 4. The import-report equality failure is
+   not R2-caused: R2 did not change the report schema, report timestamp
+   contract, or view-model restore path. It is a pre-existing precision-brittle
+   test and must be recorded for a separately released test-hygiene task; do
+   not change import behavior or expand R2 to address it.
+
+The corrective implementer must first add the failing tests above, then make
+the smallest changes in the store, migrations, and view model. Required final
+evidence is a Debug build, the focused correction suite, and the existing
+isolated manual smoke extended to create/edit/relaunch all R2 fields, reset a
+response, clear an application date, set a stage date, and confirm Pipeline
+and Needs Attention still refresh.
 
 ## Risks and gates
 
