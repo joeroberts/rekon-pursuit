@@ -57,6 +57,36 @@ struct ContentView: View {
             Text("Local job tracker")
                 .foregroundStyle(.secondary)
 
+            if !model.workspaceReady {
+                GroupBox("Local workspace") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(model.statusMessage)
+                        if model.canCreateWorkspace {
+                            Button("Create local workspace") {
+                                model.createWorkspaceIfNeeded()
+                            }
+                            .accessibilityIdentifier("create-local-workspace")
+                        } else if model.workspaceRequiresRecovery {
+                            Text("Recovery is required before this workspace can be opened. Rekon Pursuit kept the existing local material unchanged and will not create over it.")
+                                .foregroundStyle(.secondary)
+                            Button("Recheck local workspace") {
+                                model.retryWorkspaceOpen()
+                            }
+                            .accessibilityIdentifier("recheck-local-workspace")
+                        } else {
+                            Button("Retry opening workspace") {
+                                model.retryWorkspaceOpen()
+                            }
+                            .accessibilityIdentifier("retry-local-workspace")
+                        }
+                        Text("CSV import becomes available after the local workspace is ready.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .accessibilityIdentifier("workspace-gate")
+            }
+
             Picker("Workspace", selection: $page) {
                 ForEach(TrackerPage.allCases, id: \.self) { page in
                     Text(page.rawValue).tag(page)
@@ -94,13 +124,6 @@ struct ContentView: View {
             }
             }
 
-            if page == .add && model.canCreateWorkspace {
-                Button("Create new local workspace") {
-                    model.createWorkspaceIfNeeded()
-                }
-                .accessibilityIdentifier("create-local-workspace")
-            }
-
             if page == .csvImport {
                 GroupBox("Import opportunities") {
                     Text("Use a UTF-8 CSV with title and company columns. Imported rows stay on this Mac.")
@@ -108,6 +131,11 @@ struct ContentView: View {
                     Button("Choose CSV file…") { showsCSVImporter = true }
                         .disabled(!model.workspaceReady)
                         .accessibilityIdentifier("choose-csv-file")
+                    if !model.workspaceReady {
+                        Text("Create or recover the local workspace before choosing a CSV file.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
 
                     if let preview = model.csvPreview {
                         Text("\(preview.rows.count) valid row\(preview.rows.count == 1 ? "" : "s") · \(preview.invalidRowCount) invalid row\(preview.invalidRowCount == 1 ? "" : "s") skipped")

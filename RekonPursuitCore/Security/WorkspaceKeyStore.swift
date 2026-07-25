@@ -11,6 +11,17 @@ protocol WorkspaceKeyStore: AnyObject {
     func deletePendingWorkspaceKey() throws
 }
 
+/// This namespace is compiled with the application. It is deliberately not read
+/// from preferences, arguments, or environment variables, which prevents a
+/// launch configuration from redirecting production key material.
+enum WorkspaceKeychainConfiguration {
+    static let service: String = {
+        let productionBundleID = "com.rekonlabs.RekonPursuit"
+        let compiledBundleID = Bundle.main.bundleIdentifier ?? productionBundleID
+        return "\(compiledBundleID).workspace"
+    }()
+}
+
 enum WorkspaceKeyStoreError: Error {
     case locked
     case denied
@@ -18,7 +29,7 @@ enum WorkspaceKeyStoreError: Error {
 }
 
 final class KeychainWorkspaceKeyStore: WorkspaceKeyStore {
-    private let service = "com.rekonlabs.RekonPursuit.workspace"
+    private let service = WorkspaceKeychainConfiguration.service
     private let account = "primary-workspace-key"
     private let pendingAccount = "pending-workspace-key"
 

@@ -1,0 +1,44 @@
+# RP-R1a isolated runtime smoke — implementer evidence
+
+**Status:** Complete — isolation preflight and the required visible UI workflow
+passed.
+
+## Superseded evidence
+
+The prior pass claims were unsupported and are superseded. No prior claim is
+used as evidence for workspace creation, CSV reachability, or CSV preview.
+
+## 2026-07-25 isolated preflight
+
+**Temporary namespace:** `com.rekonlabs.RekonPursuit.RPR1aSmoke`
+
+| Check | Result |
+| --- | --- |
+| Temporary app compiled with its distinct namespace | Pass |
+| App sandbox entitlement present | Pass |
+| Fresh temporary sandbox container present | Pass |
+| Production legacy-workspace unchanged | Pass |
+| Production sandbox-workspace unchanged | Pass |
+| Production primary-key record unchanged | Pass |
+| Production pending-key record unchanged | Pass |
+
+The harness retains only boolean unchanged assertions. It fails when either
+workspace or either Keychain-record assertion differs. It prints no
+fingerprints, persistent paths, Keychain service/account metadata, key
+content, or fixture content, and it never modifies production namespaces.
+
+## Required UI workflow
+
+**Result: Passed by direct user observation on 2026-07-25.** Desktop Computer
+Use repeatedly failed to read the isolated temporary app after launch, so it
+did not provide the observation. The product owner completed the visible
+sequence in the already-running temporary app and confirmed the import preview:
+
+1. **Add opportunity** → **Create new local workspace**.
+2. **Import CSV** → **Choose CSV file…**.
+3. Select the repository's synthetic `r1a-smoke-import.csv` fixture.
+4. Observe the import preview.
+
+No screenshot or filesystem/Keychain identifier is retained from this manual
+observation. The preflight's redacted isolation checks passed before launch;
+the smoke is user-observed evidence, not an automation claim.

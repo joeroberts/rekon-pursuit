@@ -46,24 +46,100 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.opportunities.first?.notes, "Referral from Morgan")
     }
 
-    func testMissingKeyShowsRecoveryMessage() {
-        let model = WorkspaceViewModel(openWorkspace: { .missingKey }, createWorkspace: { throw WorkspaceStoreError.injectedFailure })
+    func testFreshLaunchShowsVisibleWorkspaceCreationState() {
+        let model = WorkspaceViewModel(openWorkspace: { .createAvailable }, createWorkspace: { throw WorkspaceStoreError.injectedFailure })
 
         model.start()
 
-        XCTAssertEqual(model.statusMessage, "Workspace key is unavailable. Create a new local workspace only if you intend to start over.")
+        XCTAssertEqual(model.statusMessage, "Create a local workspace to begin tracking opportunities.")
         XCTAssertTrue(model.canCreateWorkspace)
         XCTAssertFalse(model.workspaceReady)
     }
 
+    func testCreateFailureImmediatelyRefreshesToRecoveryRequiredState() {
+        var opens = 0
+        let model = WorkspaceViewModel(
+            openWorkspace: {
+                opens += 1
+                return opens == 1 ? .createAvailable : .recoveryRequired
+            },
+            createWorkspace: { throw WorkspaceStoreError.injectedFailure }
+        )
+
+        model.start()
+        model.createWorkspaceIfNeeded()
+
+        XCTAssertEqual(opens, 2)
+        XCTAssertTrue(model.workspaceRequiresRecovery)
+        XCTAssertFalse(model.canCreateWorkspace)
+        XCTAssertFalse(model.workspaceReady)
+        XCTAssertEqual(model.statusMessage, "Existing workspace material needs recovery. Nothing was replaced or removed.")
+    }
+
     func testExistingWorkspaceMissingKeyDoesNotOfferReplacement() {
-        let model = WorkspaceViewModel(openWorkspace: { .missingExistingKey }, createWorkspace: { throw WorkspaceStoreError.injectedFailure })
+        let model = WorkspaceViewModel(openWorkspace: { .recoveryRequired }, createWorkspace: { throw WorkspaceStoreError.injectedFailure })
 
         model.start()
 
-        XCTAssertEqual(model.statusMessage, "Workspace key is unavailable. The existing local workspace has not been replaced.")
+        XCTAssertEqual(model.statusMessage, "Existing workspace material needs recovery. Nothing was replaced or removed.")
         XCTAssertFalse(model.canCreateWorkspace)
         XCTAssertFalse(model.workspaceReady)
+        XCTAssertTrue(model.workspaceRequiresRecovery)
+    }
+
+    func testRecoveryRequiredCanBeRecheckedWithoutCreatingOrReplacingAnything() {
+        var opens = 0
+        let model = WorkspaceViewModel(
+            openWorkspace: {
+                opens += 1
+                return .recoveryRequired
+            },
+            createWorkspace: { throw WorkspaceStoreError.injectedFailure }
+        )
+
+        model.start()
+        model.retryWorkspaceOpen()
+
+        XCTAssertEqual(opens, 2)
+        XCTAssertTrue(model.workspaceRequiresRecovery)
+        XCTAssertFalse(model.canCreateWorkspace)
+        XCTAssertFalse(model.workspaceReady)
+        XCTAssertEqual(model.statusMessage, "Existing workspace material needs recovery. Nothing was replaced or removed.")
+    }
+
+    func testRecheckToRecoveryRequiredClearsLiveWorkspaceDataAndBlocksMutation() throws {
+        let store = try makeStore()
+        var opens = 0
+        let model = WorkspaceViewModel(
+            openWorkspace: {
+                opens += 1
+                return opens == 1 ? .ready(store) : .recoveryRequired
+            },
+            createWorkspace: { store }
+        )
+        model.start()
+        model.title = "Product Manager"
+        model.company = "Rekon Labs"
+        model.createOpportunity()
+        let savedOpportunity = try XCTUnwrap(model.opportunities.first)
+
+        model.retryWorkspaceOpen()
+        model.title = "Must not save"
+        model.company = "Rekon Labs"
+        model.createOpportunity()
+
+        XCTAssertFalse(model.workspaceReady)
+        XCTAssertTrue(model.workspaceRequiresRecovery)
+        XCTAssertEqual(model.opportunityCount, 0)
+        XCTAssertEqual(model.activityCount, 0)
+        XCTAssertTrue(model.opportunities.isEmpty)
+        XCTAssertTrue(model.activityEvents.isEmpty)
+        XCTAssertTrue(model.needsAttention.isEmpty)
+        XCTAssertNil(model.selectedOpportunity)
+        XCTAssertEqual(model.selectedOpportunityID, "")
+        XCTAssertEqual(try store.opportunities(), [savedOpportunity])
+        XCTAssertEqual(try store.activityEvents().map(\.kind), ["opportunity_created"])
+        XCTAssertEqual(model.statusMessage, "Create or reopen the local workspace first.")
     }
 
     func testCorruptWorkspaceDoesNotOfferReplacement() {

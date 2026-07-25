@@ -72,6 +72,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var statusMessage = "Opening local workspace…"
     @Published private(set) var canCreateWorkspace = false
     @Published private(set) var workspaceReady = false
+    @Published private(set) var workspaceRequiresRecovery = false
 
     private let openWorkspace: () throws -> WorkspaceOpenState
     private let createWorkspace: () throws -> WorkspaceStore
@@ -98,27 +99,32 @@ final class WorkspaceViewModel: ObservableObject {
         do {
             apply(try openWorkspace())
         } catch {
-            statusMessage = "The local workspace could not be opened."
+            apply(.unavailable)
         }
     }
 
     func createWorkspaceIfNeeded() {
         do {
-            store = try createWorkspace()
-            refreshCounts()
+            apply(.ready(try createWorkspace()))
             statusMessage = "Local workspace created."
-            canCreateWorkspace = false
-            workspaceReady = true
         } catch {
-            statusMessage = "The local workspace could not be created."
+            // Creation can fail after retaining database or Keychain artifacts.
+            // Re-open immediately so the UI presents the resulting safe state
+            // (normally recovery-required) instead of offering another create.
+            do {
+                apply(try openWorkspace())
+            } catch {
+                apply(.unavailable)
+            }
         }
     }
 
+    func retryWorkspaceOpen() {
+        start()
+    }
+
     func createOpportunity() {
-        guard let store else {
-            statusMessage = "Create or reopen the local workspace first."
-            return
-        }
+        guard let store = readyStore() else { return }
         do {
             _ = try store.create(CreateOpportunity(title: title, company: company, stage: stage, nextAction: nextAction, dueAt: nextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !hasDueDate ? nil : dueAt, jobURL: jobURL, jobDescription: jobDescription, notes: notes))
             title = ""
@@ -138,8 +144,9 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func deleteOpportunity(_ opportunity: Opportunity) {
+        guard let store = readyStore() else { return }
         do {
-            try store?.deleteOpportunity(id: opportunity.id)
+            try store.deleteOpportunity(id: opportunity.id)
             refreshCounts()
             statusMessage = "Opportunity deleted locally."
         } catch {
@@ -148,8 +155,9 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func complete(_ task: TaskReminder) {
+        guard let store = readyStore() else { return }
         do {
-            try store?.completeTask(id: task.id)
+            try store.completeTask(id: task.id)
             refreshCounts()
             statusMessage = "Action completed locally."
         } catch {
@@ -158,8 +166,9 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func snoozeOneDay(_ task: TaskReminder) {
+        guard let store = readyStore() else { return }
         do {
-            try store?.snoozeTask(id: task.id)
+            try store.snoozeTask(id: task.id)
             refreshCounts()
             statusMessage = "Action snoozed for one day."
         } catch {
@@ -168,8 +177,9 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func reschedule(_ task: TaskReminder, to dueAt: Date) {
+        guard let store = readyStore() else { return }
         do {
-            try store?.rescheduleTask(id: task.id, dueAt: dueAt)
+            try store.rescheduleTask(id: task.id, dueAt: dueAt)
             refreshCounts()
             statusMessage = "Action rescheduled locally."
         } catch {
@@ -178,8 +188,9 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func changeStage(_ opportunity: Opportunity, to stage: PipelineStage) {
+        guard let store = readyStore() else { return }
         do {
-            try store?.changeStage(opportunityID: opportunity.id, to: stage)
+            try store.changeStage(opportunityID: opportunity.id, to: stage)
             refreshCounts()
             statusMessage = "Stage updated locally."
         } catch {
@@ -231,8 +242,9 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func open(_ task: TaskReminder) {
+        guard let store = readyStore() else { return }
         do {
-            try store?.openTask(id: task.id)
+            try store.openTask(id: task.id)
             selectedOpportunityID = task.opportunityID
             refreshCounts()
             statusMessage = "Opened opportunity locally."
@@ -251,7 +263,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func saveSelectedOpportunity() {
-        guard let store, !selectedOpportunityID.isEmpty else { return }
+        guard let store = readyStore(), !selectedOpportunityID.isEmpty else { return }
         do {
             try store.updateOpportunity(
                 id: selectedOpportunityID,
@@ -274,12 +286,13 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func rescheduleSelectedTask() {
+        guard let store = readyStore() else { return }
         guard let task = needsAttention.first(where: { $0.opportunityID == selectedOpportunityID }) else {
             statusMessage = "Add a next action before rescheduling it."
             return
         }
         do {
-            try store?.rescheduleTask(id: task.id, dueAt: selectedDueAt)
+            try store.rescheduleTask(id: task.id, dueAt: selectedDueAt)
             refreshCounts()
             statusMessage = "Action rescheduled locally."
         } catch {
@@ -288,8 +301,9 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func createContact() {
+        guard let store = readyStore() else { return }
         do {
-            _ = try store?.createContact(contactCommand())
+            _ = try store.createContact(contactCommand())
             clearContactDraft()
             refreshCounts()
             statusMessage = "Contact saved locally."
@@ -317,7 +331,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func saveSelectedContact() {
-        guard let store, !selectedContactID.isEmpty else { return }
+        guard let store = readyStore(), !selectedContactID.isEmpty else { return }
         do {
             _ = try store.updateContact(id: selectedContactID, command: contactCommand())
             refreshCounts()
@@ -330,8 +344,9 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func deleteContact(_ contact: Contact) {
+        guard let store = readyStore() else { return }
         do {
-            try store?.deleteContact(id: contact.id)
+            try store.deleteContact(id: contact.id)
             if selectedContactID == contact.id { clearContactDraft() }
             refreshCounts()
             statusMessage = "Contact deleted locally."
@@ -341,9 +356,9 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func link(_ contact: Contact) {
-        guard !selectedOpportunityID.isEmpty else { return }
+        guard let store = readyStore(), !selectedOpportunityID.isEmpty else { return }
         do {
-            try store?.linkContact(contactID: contact.id, toOpportunityID: selectedOpportunityID)
+            try store.linkContact(contactID: contact.id, toOpportunityID: selectedOpportunityID)
             refreshCounts()
             statusMessage = "Contact linked locally."
         } catch {
@@ -352,9 +367,9 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func unlink(_ contact: Contact) {
-        guard !selectedOpportunityID.isEmpty else { return }
+        guard let store = readyStore(), !selectedOpportunityID.isEmpty else { return }
         do {
-            try store?.unlinkContact(contactID: contact.id, fromOpportunityID: selectedOpportunityID)
+            try store.unlinkContact(contactID: contact.id, fromOpportunityID: selectedOpportunityID)
             refreshCounts()
             statusMessage = "Contact unlinked locally."
         } catch {
@@ -363,7 +378,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func recordPostingCheck() {
-        guard let store, !selectedOpportunityID.isEmpty else { return }
+        guard let store = readyStore(), !selectedOpportunityID.isEmpty else { return }
         do {
             _ = try store.recordPostingCheck(RecordPostingCheck(opportunityID: selectedOpportunityID, url: selectedJobURL, status: postingStatus, evidence: postingEvidence))
             postingEvidence = ""
@@ -377,10 +392,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func exportOpportunitiesCSV() -> String? {
-        guard let store else {
-            statusMessage = "Create or reopen the local workspace first."
-            return nil
-        }
+        guard let store = readyStore() else { return nil }
         do {
             try store.recordOpportunitiesExport()
             refreshCounts()
@@ -397,8 +409,9 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func createEncryptedBackup(at url: URL) {
+        guard let store = readyStore() else { return }
         do {
-            try store?.createEncryptedBackup(at: url)
+            try store.createEncryptedBackup(at: url)
             refreshCounts()
             statusMessage = "Encrypted same-Mac backup saved locally. Keep it with access to this Mac's Keychain."
         } catch let error as LocalizedError {
@@ -409,6 +422,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func restoreEncryptedBackup(from url: URL) {
+        guard let store = readyStore() else { return }
         defer {
             if url == stagedRestoreURL {
                 try? FileManager.default.removeItem(at: url)
@@ -416,12 +430,11 @@ final class WorkspaceViewModel: ObservableObject {
             }
         }
         do {
-            try store?.close()
-            store = try restoreWorkspace(url)
-            refreshCounts()
+            try store.close()
+            apply(.ready(try restoreWorkspace(url)))
             statusMessage = "Encrypted backup restored locally."
         } catch {
-            store = nil
+            self.store = nil
             start()
             statusMessage = "The encrypted backup could not be restored. Your existing workspace was kept."
         }
@@ -448,7 +461,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func attachDocumentReference(at url: URL) {
-        guard let store, !selectedOpportunityID.isEmpty else {
+        guard let store = readyStore(), !selectedOpportunityID.isEmpty else {
             statusMessage = "Select an opportunity before attaching a document reference."
             return
         }
@@ -476,8 +489,9 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func markDocumentReferenceFinalSent(_ reference: DocumentReference) {
+        guard let store = readyStore() else { return }
         do {
-            try store?.markDocumentReferenceFinalSent(id: reference.id)
+            try store.markDocumentReferenceFinalSent(id: reference.id)
             refreshCounts()
             statusMessage = "Final-sent metadata saved locally."
         } catch {
@@ -486,7 +500,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func recordSelectedContactInteraction() {
-        guard let store, !selectedContactID.isEmpty else { return }
+        guard let store = readyStore(), !selectedContactID.isEmpty else { return }
         do {
             _ = try store.recordContactInteraction(CreateContactInteraction(
                 contactID: selectedContactID,
@@ -507,11 +521,12 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func previewCSV(at url: URL) {
+        guard let store = readyStore() else { return }
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         do {
             csvPreview = try CSVOpportunityImporter.preview(data: Data(contentsOf: url))
-            csvImportPlan = try store?.csvImportPlan(for: csvPreview!) ?? []
+            csvImportPlan = try store.csvImportPlan(for: csvPreview!)
             statusMessage = "CSV preview ready. Review before importing."
         } catch {
             csvPreview = nil
@@ -521,7 +536,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func importCSVPreview() {
-        guard let preview = csvPreview, let store else { return }
+        guard let store = readyStore(), let preview = csvPreview else { return }
         do {
             csvImportReport = try store.importCSV(csvImportPlan, invalidCount: preview.invalidRowCount)
             csvPreview = nil
@@ -534,11 +549,20 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func setCSVDecision(_ decision: CSVDuplicateDecision, for rowID: Int) {
+        guard workspaceReady, store != nil else {
+            statusMessage = "Create or reopen the local workspace first."
+            return
+        }
         guard let index = csvImportPlan.firstIndex(where: { $0.id == rowID }) else { return }
         csvImportPlan[index].decision = decision
     }
 
     private func apply(_ state: WorkspaceOpenState) {
+        if case .ready = state {
+            // A ready state replaces its store below.
+        } else {
+            clearWorkspaceDerivedState()
+        }
         switch state {
         case let .ready(store):
             self.store = store
@@ -546,31 +570,76 @@ final class WorkspaceViewModel: ObservableObject {
             statusMessage = "Local workspace ready."
             canCreateWorkspace = false
             workspaceReady = true
-        case .missingKey:
-            statusMessage = "Workspace key is unavailable. Create a new local workspace only if you intend to start over."
+            workspaceRequiresRecovery = false
+        case .createAvailable:
+            statusMessage = "Create a local workspace to begin tracking opportunities."
             canCreateWorkspace = true
             workspaceReady = false
-        case .missingExistingKey:
-            statusMessage = "Workspace key is unavailable. The existing local workspace has not been replaced."
+            workspaceRequiresRecovery = false
+        case .recoveryRequired:
+            statusMessage = "Existing workspace material needs recovery. Nothing was replaced or removed."
             canCreateWorkspace = false
             workspaceReady = false
+            workspaceRequiresRecovery = true
         case .locked:
             statusMessage = "Unlock your Mac to reopen the local workspace."
             canCreateWorkspace = false
             workspaceReady = false
+            workspaceRequiresRecovery = false
         case .denied:
             statusMessage = "Keychain access was denied. Allow access to reopen the local workspace."
             canCreateWorkspace = false
             workspaceReady = false
+            workspaceRequiresRecovery = false
         case .corrupt:
             statusMessage = "The local workspace is unreadable. It has not been replaced; keep its files intact."
             canCreateWorkspace = false
             workspaceReady = false
+            workspaceRequiresRecovery = true
         case .unavailable:
             statusMessage = "The local workspace could not be opened."
             canCreateWorkspace = false
             workspaceReady = false
+            workspaceRequiresRecovery = false
         }
+    }
+
+    private func readyStore() -> WorkspaceStore? {
+        guard workspaceReady, let store else {
+            statusMessage = "Create or reopen the local workspace first."
+            return nil
+        }
+        return store
+    }
+
+    private func clearWorkspaceDerivedState() {
+        store = nil
+        opportunityCount = 0
+        activityCount = 0
+        needsAttentionCount = 0
+        needsAttention = []
+        opportunities = []
+        activityEvents = []
+        selectedOpportunityID = ""
+        selectedStageHistory = []
+        selectedTask = nil
+        loadSelectedOpportunity()
+        contacts = []
+        selectedContacts = []
+        selectedSameEmployerContacts = []
+        selectedOpportunityInteractions = []
+        selectedContactInteractions = []
+        selectedContactOpportunities = []
+        selectedContactLastTouch = nil
+        selectedContactNextTouch = nil
+        clearContactDraft()
+        postingStatus = .stillOpen
+        postingEvidence = ""
+        selectedPostingChecks = []
+        selectedDocumentReferences = []
+        csvPreview = nil
+        csvImportPlan = []
+        csvImportReport = nil
     }
 
     private func refreshCounts() {

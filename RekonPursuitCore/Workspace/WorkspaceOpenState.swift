@@ -1,10 +1,13 @@
 import Foundation
 import Security
 
+/// The only workspace combination that is opened automatically is a database with
+/// one primary key and no interrupted-creation journal. Everything else is kept
+/// intact for an explicit recovery flow.
 enum WorkspaceOpenState: Equatable {
     case ready(WorkspaceStore)
-    case missingKey
-    case missingExistingKey
+    case createAvailable
+    case recoveryRequired
     case locked
     case denied
     case corrupt
@@ -12,12 +15,52 @@ enum WorkspaceOpenState: Equatable {
 
     static func == (lhs: WorkspaceOpenState, rhs: WorkspaceOpenState) -> Bool {
         switch (lhs, rhs) {
-        case (.ready, .ready), (.missingKey, .missingKey), (.missingExistingKey, .missingExistingKey), (.locked, .locked), (.denied, .denied), (.corrupt, .corrupt), (.unavailable, .unavailable):
+        case (.ready, .ready), (.createAvailable, .createAvailable), (.recoveryRequired, .recoveryRequired), (.locked, .locked), (.denied, .denied), (.corrupt, .corrupt), (.unavailable, .unavailable):
             true
         default:
             false
         }
     }
+}
+
+enum WorkspaceCreationPhase: String, Codable, Equatable {
+    case staging
+    case pendingWritten = "pending-written"
+    case databasePromoted = "database-promoted"
+    case primaryPromoted = "primary-promoted"
+    case cleanupPending = "cleanup-pending"
+}
+
+struct WorkspaceCreationJournal: Codable, Equatable {
+    let attemptID: String
+    let phase: WorkspaceCreationPhase
+}
+
+struct WorkspaceMaterialState: Equatable {
+    let hasDatabase: Bool
+    let hasSidecars: Bool
+    let hasJournal: Bool
+    let hasPrimaryKey: Bool
+    let hasPendingKey: Bool
+
+    var isEmpty: Bool {
+        !hasDatabase && !hasSidecars && !hasJournal && !hasPrimaryKey && !hasPendingKey
+    }
+
+    var isVerifiedReadyPair: Bool {
+        // SQLite WAL/SHM sidecars are normal while a healthy workspace is open.
+        // They are database artifacts, not interrupted-creation evidence.
+        hasDatabase && !hasJournal && hasPrimaryKey && !hasPendingKey
+    }
+}
+
+enum WorkspaceCreationFault: Error, Equatable {
+    case stagingClose
+    case pendingKeyWrite
+    case databasePromotion
+    case primaryKeyPromotion
+    case pendingKeyCleanup
+    case finalReopen
 }
 
 @MainActor
@@ -26,60 +69,81 @@ final class WorkspaceSession {
     private let keyStore: WorkspaceKeyStore
     private let newKey: @MainActor () throws -> Data
     private let now: Date
+    private let creationFault: WorkspaceCreationFault?
 
     init(
         root: URL,
         keyStore: WorkspaceKeyStore = KeychainWorkspaceKeyStore(),
         newKey: @MainActor @escaping () throws -> Data = WorkspaceSession.generateKey,
-        now: Date = .now
+        now: Date = .now,
+        creationFault: WorkspaceCreationFault? = nil
     ) {
         self.root = root
         self.keyStore = keyStore
         self.newKey = newKey
         self.now = now
+        self.creationFault = creationFault
     }
 
     func create() throws -> WorkspaceStore {
-        guard !workspaceArtifactsExist() else { throw WorkspaceSessionError.workspaceAlreadyExists }
+        guard try materials().isEmpty else { throw WorkspaceSessionError.workspaceAlreadyExists }
+
         let key = try newKey()
         guard key.count == 32 else { throw EncryptedDatabaseError.invalidKeyLength }
-        let stagingRoot = root.appendingPathComponent(".creating-\(UUID().uuidString)", isDirectory: true)
+        let attemptID = UUID().uuidString
+        let stagingRoot = root.appendingPathComponent(".creating-\(attemptID)", isDirectory: true)
         let stagingDatabaseURL = stagingRoot.appendingPathComponent("workspace.sqlite")
         try FileManager.default.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: stagingRoot) }
-        let stagingStore = try openStore(at: stagingDatabaseURL, with: key, createIfMissing: true)
-        try stagingStore.close()
+        try writeJournal(attemptID: attemptID, phase: .staging)
+
         do {
+            let stagingStore = try openStore(at: stagingDatabaseURL, with: key, createIfMissing: true)
+            try stagingStore.close()
+            try throwIfInjected(.stagingClose)
+
             try keyStore.writePendingWorkspaceKey(key)
+            try writeJournal(attemptID: attemptID, phase: .pendingWritten)
+            try throwIfInjected(.pendingKeyWrite)
+
             try FileManager.default.moveItem(at: stagingDatabaseURL, to: databaseURL)
-            try keyStore.promotePendingWorkspaceKey()
-            return try openStore(with: key, createIfMissing: false)
+            try writeJournal(attemptID: attemptID, phase: .databasePromoted)
+            try throwIfInjected(.databasePromotion)
+
+            // Do not use a destructive "promote" primitive: if this fails, both
+            // keys remain as evidence for a future explicit recovery flow.
+            try keyStore.writeWorkspaceKey(key)
+            try throwIfInjected(.primaryKeyPromotion)
+            try writeJournal(attemptID: attemptID, phase: .primaryPromoted)
+
+            try keyStore.deletePendingWorkspaceKey()
+            try writeJournal(attemptID: attemptID, phase: .cleanupPending)
+            try throwIfInjected(.pendingKeyCleanup)
+
+            try? FileManager.default.removeItem(at: stagingRoot)
+
+            // The journal is proof that this creation attempt is still in
+            // progress until the database has been opened through the same
+            // normal path used on a later launch. Do not remove it before
+            // that final open succeeds.
+            let openedStore = try openStore(with: key, createIfMissing: false)
+            try FileManager.default.removeItem(at: journalURL)
+            return openedStore
         } catch {
-            try? keyStore.deletePendingWorkspaceKey()
-            try? FileManager.default.removeItem(at: databaseURL)
-            try? FileManager.default.removeItem(at: sidecarURL("-wal"))
-            try? FileManager.default.removeItem(at: sidecarURL("-shm"))
+            // Only staging data belongs solely to this incomplete attempt. Once a
+            // database is promoted, no database or key material is auto-deleted.
+            if !FileManager.default.fileExists(atPath: databaseURL.path) {
+                try? FileManager.default.removeItem(at: stagingRoot)
+            }
             throw error
         }
     }
 
     func open() throws -> WorkspaceOpenState {
         do {
-            let databaseExists = FileManager.default.fileExists(atPath: databaseURL.path)
-            guard databaseExists else {
-                try? keyStore.deletePendingWorkspaceKey()
-                return try keyStore.readWorkspaceKey() == nil ? .missingKey : .unavailable
-            }
-            let key: Data
-            if let existingKey = try keyStore.readWorkspaceKey() {
-                key = existingKey
-            } else if try keyStore.readPendingWorkspaceKey() != nil {
-                try keyStore.promotePendingWorkspaceKey()
-                guard let recoveredKey = try keyStore.readWorkspaceKey() else { return .missingExistingKey }
-                key = recoveredKey
-            } else {
-                return .missingExistingKey
-            }
+            let material = try materials()
+            if material.isEmpty { return .createAvailable }
+            guard material.isVerifiedReadyPair else { return .recoveryRequired }
+            guard let key = try keyStore.readWorkspaceKey() else { return .recoveryRequired }
             return .ready(try openStore(with: key, createIfMissing: false))
         } catch let error as WorkspaceKeyStoreError {
             switch error {
@@ -92,6 +156,17 @@ final class WorkspaceSession {
         } catch {
             return .unavailable
         }
+    }
+
+    /// Exposed for focused state fixtures only. It contains booleans, never a
+    /// filesystem path, key value, Keychain account, or journal attempt ID.
+    func materialState() throws -> WorkspaceMaterialState {
+        try materials()
+    }
+
+    func creationJournal() throws -> WorkspaceCreationJournal? {
+        guard FileManager.default.fileExists(atPath: journalURL.path) else { return nil }
+        return try JSONDecoder().decode(WorkspaceCreationJournal.self, from: Data(contentsOf: journalURL))
     }
 
     func restore(from backupURL: URL) throws -> WorkspaceStore {
@@ -126,13 +201,27 @@ final class WorkspaceSession {
         }
     }
 
-    private var databaseURL: URL {
-        root.appendingPathComponent("workspace.sqlite")
+    private var databaseURL: URL { root.appendingPathComponent("workspace.sqlite") }
+    private var journalURL: URL { root.appendingPathComponent("workspace-creation.json") }
+
+    private func materials() throws -> WorkspaceMaterialState {
+        WorkspaceMaterialState(
+            hasDatabase: FileManager.default.fileExists(atPath: databaseURL.path),
+            hasSidecars: [sidecarURL("-wal"), sidecarURL("-shm")].contains { FileManager.default.fileExists(atPath: $0.path) },
+            hasJournal: FileManager.default.fileExists(atPath: journalURL.path),
+            hasPrimaryKey: try keyStore.readWorkspaceKey() != nil,
+            hasPendingKey: try keyStore.readPendingWorkspaceKey() != nil
+        )
     }
 
-    private func workspaceArtifactsExist() -> Bool {
-        [databaseURL, sidecarURL("-wal"), sidecarURL("-shm")]
-            .contains { FileManager.default.fileExists(atPath: $0.path) }
+    private func writeJournal(attemptID: String, phase: WorkspaceCreationPhase) throws {
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let data = try JSONEncoder().encode(WorkspaceCreationJournal(attemptID: attemptID, phase: phase))
+        try data.write(to: journalURL, options: .atomic)
+    }
+
+    private func throwIfInjected(_ point: WorkspaceCreationFault) throws {
+        if creationFault == point { throw point }
     }
 
     private func sidecarURL(_ suffix: String) -> URL {
@@ -146,12 +235,14 @@ final class WorkspaceSession {
 
     private func openStore(at url: URL, with key: Data, createIfMissing: Bool) throws -> WorkspaceStore {
         let database = try EncryptedDatabase.open(url: url, key: key, createIfMissing: createIfMissing)
-        return try WorkspaceStore(
-            database: database,
-            now: now,
-            actorID: "local-user",
-            correlationID: UUID().uuidString
-        )
+        // This fault is deliberately inside the actual final reopen path. It
+        // lets the focused fixture prove that a failed reopen retains the
+        // journal and every committed artifact for non-destructive recovery.
+        if creationFault == .finalReopen, url == databaseURL, !createIfMissing {
+            try? database.close()
+            throw WorkspaceCreationFault.finalReopen
+        }
+        return try WorkspaceStore(database: database, now: now, actorID: "local-user", correlationID: UUID().uuidString)
     }
 
     private static func generateKey() throws -> Data {
