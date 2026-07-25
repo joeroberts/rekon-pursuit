@@ -106,7 +106,10 @@
 | --- | --- | --- |
 | Planning | Correction brief issued | Independent Architect and QA review of `2851b84` found stale initialization-time audit timestamps, new-form date carryover, an invalid version-16 failure setup, and missing R2 edge-case coverage. The R2 brief now requires one injectable clock sampled per mutation and per Needs Attention read, with stepwise quick-stage, task-action, multi-row existing-CSV, and read-time regressions; atomic create rejection of a non-default response without a date; explicit date validation; fresh new-form defaults; a real v15 fixture; atomic update rollback; and deterministic history ordering. |
 | QA failure classification | Stage-history ordering: R2-caused; import-report equality: not R2-caused | A selected effective stage date makes `ORDER BY occurred_at, rowid` nondeterministic/semantically wrong for R2; the correction fixes it with `occurred_at ASC, id ASC` and tie tests. The import-report equality precision failure predates R2’s report contract and is explicitly deferred without an R2 code change. |
-| Release state | **No corrective implementation released by this record** | TPM/Delivery must independently release this bounded corrective pass before a fresh implementer changes code. `RP-R3`–`RP-R10` remain blocked. |
+| Architect | Approved | Explicit-date rejection, one injected clock per mutation/time-dependent read, real v15 fixture, and deterministic ordering preserve the R2 contract. |
+| QA | Approved | Stepwise clock checks cover quick stage, task, existing multi-row CSV, and Needs Attention without opening R3 mapping scope. |
+| TPM | Approved | Corrective work remains R2-only; import-report precision remains deferred test hygiene. |
+| Delivery Manager | Pending final corrective-release check | Must independently release the bounded corrective implementation before code changes. |
 
 ## Release log
 
