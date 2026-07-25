@@ -137,7 +137,7 @@
 | 2026-07-25 | `RP-R2` | **Released for implementation** | Delivery Manager approved the migration-and-core-fields brief. No successor is released; `RP-R3`–`RP-R10` remain blocked. |
 | 2026-07-25 | `RP-R2` | **Implementation rejected — corrective pass planned** | Independent Architect and QA findings are reconciled in the R2 brief. This is not acceptance and does not release corrective code or any successor. |
 | 2026-07-25 | `RP-R2` | **Corrective implementation released** | Delivery approved only the bounded R2 correction. R2 is not accepted; no successor is released. |
-| 2026-07-25 | `RP-R2` | **Accepted — `RP-R3` released** | Corrective evidence, independent Code Review/QA/Architect/TPM decisions, and product-owner isolated smoke are complete. `RP-R4`–`RP-R10` remain blocked. |
+| 2026-07-25 | `RP-R2` | **Accepted — `RP-R3` eligible for amended plan gate** | Corrective evidence, independent Code Review/QA/Architect/TPM decisions, and product-owner isolated smoke are complete. `RP-R3` requires its own amended plan gate; `RP-R3a` and `RP-R4`–`RP-R10` remain blocked or deferred. |
 | 2026-07-25 | `RP-R3` | **Scope decision — core flow first** | Product owner approved core mapping/validation/explicit decisions/selected-field update/report now. Resumable raw-file drafts and Undo Import are deferred to `RP-R3a`; no implementation begins until the amended R3 plan gate accepts. |
 
 ## Risks and decisions

@@ -239,4 +239,5 @@ and Needs Attention still refresh.
 Accepted 2026-07-25 at `c205e76`. The focused corrective verification, final
 independent Code Review, QA, Architect and TPM approvals, and the passed
 product-owner isolated create/edit/reset/clear/relaunch smoke complete this
-slice. `RP-R3` is the only released successor.
+slice. `RP-R3` is the only eligible successor, subject to its own amended plan
+gate.
