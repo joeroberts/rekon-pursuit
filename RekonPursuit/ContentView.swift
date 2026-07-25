@@ -805,13 +805,6 @@ struct ContentView: View {
 
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
-
-            let accessedSecurityScopedResource = url.startAccessingSecurityScopedResource()
-            defer {
-                if accessedSecurityScopedResource {
-                    url.stopAccessingSecurityScopedResource()
-                }
-            }
             model.previewCSV(at: url)
         }
     }
