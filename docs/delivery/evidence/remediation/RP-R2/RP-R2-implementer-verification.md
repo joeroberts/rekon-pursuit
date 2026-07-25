@@ -1,6 +1,6 @@
 # RP-R2 implementer verification
 
-**Status:** Ready for independent review; not accepted.
+**Status:** Accepted.
 
 ## Implemented boundary
 
@@ -22,6 +22,18 @@
   passed.
 - Version-four-to-current migration and existing update/task regression tests
   passed.
+- Debug macOS build passed.
+- The corrective focused checks passed for dynamic command time, v15 → v16
+  migration-failure snapshot retention, atomic update rollback, and fresh form
+  dates after an Add save.
 
 No user data, local production paths, Keychain values, external connections,
 or CSV mapping behavior were used or changed.
+
+## Product-owner isolated smoke
+
+2026-07-25: The product owner ran the generated, sandboxed temporary app and
+reported **passed** for the required create → edit → clear application date →
+relaunch flow. The smoke used synthetic data and confirmed persisted core
+fields and history plus normal Pipeline and Needs Attention refresh. This is
+manual acceptance evidence, not an automated claim.

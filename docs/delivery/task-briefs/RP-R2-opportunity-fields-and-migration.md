@@ -1,6 +1,6 @@
 # RP-R2 — Opportunity fields and safe migration
 
-**State:** Corrective pass required before acceptance
+**State:** Accepted
 **Depends on:** `RP-R1b` accepted  
 **Blocks:** `RP-R3` and `RP-R5`
 
@@ -233,3 +233,10 @@ and Needs Attention still refresh.
 - Fresh Implementer → separate Code Reviewer and QA verifier → Architect
   review → TPM/Delivery acceptance. Security/Privacy review is not required
   unless implementation expands storage scope, entitlements, or data egress.
+
+## Final acceptance
+
+Accepted 2026-07-25 at `c205e76`. The focused corrective verification, final
+independent Code Review, QA, Architect and TPM approvals, and the passed
+product-owner isolated create/edit/reset/clear/relaunch smoke complete this
+slice. `RP-R3` is the only released successor.

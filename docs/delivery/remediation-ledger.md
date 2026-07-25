@@ -1,6 +1,6 @@
 # Rekon Pursuit — MVP remediation ledger
 
-**Status:** `RP-R0`, `RP-R1a`, and `RP-R1b` are accepted. `RP-R2` is the sole released remediation task. `RP-R3`–`RP-R10` remain blocked by their stated dependencies and gates.
+**Status:** `RP-R0`, `RP-R1a`, `RP-R1b`, and `RP-R2` are accepted. `RP-R3` is the sole released remediation task. `RP-R4`–`RP-R10` remain blocked by their stated dependencies and gates.
 
 **Authority:** This is the canonical status record for the current MVP remediation. It supersedes “MVP shipped” language in the roadmap and candidate handoff. The PRD, architecture specification, ADR-001, and approved mockups remain controlling requirements.
 
@@ -26,8 +26,8 @@
 | `RP-R0` | Evidence-only baseline in a dedicated disposable test workspace/app-data location: first launch, default-page workspace access, pre-workspace CSV availability/explanation, page-state refresh, and mockup divergence. No behavior changes or modification of the user’s workspace/Keychain data. | None | **Accepted** | Redacted reproduction notes/screenshots, exact state transitions, build/OS/window details, and committed evidence path. | Amended boundary accepted. The evidence establishes the first-run/default-page, pre-workspace CSV guidance, page-refresh, and shell defects. Runtime create → CSV-preview/refresh is owned by `RP-R1a`. |
 | `RP-R1a` | Typed workspace gate: visible create/open/recover/retry states for database artifacts × no key, primary only, pending only, and both keys. Ambiguous combinations are recovery-required: no overwrite, promotion, ignored key, or automatic key deletion. A non-secret durable creation journal records staging/pending-written/database-promoted/primary-promoted/cleanup-pending phases. Creation never deletes a committed database on an open error. | `RP-R0` | **Accepted** | State/failure tests, a macOS build, an isolated temporary-app smoke, and direct user observation of create workspace → native CSV dialog → fixture preview. The smoke record is manual UI evidence, not an automation claim. | All independent roles approved. The residual native-dialog observation risk is explicitly manual/user-observed. Release `RP-R1b` only. |
 | `RP-R1b` | Reactive `NavigationSplitView` shell aligned with approved mockup structure and usable in a small window. | `RP-R1a` | **Accepted** | Debug build, focused navigation tests, isolated sandbox smoke, direct user 900×640 smoke, and all required independent approvals are recorded. | Delivery accepted R1b. Release `RP-R2` only. |
-| `RP-R2` | Migration plus editable compensation, location, response state/history, and application/status dates. | `RP-R1b` | **Corrective pass required** | Existing-workspace migration and create/edit/relaunch activity evidence, plus the corrective clock/date, real-v15-fixture, atomic-rollback, and deterministic-history evidence. | `2851b84` is rejected pending the documented R2 corrective pass. `RP-R3`–`RP-R10` remain blocked. |
-| `RP-R3` | Map → validate → row decision → import report; field-selected update-existing with no silent overwrite. | `RP-R2` | Blocked | Standard-header, nonstandard-header, invalid-row, duplicate, and reimport workflows. | Pending `RP-R2`; allowed-field policy in brief. |
+| `RP-R2` | Migration plus editable compensation, location, response state/history, and application/status dates. | `RP-R1b` | **Accepted** | Existing-workspace migration and create/edit/relaunch activity evidence, plus the corrective clock/date, real-v15-fixture, atomic-rollback, and deterministic-history evidence. | Corrective pass accepted at `c205e76` after independent review and a passed product-owner isolated smoke. Release `RP-R3` only. |
+| `RP-R3` | Map → validate → row decision → import report; field-selected update-existing with no silent overwrite. | `RP-R2` | **Released for implementation** | Standard-header, nonstandard-header, invalid-row, duplicate, and reimport workflows. | R2 accepted. Implement only the approved R3 brief and allowed-field policy. |
 | `RP-R4` | Reconciliation contract and local workflow states only: safe URL validation, classifications, evidence/error, confidence, retry de-duplication, closure confirmation; no request yet. | `RP-R1b` | Blocked | Deterministic fixtures and approved network/privacy contract. | Architect + Security/Privacy approval required. |
 | `RP-R5` | User-initiated public-URL check: direct GET only, bounded/no-auth/no-script request, offline/manual-review handling, retry task, no auto-close. | `RP-R2`, `RP-R4` | Blocked | Online/offline/blocked/changed/failure/explicit-closure workflow evidence. | Architect + Security/Privacy approval of `RP-R4`. |
 | `RP-R6` | Security-scoped document bookmark, open/verify/relink, hash revalidation, and relink-required after portable restore. No copy/edit/parse. | Serial after `RP-R2` | Blocked | PDF/DOCX attach, relaunch/open, moved-file relink, permission failure smoke. | `RP-R2` is the sole active task; release only in serial order after its acceptance. |
@@ -111,6 +111,17 @@
 | TPM | Approved | Corrective work remains R2-only; import-report precision remains deferred test hygiene. |
 | Delivery Manager | Approved — corrective implementation released | R2-only clock/date, migration-fixture, form-lifecycle, and ordering correction is released. `RP-R3`–`RP-R10` remain blocked. |
 
+### RP-R2 corrective implementation verification record
+
+| Role | Decision | Evidence |
+| --- | --- | --- |
+| Code Reviewer | Approved | Final review at `c205e76` found the production dynamic-clock wiring, explicit date validation, atomic rollback, real v15 fixture, fresh form defaults, and deterministic histories correct and within R2 scope. |
+| QA | Approved for manual smoke | Debug build and focused correction checks passed; the required isolated manual smoke remained the final direct-product check. |
+| Architect | Approved | The dynamic-clock and migration/data contracts remain coherent; no ADR deviation is required. |
+| TPM | Approved for acceptance | Corrective scope stayed inside R2; release `RP-R3` only. |
+| Product owner | Passed isolated smoke | In the generated sandboxed app, the required synthetic create/edit/reset/clear/relaunch flow passed and Pipeline/Needs Attention refreshed normally. |
+| Delivery Manager | Accepted — R2 accepted | The corrective evidence, independent approvals, and product-owner smoke are complete. Release `RP-R3` only; keep `RP-R4`–`RP-R10` blocked. |
+
 ## Release log
 
 | Date | Task | Delivery decision | Scope boundary |
@@ -125,6 +136,7 @@
 | 2026-07-25 | `RP-R2` | **Released for implementation** | Delivery Manager approved the migration-and-core-fields brief. No successor is released; `RP-R3`–`RP-R10` remain blocked. |
 | 2026-07-25 | `RP-R2` | **Implementation rejected — corrective pass planned** | Independent Architect and QA findings are reconciled in the R2 brief. This is not acceptance and does not release corrective code or any successor. |
 | 2026-07-25 | `RP-R2` | **Corrective implementation released** | Delivery approved only the bounded R2 correction. R2 is not accepted; no successor is released. |
+| 2026-07-25 | `RP-R2` | **Accepted — `RP-R3` released** | Corrective evidence, independent Code Review/QA/Architect/TPM decisions, and product-owner isolated smoke are complete. `RP-R4`–`RP-R10` remain blocked. |
 
 ## Risks and decisions
 
@@ -134,5 +146,5 @@
 | `RP-RISK-1` | Direct URL requests can reach private/internal endpoints without explicit validation. `RP-R4` must reject non-http(s), credential-bearing, localhost, private, and link-local destinations. | Architect + Security/Privacy | Open |
 | `RP-RISK-2` | Portable recovery/export/purge can cause data loss or false recovery claims. `RP-R7a/b` requires separate high-risk approval and restore-as-new-workspace. | Architect + Security/Privacy | Open |
 | `RP-RISK-3` | The current candidate’s status claims obscured required work. This ledger is controlling until `RP-R10` is accepted. | Delivery Manager | Mitigated |
-| `RP-RISK-4` | A store-wide initialization timestamp can make later audit events untruthful, while optional form dates can silently reuse a prior draft. | Architect + QA | Open — RP-R2 corrective pass |
+| `RP-RISK-4` | A store-wide initialization timestamp can make later audit events untruthful, while optional form dates can silently reuse a prior draft. | Architect + QA | Mitigated — RP-R2 corrective pass accepted |
 | `RP-RISK-5` | The existing import-report equality test compares a precision-sensitive timestamp but is unrelated to R2’s report contract. | QA | Deferred — separate test-hygiene release required; no R2 scope expansion |
