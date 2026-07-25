@@ -62,23 +62,23 @@ points.
    cleaned up; it must not change production storage or Keychain configuration.
    The manual smoke owns workspace creation, create/edit/Pipeline refresh, and
    native panel/fixture preview verification.
-6. Validate recovery in a **separate** R1a isolated fixture/harness launch.
-   The existing generated bundle ID already yields a distinct sandbox container
-   workspace root; do not add test injection/configuration. Assert that a
-   recovery-required state shows only **Recheck** or **Retry** as applicable,
-   never Create, overwrite, replacement, or automatic cleanup.
+6. R1a's existing focused non-UI recovery tests remain authoritative for the
+   database/key-state recovery matrix. R1b verifies only the visible default
+   fresh-create workspace gate; do not add a recovery fixture, harness launch,
+   test injection, or production configuration seam.
 
 ## Acceptance criteria
 
 - At 900 × 640, sidebar selection, toolbar, primary content, and recovery
   controls are reachable; long page content scrolls rather than clipping.
-- First launch shows Needs attention plus the R1a workspace-create or recovery
-  state. Recovery-required never exposes replacement/overwrite behavior.
+- A fresh default launch shows Needs attention plus the R1a workspace-create
+  state. R1a's accepted focused recovery tests remain authoritative for
+  recovery-required behavior.
 - The isolated R1a temporary-app smoke creates a workspace, creates a unique
   synthetic opportunity, edits/saves that same record, and navigates to
-  Pipeline where the edited record visibly refreshes without relaunch. The
-  separate isolated fixture/harness launch verifies the recovery-required gate
-  exposes only Recheck/Retry and never replacement/overwrite behavior.
+  Pipeline where the edited record visibly refreshes without relaunch. R1a's
+  accepted focused recovery tests remain the evidence that recovery never
+  exposes replacement/overwrite behavior.
 - The CSV chooser button is enabled only after workspace-ready. In the manual
   isolated smoke, activating it opens the native single-file dialog and the
   R1a synthetic fixture previews successfully; UI tests assert button
@@ -98,9 +98,8 @@ points.
    Activity & AI → select Import CSV → activate the enabled CSV chooser button
    → choose the R1a synthetic fixture
    (`RekonPursuitTests/Fixtures/r1a-smoke-import.csv`) → confirm preview.
-   Run a separate isolated recovery fixture/harness launch and confirm only
-   Recheck/Retry appears—never Create or overwrite. Verify visible immediate
-   refresh and no clipped primary action.
+   Verify visible immediate refresh and no clipped primary action. Recovery
+   behavior is verified by R1a's existing focused non-UI recovery tests.
 3. Record redacted screenshots and the build/test commands/results in
    `docs/delivery/evidence/remediation/RP-R1b/RP-R1b-shell-smoke.md`.
 
