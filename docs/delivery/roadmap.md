@@ -6,6 +6,28 @@ Build a local-first, native-window Mac application that is useful without any ac
 
 The delivery principle is **vertical slices over isolated screens**: each slice must persist real data, expose recovery states, create the required activity evidence, and be acceptance-testable end to end. Mockups are interaction intent, not implementation scope; their safe-state behavior is binding where it reflects a PRD requirement.
 
+## Current release status — source of truth
+
+**Rekon Pursuit MVP is shipped as an unsigned local macOS app.** This section is the current status tracker. The detailed workstreams and M0–M9 sequence below are retained as original planning context; they are not the release-status authority.
+
+| Release area | Current status |
+| --- | --- |
+| Local MVP tracker | **Shipped** — encrypted local workspace; opportunities, pipeline, next actions, Needs Attention, stage history, descriptions, notes, contacts, interactions, relationship history, local activity, CSV import/export, manual posting reconciliation, PDF/DOCX reference metadata, same-Mac encrypted backup/restore, and Settings. |
+| Package and automation | **Shipped** — unsigned `.app` package and build/archive/macOS smoke workflow. Developer ID signing, notarization, and DMG distribution are intentionally deferred. |
+| MVP stabilization | **Current work** — fix user-reported issues in the shipped app. Do not expand MVP scope while stabilization is active. |
+| Phase 2a — privacy and AI foundation | **Not started** — local-model runtime, cloud routing/sanitization/consent, populated AI ledger, budgets, and costs. |
+| Phase 2b — Gmail and Google Calendar | **Not started** — follows the privacy/AI foundation. |
+| Phase 2c — documents and research | **Not started** — full document processing/versioning and sourced employer research. |
+| Phase 3 — interview and offer support | **Not started** — interview preparation/call review, offers, comparison, and negotiation. |
+
+### Shipped MVP boundaries
+
+- All MVP data remains local by default. CSV export is intentionally unencrypted and warns before export.
+- Backup/restore works only on the same Mac through its Keychain; portable/cross-Mac recovery and purge are deferred.
+- Reconciliation is manual and local: the app records a user-reviewed URL, outcome, and evidence. It never changes the opportunity stage automatically.
+- PDF/DOCX references retain filename, size, hash, and final-sent metadata only; the app does not copy, parse, edit, send, or upload files.
+- AI execution, Gmail, Calendar, research, document generation/editing, interview tooling, and offer tooling are not part of this release.
+
 ## Architecture that spans every release
 
 Implement these foundations before, or as part of, the first vertical slice; do not defer them in a way that creates a second architecture for later phases.
@@ -176,22 +198,22 @@ For a small team, one person may hold multiple roles, but the accountability bou
 
 **Acceptance checkpoint:** Change one offer weight and verify recomputation/explanation is predictable. Feed insufficient interview evidence and verify no fabricated score appears. Delete an interview transcript/audio and verify the interview record remains with the expected deletion activity event.
 
-## Delivery sequence and milestones
+## Historical build sequence and future milestones
 
-No calendar dates or effort estimates are assumed. A milestone is complete only when its exit criteria, acceptance checkpoint, and listed gates have passed.
+The M0–M5 work below describes how the MVP was planned and built. It is retained for traceability only; use **Current release status** above for what is shipped and what comes next.
 
 | Milestone | Included workstreams | Demonstrable outcome | Gate to proceed |
 | --- | --- | --- | --- |
-| M0 — Product and architecture readiness | A design/architecture decisions | Reviewed domain, audit, privacy, state, and migration contracts; test fixtures identified | Product owner, tech lead, UX, and privacy owner approve the non-negotiable invariants and open decisions needed for MVP |
-| M1 — Local record spine | A + first B slice | Persisted opportunity plus auditable activity timeline and recoverable states | Architecture review confirms commands/logs are atomic enough for all MVP mutations |
-| M2 — Daily tracker | B | Offline opportunity workspace, pipeline, next actions, and deterministic Needs attention loop work together | UX/QA accept the complete Workstream-B daily-loop acceptance suite and accessibility baseline |
-| M3 — Contacts and interactions | C | Offline contacts, interactions, and opportunity links work together | UX/QA accept the Workstream-C relationship-history and unlink regression suite |
-| M4 — Safe bulk capture | D | Import map/validate/duplicate-choice/report flow has no silent overwrite | Product/QA accept re-import and row-decision regression evidence |
-| M5 — Reconciliation, MVP hardening, and release readiness | E + F | Evidence-to-decision reconciliation, lifecycle/export boundaries, accessibility, and release readiness satisfy the local MVP criteria | Privacy/legal/tech review approves check behavior; QA accepts reconciliation and MVP release suites; no unresolved P0 trust, data-loss, accessibility, or audit defects |
-| M6 — Privacy and AI foundation | G | Accepted routing, consent, local ledger, and budget contracts before any AI feature or connected workflow | Privacy/AI acceptance gate passes, including no-fallback and ledger evidence |
-| M7 — Connected workflow | H | Permissioned Gmail/Calendar workflow, confidence/manual-review classification, accepted follow-up tasks, and explicit approvals | OAuth/security/privacy and integration acceptance gates pass |
-| M8 — Documents and research | I | Full document versioning and sourced AI/research workflow | Document-provenance and source-policy acceptance gates pass |
-| M9 — Decision support | J | Evidence-backed interview and offer support | Rubric, consent, deletion, and transparent-score acceptance gates pass |
+| M0 — Product and architecture readiness | A design/architecture decisions | Reviewed domain, audit, privacy, state, and migration contracts; test fixtures identified | Historical — complete |
+| M1 — Local record spine | A + first B slice | Persisted opportunity plus auditable activity timeline and recoverable states | Historical — complete |
+| M2 — Daily tracker | B | Offline opportunity workspace, pipeline, next actions, and deterministic Needs attention loop work together | Historical — implemented in shipped MVP |
+| M3 — Contacts and interactions | C | Offline contacts, interactions, and opportunity links work together | Historical — implemented in shipped MVP |
+| M4 — Safe bulk capture | D | Import map/validate/duplicate-choice/report flow has no silent overwrite | Historical — implemented subset in shipped MVP |
+| M5 — Reconciliation, MVP hardening, and release readiness | E + F | Evidence-to-decision reconciliation, lifecycle/export boundaries, accessibility, and release readiness satisfy the local MVP criteria | Historical — implemented subset in shipped MVP; stabilization is current |
+| M6 — Privacy and AI foundation | G | Accepted routing, consent, local ledger, and budget contracts before any AI feature or connected workflow | Future — not started |
+| M7 — Connected workflow | H | Permissioned Gmail/Calendar workflow, confidence/manual-review classification, accepted follow-up tasks, and explicit approvals | Future — not started |
+| M8 — Documents and research | I | Full document versioning and sourced AI/research workflow | Future — not started |
+| M9 — Decision support | J | Evidence-backed interview and offer support | Future — not started |
 
 ## Explicit decision gates
 
