@@ -348,6 +348,26 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
+    func exportOpportunitiesCSV() -> String? {
+        guard let store else {
+            statusMessage = "Create or reopen the local workspace first."
+            return nil
+        }
+        do {
+            try store.recordOpportunitiesExport()
+            refreshCounts()
+            statusMessage = "Unencrypted CSV export is ready. Save it only where you trust the storage."
+            return OpportunityCSVExport.render(opportunities)
+        } catch {
+            statusMessage = "The CSV export could not be prepared."
+            return nil
+        }
+    }
+
+    func noteExportSaved() {
+        statusMessage = "Unencrypted CSV export saved."
+    }
+
     func recordSelectedContactInteraction() {
         guard let store, !selectedContactID.isEmpty else { return }
         do {

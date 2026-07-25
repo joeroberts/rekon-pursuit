@@ -422,6 +422,14 @@ final class WorkspaceStore {
         }
     }
 
+    func recordOpportunitiesExport() throws {
+        try synchronized {
+            try database.transaction {
+                try appendActivity(kind: "opportunities_exported", opportunityID: nil)
+            }
+        }
+    }
+
     func lastTouch(forContactID contactID: String) throws -> Date? {
         try contactInteractions(forContactID: contactID).map(\.occurredAt).max()
     }

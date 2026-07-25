@@ -84,6 +84,21 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.csvImportReport, report)
     }
 
+    func testExportReturnsCSVAndRecordsOnlyAnAuditEvent() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        model.start()
+        model.title = "Product Manager"
+        model.company = "Rekon Labs"
+        model.createOpportunity()
+
+        let csv = try XCTUnwrap(model.exportOpportunitiesCSV())
+
+        XCTAssertTrue(csv.contains("\"Product Manager\""))
+        XCTAssertEqual(model.activityEvents.last?.kind, "opportunities_exported")
+        XCTAssertEqual(model.statusMessage, "Unencrypted CSV export is ready. Save it only where you trust the storage.")
+    }
+
     func testSavingSelectedOpportunityUpdatesItsVisibleRecord() throws {
         let store = try makeStore()
         let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })

@@ -198,6 +198,27 @@ struct CreateOpportunity: Equatable {
     }
 }
 
+enum OpportunityCSVExport {
+    static func render(_ opportunities: [Opportunity]) -> String {
+        let header = ["title", "company", "stage", "next_action", "due_at", "job_url"]
+        let rows = opportunities.map { opportunity in
+            [
+                opportunity.title,
+                opportunity.company,
+                opportunity.stage.rawValue,
+                opportunity.nextAction,
+                opportunity.dueAt?.ISO8601Format() ?? "",
+                opportunity.jobURL
+            ]
+        }
+        return ([header] + rows).map { $0.map(escape).joined(separator: ",") }.joined(separator: "\n") + "\n"
+    }
+
+    private static func escape(_ value: String) -> String {
+        "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+    }
+}
+
 enum WorkspaceStoreError: Error, LocalizedError {
     case invalidOpportunity
     case injectedFailure

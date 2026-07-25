@@ -515,6 +515,19 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents().last?.kind, "posting_checked")
     }
 
+    func testOpportunityExportEscapesDataAndRecordsLocalActivity() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product, Manager", company: "Rekon \"Labs\"", stage: .applied, nextAction: "Send notes", dueAt: now, jobURL: "https://jobs.example.com/123"))
+
+        try store.recordOpportunitiesExport()
+
+        XCTAssertEqual(
+            OpportunityCSVExport.render([opportunity]),
+            "\"title\",\"company\",\"stage\",\"next_action\",\"due_at\",\"job_url\"\n\"Product, Manager\",\"Rekon \"\"Labs\"\"\",\"Applied\",\"Send notes\",\"2024-01-01T00:00:00Z\",\"https://jobs.example.com/123\"\n"
+        )
+        XCTAssertEqual(try store.activityEvents().last?.kind, "opportunities_exported")
+    }
+
     func testDeletingOpportunityHidesItAndLeavesOnlyRedactedAuditEvidence() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(

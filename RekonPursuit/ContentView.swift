@@ -5,6 +5,24 @@ enum BootstrapCopy {
     nonisolated static let status = "Local-only foundation"
 }
 
+struct CSVExportDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.commaSeparatedText] }
+
+    var text: String
+
+    init(text: String) {
+        self.text = text
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        text = String(data: configuration.file.regularFileContents ?? Data(), encoding: .utf8) ?? ""
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: Data(text.utf8))
+    }
+}
+
 private enum TrackerPage: String, CaseIterable {
     case home = "Needs Attention"
     case pipeline = "Pipeline"
@@ -21,6 +39,9 @@ struct ContentView: View {
     @State private var rescheduledDueAt = Date.now
     @State private var showsPipelineBoard = false
     @State private var showsCSVImporter = false
+    @State private var showsUnencryptedExportWarning = false
+    @State private var showsCSVExporter = false
+    @State private var exportDocument: CSVExportDocument?
     @State private var page: TrackerPage = .home
 
     var body: some View {
@@ -505,9 +526,17 @@ struct ContentView: View {
                     }
                 }
             }
+
+            GroupBox("Export local data") {
+                Text("Export your active opportunities as a CSV you can open in Numbers or another spreadsheet app.")
+                    .foregroundStyle(.secondary)
+                Button("Export opportunities as CSV…") { showsUnencryptedExportWarning = true }
+                    .disabled(!model.workspaceReady || model.opportunities.isEmpty)
+                    .accessibilityIdentifier("export-opportunities-csv")
+            }
             }
 
-            Text("This MVP keeps data on this Mac. Backup, restore, and export are not available yet.")
+            Text("This MVP keeps data on this Mac. CSV exports are unencrypted; backup and restore are not available yet.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -528,6 +557,28 @@ struct ContentView: View {
             if case let .success(urls) = result, let url = urls.first {
                 model.previewCSV(at: url)
             }
+        }
+        .fileExporter(
+            isPresented: $showsCSVExporter,
+            document: exportDocument,
+            contentType: .commaSeparatedText,
+            defaultFilename: "rekon-pursuit-opportunities"
+        ) { result in
+            if case .success = result {
+                model.noteExportSaved()
+            }
+            exportDocument = nil
+        }
+        .alert("Export unencrypted CSV?", isPresented: $showsUnencryptedExportWarning) {
+            Button("Export unencrypted CSV") {
+                if let csv = model.exportOpportunitiesCSV() {
+                    exportDocument = CSVExportDocument(text: csv)
+                    showsCSVExporter = true
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This file will contain your job titles, companies, actions, dates, and job URLs in plain text. Save it only to storage you trust.")
         }
         .alert("Delete opportunity?", isPresented: Binding(
             get: { pendingDeletion != nil },
