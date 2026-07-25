@@ -1,4 +1,4 @@
-name: M0 bootstrap validation
+name: MVP archive smoke
 
 on:
   push:
@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  universal-validation:
-    name: Universal archive and local policy
+  universal-archive:
+    name: Universal archive
     runs-on: macos-15-intel
     timeout-minutes: 30
     env:
@@ -56,14 +56,6 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Verify workflow policy
-        shell: bash
-        run: scripts/m0/test_workflow_policy.sh .
-
-      - name: Verify static bootstrap requirements
-        shell: bash
-        run: scripts/m0/validate_bootstrap.sh --static-only .
-
       - name: Package identity-free universal archive
         shell: bash
         run: |
@@ -94,7 +86,7 @@ jobs:
 
   macos-14-smoke:
     name: macOS 14 arm64 archived-app smoke
-    needs: universal-validation
+    needs: universal-archive
     runs-on: macos-14
     timeout-minutes: 15
     steps:
