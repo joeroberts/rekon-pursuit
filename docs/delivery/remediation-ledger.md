@@ -109,7 +109,7 @@
 | Architect | Approved | Explicit-date rejection, one injected clock per mutation/time-dependent read, real v15 fixture, and deterministic ordering preserve the R2 contract. |
 | QA | Approved | Stepwise clock checks cover quick stage, task, existing multi-row CSV, and Needs Attention without opening R3 mapping scope. |
 | TPM | Approved | Corrective work remains R2-only; import-report precision remains deferred test hygiene. |
-| Delivery Manager | Pending final corrective-release check | Must independently release the bounded corrective implementation before code changes. |
+| Delivery Manager | Approved — corrective implementation released | R2-only clock/date, migration-fixture, form-lifecycle, and ordering correction is released. `RP-R3`–`RP-R10` remain blocked. |
 
 ## Release log
 
@@ -124,6 +124,7 @@
 | 2026-07-25 | `RP-R1b` | **Accepted — `RP-R2` released** | Delivery Manager accepted the completed shell slice after independent Code Review, QA, Architect, TPM, and direct user 900×640 evidence. `RP-R3`–`RP-R10` remain blocked. |
 | 2026-07-25 | `RP-R2` | **Released for implementation** | Delivery Manager approved the migration-and-core-fields brief. No successor is released; `RP-R3`–`RP-R10` remain blocked. |
 | 2026-07-25 | `RP-R2` | **Implementation rejected — corrective pass planned** | Independent Architect and QA findings are reconciled in the R2 brief. This is not acceptance and does not release corrective code or any successor. |
+| 2026-07-25 | `RP-R2` | **Corrective implementation released** | Delivery approved only the bounded R2 correction. R2 is not accepted; no successor is released. |
 
 ## Risks and decisions
 
