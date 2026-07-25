@@ -8,7 +8,7 @@
 
 | Requirement | Current verified state | Remediation task |
 | --- | --- | --- |
-| First-run workspace | Create action is hidden off the default page; a key-without-database state has no recovery path. | `RP-R0`, `RP-R1a` |
+| First-run workspace | Create action is hidden off the default page; a dangling-key/no-database state is currently reported as unavailable and has no recovery path. | `RP-R0`, `RP-R1a` |
 | Usable layout/reactivity | Single segmented `VStack` does not implement the approved desktop shell and can appear inert. | `RP-R0`, `RP-R1b` |
 | CSV selection/import | Picker is unreachable before workspace creation; importer requires literal `title` and `company` headers. | `RP-R1a`, `RP-R3` |
 | Opportunity fields | Compensation, location, responses, and application/status dates are absent. | `RP-R2` |
@@ -23,8 +23,8 @@
 
 | ID | Scope | Dependencies | State | Required evidence | Gate decision |
 | --- | --- | --- | --- | --- | --- |
-| `RP-R0` | Evidence-only baseline in a dedicated disposable test workspace/app-data location: first launch, workspace initialization, CSV reachability, visible refresh, and mockup divergence. No behavior changes or modification of the user’s workspace/Keychain data. | None | **Released** | Redacted reproduction notes/screenshots, exact state transitions, build/OS/window details, and committed evidence path. | Planning, Architect, TPM, QA, and Delivery approved. No successor is released. |
-| `RP-R1a` | Typed workspace gate: visible create/open/recover/retry states; no overwrite; CSV availability follows ready state. | `RP-R0` | Blocked | Fresh-launch manual smoke: create workspace, CSV entry becomes selectable, retry/error paths are understandable. This task does not accept visual shell alignment. | Pending `RP-R0`. |
+| `RP-R0` | Evidence-only baseline in a dedicated disposable test workspace/app-data location: first launch, workspace initialization, CSV reachability, visible refresh, and mockup divergence. No behavior changes or modification of the user’s workspace/Keychain data. | None | **Released — incomplete evidence** | Redacted reproduction notes/screenshots, exact state transitions, build/OS/window details, safe create → CSV preview → refresh evidence, and committed evidence path. | Initial partial evidence is valid; QA and Architect require the remaining isolated create/import/refresh capture. No successor is released. |
+| `RP-R1a` | Typed workspace gate: visible create/open/recover/retry states, including the currently unmodeled dangling-Keychain-key/no-database condition; no overwrite; CSV availability follows ready state. | `RP-R0` | Blocked | Fresh-launch manual smoke: create workspace, CSV entry becomes selectable, retry/error paths are understandable. This task does not accept visual shell alignment. | Pending accepted `RP-R0`. |
 | `RP-R1b` | Reactive `NavigationSplitView` shell aligned with approved mockup structure and usable in a small window. | `RP-R1a` | Blocked | Before/after mockup comparison at the recorded window size plus manual create/edit/navigation refresh smoke. | Pending `RP-R1a`. |
 | `RP-R2` | Migration plus editable compensation, location, response state/history, and application/status dates. | `RP-R1b` | Blocked | Existing-workspace migration and create/edit/relaunch activity evidence. | Pending `RP-R1b`. |
 | `RP-R3` | Map → validate → row decision → import report; field-selected update-existing with no silent overwrite. | `RP-R2` | Blocked | Standard-header, nonstandard-header, invalid-row, duplicate, and reimport workflows. | Pending `RP-R2`; allowed-field policy in brief. |

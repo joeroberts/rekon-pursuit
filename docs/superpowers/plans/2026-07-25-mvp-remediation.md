@@ -29,7 +29,7 @@
 
 **Files:** Modify `RekonPursuit/ContentView.swift`, `RekonPursuit/WorkspaceViewModel.swift`, `RekonPursuitCore/WorkspaceOpenState.swift`; add focused local tests beside existing workspace tests.
 
-**Scope:** Replace hidden first-run creation with an explicit default-page workspace gate. Model missing workspace, missing key, key-without-database, corrupt, unavailable, ready, retry, and recovery states. Creation is atomic and never replaces an existing workspace. Enable CSV selection only after ready state and show why otherwise.
+**Scope:** Replace hidden first-run creation with an explicit default-page workspace gate. Model missing workspace, database-present/key-missing, dangling-Keychain-key/no-database, corrupt, unavailable, ready, retry, and recovery states. Creation is atomic and never replaces an existing workspace. Enable CSV selection only after ready state and show why otherwise.
 
 **Acceptance:** Fresh launch exposes Create Workspace; create succeeds; pipeline and CSV entry point become reachable without relaunch; failure/retry paths do not destroy existing data.
 
