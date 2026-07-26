@@ -340,8 +340,15 @@ final class PublicURLChecker: PublicURLChecking {
             normalizedTitle: normalizedTitle,
             marker: matchingMarker
         )
+        let hasIncompatibleTitle = nearbyIncompatibleJobTitle(
+            in: body,
+            visible: visible,
+            normalizedTitle: normalizedTitle,
+            marker: matchingMarker
+        )
         let ambiguous = response.truncated ||
             !titleMatches ||
+            hasIncompatibleTitle ||
             (matchingActive.isEmpty == matchingClosure.isEmpty)
 
         guard !ambiguous else {
@@ -518,6 +525,60 @@ final class PublicURLChecker: PublicURLChecking {
             searchStart = titleRange.upperBound
         }
         return false
+    }
+
+    private func nearbyIncompatibleJobTitle(
+        in html: String,
+        visible: String,
+        normalizedTitle: String,
+        marker: String?
+    ) -> Bool {
+        // Opportunities do not yet store a stable requisition identifier, so this bounded
+        // public-page check must stay conservative when a second job-title heading is nearby.
+        guard !normalizedTitle.isEmpty, let marker else { return false }
+        let candidates = headingCandidates(in: html).filter { $0 != normalizedTitle && isLikelyJobTitle($0) }
+        guard !candidates.isEmpty else { return false }
+
+        let searchable = visible.lowercased()
+        var searchStart = searchable.startIndex
+        while let titleRange = searchable.range(of: normalizedTitle, range: searchStart..<searchable.endIndex) {
+            let lower = searchable.index(titleRange.lowerBound, offsetBy: -256, limitedBy: searchable.startIndex) ?? searchable.startIndex
+            let upper = searchable.index(titleRange.upperBound, offsetBy: 256, limitedBy: searchable.endIndex) ?? searchable.endIndex
+            if searchable.range(of: marker, options: .caseInsensitive, range: lower..<upper) != nil {
+                let context = String(searchable[lower..<upper])
+                if candidates.contains(where: context.contains) {
+                    return true
+                }
+            }
+            searchStart = titleRange.upperBound
+        }
+        return false
+    }
+
+    private func headingCandidates(in html: String) -> [String] {
+        guard let expression = try? NSRegularExpression(pattern: "(?is)<h[1-6]\\b[^>]*>(.*?)</h[1-6]>") else {
+            return []
+        }
+        let range = NSRange(html.startIndex..., in: html)
+        return expression.matches(in: html, range: range).compactMap { match in
+            guard let headingRange = Range(match.range(at: 1), in: html) else { return nil }
+            let heading = normalizedVisibleText(String(html[headingRange]))
+            return heading.isEmpty ? nil : heading
+        }
+    }
+
+    private func isLikelyJobTitle(_ heading: String) -> Bool {
+        let ignoredHeadings: Set<String> = [
+            "about the role", "benefits", "job details", "job description", "location",
+            "responsibilities", "qualifications", "requirements", "what you will do"
+        ]
+        guard !ignoredHeadings.contains(heading) else { return false }
+        let roleWords: Set<String> = [
+            "administrator", "analyst", "architect", "consultant", "coordinator", "designer",
+            "developer", "director", "engineer", "lead", "manager", "officer", "recruiter",
+            "scientist", "specialist"
+        ]
+        return heading.split(separator: " ").contains { roleWords.contains(String($0)) }
     }
 
     private func metaRefreshEvidence(in html: String, relativeTo base: String) -> (found: Bool, target: String?) {

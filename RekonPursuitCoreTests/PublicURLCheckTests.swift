@@ -243,6 +243,22 @@ final class PublicURLCheckTests: XCTestCase {
         XCTAssertEqual(completion.classification, .ambiguous)
     }
 
+    func testNearbyIncompatibleJobTitleStaysAmbiguous() async throws {
+        let checker = PublicURLChecker(
+            resolver: FixturePublicURLResolver(result: .success([PublicIPAddress("93.184.216.34")!])),
+            transport: FixturePublicURLTransport(result: .success(.html(
+                status: 200,
+                body: "<h1>Platform Engineer</h1><h1>Sales Manager</h1><p>Apply now</p>"
+            )))
+        )
+        let request = try XCTUnwrap(checker.prepareEligible("https://jobs.example.com/role"))
+
+        let completion = await checker.check(request, opportunityTitle: "Platform Engineer")
+
+        XCTAssertEqual(completion.outcome, .needsManualReview)
+        XCTAssertEqual(completion.classification, .ambiguous)
+    }
+
     func testIPv4CompatibleIPv6LoopbackIsNotPublic() {
         XCTAssertFalse(PublicIPAddress("::127.0.0.1")!.isPublic)
         XCTAssertFalse(PublicIPAddress("::ffff:127.0.0.1")!.isPublic)
