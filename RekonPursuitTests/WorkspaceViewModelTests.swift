@@ -307,6 +307,156 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.statusMessage, "Existing workspace material needs recovery. Nothing was replaced or removed.")
     }
 
+    func testRecoveryCreatesSeparateLocalWorkspaceWithoutConsultingPreservedWorkspace() throws {
+        let bookmarkFixture = ViewModelBookmarkFixture()
+        let preservedBookmark = Data("preserved-bookmark".utf8)
+        bookmarkFixture.bookmark = preservedBookmark
+        let separate = SeparateWorkspaceFixture()
+        var productionOpenCount = 0
+        var productionCreateCount = 0
+        let model = WorkspaceViewModel(
+            openWorkspace: {
+                productionOpenCount += 1
+                return .recoveryRequired
+            },
+            createWorkspace: {
+                productionCreateCount += 1
+                throw WorkspaceStoreError.injectedFailure
+            },
+            workspaceLocationBookmarks: bookmarkFixture.makeStore(),
+            separateLocalWorkspace: separate.dependencies
+        )
+        model.start()
+        XCTAssertTrue(model.workspaceRequiresRecovery)
+        let bookmarkLoadsBeforeCreation = bookmarkFixture.loadCount
+
+        model.createSeparateLocalWorkspace()
+        model.title = "Separate role"
+        model.company = "Rekon Labs"
+        model.createOpportunity()
+
+        XCTAssertTrue(model.workspaceReady)
+        XCTAssertTrue(model.usingSeparateLocalWorkspace)
+        XCTAssertEqual(model.opportunities.map(\.title), ["Separate role"])
+        XCTAssertEqual(separate.persistedIdentity, separate.createdIdentities.first)
+        XCTAssertEqual(separate.allocatedIdentities.count, 1)
+        XCTAssertEqual(separate.createdIdentities.count, 1)
+        XCTAssertEqual(productionCreateCount, 0)
+        XCTAssertEqual(bookmarkFixture.bookmark, preservedBookmark)
+        XCTAssertEqual(bookmarkFixture.loadCount, bookmarkLoadsBeforeCreation)
+        XCTAssertEqual(bookmarkFixture.saveCount, 0)
+        XCTAssertEqual(productionOpenCount, 0)
+    }
+
+    func testRelaunchPrefersSelectedSeparateWorkspaceAndRetainsOpportunity() throws {
+        let bookmarkFixture = ViewModelBookmarkFixture()
+        bookmarkFixture.bookmark = Data("preserved-bookmark".utf8)
+        let separate = SeparateWorkspaceFixture()
+        let first = WorkspaceViewModel(
+            openWorkspace: { .recoveryRequired },
+            createWorkspace: { throw WorkspaceStoreError.injectedFailure },
+            workspaceLocationBookmarks: bookmarkFixture.makeStore(),
+            separateLocalWorkspace: separate.dependencies
+        )
+        first.start()
+        first.createSeparateLocalWorkspace()
+        first.title = "Persisted role"
+        first.company = "Rekon Labs"
+        first.createOpportunity()
+        first.teardown()
+        let bookmarkLoadsBeforeRelaunch = bookmarkFixture.loadCount
+        var productionOpenCount = 0
+
+        let relaunched = WorkspaceViewModel(
+            openWorkspace: {
+                productionOpenCount += 1
+                return .recoveryRequired
+            },
+            createWorkspace: { throw WorkspaceStoreError.injectedFailure },
+            workspaceLocationBookmarks: bookmarkFixture.makeStore(),
+            separateLocalWorkspace: separate.dependencies
+        )
+        relaunched.start()
+
+        XCTAssertTrue(relaunched.workspaceReady)
+        XCTAssertTrue(relaunched.usingSeparateLocalWorkspace)
+        XCTAssertEqual(relaunched.opportunities.map(\.title), ["Persisted role"])
+        XCTAssertEqual(separate.openedIdentities, [try XCTUnwrap(separate.persistedIdentity)])
+        XCTAssertEqual(productionOpenCount, 0)
+        XCTAssertEqual(bookmarkFixture.loadCount, bookmarkLoadsBeforeRelaunch)
+        XCTAssertEqual(bookmarkFixture.saveCount, 0)
+    }
+
+    func testSeparateWorkspaceCreationFailureReusesPersistedIdentityWithoutFallback() {
+        let bookmarkFixture = ViewModelBookmarkFixture()
+        bookmarkFixture.bookmark = Data("preserved-bookmark".utf8)
+        let separate = SeparateWorkspaceFixture()
+        separate.creationFailure = WorkspaceStoreError.injectedFailure
+        var productionOpenCount = 0
+        var productionCreateCount = 0
+        let model = WorkspaceViewModel(
+            openWorkspace: {
+                productionOpenCount += 1
+                return .recoveryRequired
+            },
+            createWorkspace: {
+                productionCreateCount += 1
+                throw WorkspaceStoreError.injectedFailure
+            },
+            workspaceLocationBookmarks: bookmarkFixture.makeStore(),
+            separateLocalWorkspace: separate.dependencies
+        )
+        model.start()
+        let bookmarkLoadsBeforeCreation = bookmarkFixture.loadCount
+
+        model.createSeparateLocalWorkspace()
+        model.createSeparateLocalWorkspace()
+
+        XCTAssertFalse(model.workspaceReady)
+        XCTAssertTrue(model.usingSeparateLocalWorkspace)
+        XCTAssertEqual(separate.allocatedIdentities.count, 1)
+        XCTAssertEqual(separate.createdIdentities.count, 2)
+        XCTAssertEqual(Set(separate.createdIdentities).count, 1)
+        XCTAssertEqual(separate.openedIdentities, separate.createdIdentities)
+        XCTAssertEqual(productionOpenCount, 0)
+        XCTAssertEqual(productionCreateCount, 0)
+        XCTAssertEqual(bookmarkFixture.loadCount, bookmarkLoadsBeforeCreation)
+        XCTAssertEqual(bookmarkFixture.saveCount, 0)
+    }
+
+    func testReturnToPreservedRecoveryClosesSeparateStoreAndChangesOnlySelector() throws {
+        let bookmarkFixture = ViewModelBookmarkFixture()
+        let preservedBookmark = Data("preserved-bookmark".utf8)
+        bookmarkFixture.bookmark = preservedBookmark
+        let separate = SeparateWorkspaceFixture()
+        var closeCount = 0
+        let model = WorkspaceViewModel(
+            openWorkspace: { .recoveryRequired },
+            createWorkspace: { throw WorkspaceStoreError.injectedFailure },
+            workspaceLocationBookmarks: bookmarkFixture.makeStore(),
+            closeWorkspaceStore: {
+                closeCount += 1
+                try $0.close()
+            },
+            separateLocalWorkspace: separate.dependencies
+        )
+        model.start()
+        model.createSeparateLocalWorkspace()
+        let bookmarkLoadsBeforeReturn = bookmarkFixture.loadCount
+
+        model.returnToPreservedWorkspaceRecovery()
+
+        XCTAssertEqual(closeCount, 1)
+        XCTAssertEqual(separate.clearSelectionCount, 1)
+        XCTAssertNil(separate.persistedIdentity)
+        XCTAssertFalse(model.workspaceReady)
+        XCTAssertFalse(model.usingSeparateLocalWorkspace)
+        XCTAssertTrue(model.workspaceRequiresRecovery)
+        XCTAssertEqual(bookmarkFixture.bookmark, preservedBookmark)
+        XCTAssertEqual(bookmarkFixture.loadCount, bookmarkLoadsBeforeReturn)
+        XCTAssertEqual(bookmarkFixture.saveCount, 0)
+    }
+
     func testRecheckToRecoveryRequiredClearsLiveWorkspaceDataAndBlocksMutation() throws {
         let store = try makeStore()
         var opens = 0
@@ -806,6 +956,8 @@ private final class ViewModelBookmarkFixture {
     private var databaseFolderPaths: Set<String> = []
     private(set) var startedURLs: [URL] = []
     private(set) var stoppedURLs: [URL] = []
+    private(set) var loadCount = 0
+    private(set) var saveCount = 0
 
     func makeFolder(withDatabase: Bool) -> URL {
         let folder = URL(fileURLWithPath: "/fixture/\(UUID().uuidString)", isDirectory: true)
@@ -815,8 +967,14 @@ private final class ViewModelBookmarkFixture {
 
     func makeStore() -> WorkspaceLocationBookmarkStore {
         WorkspaceLocationBookmarkStore(dependencies: .init(
-            loadBookmark: { [weak self] in self?.bookmark },
-            saveBookmark: { [weak self] bookmark in self?.bookmark = bookmark },
+            loadBookmark: { [weak self] in
+                self?.loadCount += 1
+                return self?.bookmark
+            },
+            saveBookmark: { [weak self] bookmark in
+                self?.saveCount += 1
+                self?.bookmark = bookmark
+            },
             createBookmark: { url in Data("bookmark:\(url.lastPathComponent)".utf8) },
             resolveBookmark: { [weak self] bookmark in
                 guard let result = self?.resolvedBookmarks[bookmark] else { throw ViewModelBookmarkFixtureError.unresolvable }
@@ -828,6 +986,51 @@ private final class ViewModelBookmarkFixture {
                 self?.databaseFolderPaths.contains(url.standardizedFileURL.path) == true ? nil : .missingWorkspaceDatabase
             }
         ))
+    }
+}
+
+@MainActor
+private final class SeparateWorkspaceFixture {
+    let identity = UUID(uuidString: "A11CE000-0000-4000-8000-000000000001")!
+    var persistedIdentity: UUID?
+    var creationFailure: Error?
+    private(set) var allocatedIdentities: [UUID] = []
+    private(set) var createdIdentities: [UUID] = []
+    private(set) var openedIdentities: [UUID] = []
+    private(set) var clearSelectionCount = 0
+    private let databaseURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent("rekon-separate-\(UUID().uuidString).sqlite")
+    private let key = Data(repeating: 31, count: 32)
+
+    var dependencies: SeparateLocalWorkspaceDependencies {
+        SeparateLocalWorkspaceDependencies(
+            selectedIdentity: { [weak self] in self?.persistedIdentity },
+            allocateAndPersistIdentity: { [weak self] in
+                guard let self else { throw WorkspaceStoreError.injectedFailure }
+                if let persistedIdentity { return persistedIdentity }
+                allocatedIdentities.append(identity)
+                persistedIdentity = identity
+                return identity
+            },
+            open: { [weak self] identity in
+                guard let self else { return .unavailable }
+                openedIdentities.append(identity)
+                guard FileManager.default.fileExists(atPath: databaseURL.path) else { return .createAvailable }
+                let database = try EncryptedDatabase.open(url: databaseURL, key: key, createIfMissing: false)
+                return .ready(try WorkspaceStore(database: database, actorID: "test", correlationID: "test"))
+            },
+            create: { [weak self] identity in
+                guard let self else { throw WorkspaceStoreError.injectedFailure }
+                createdIdentities.append(identity)
+                if let creationFailure { throw creationFailure }
+                let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+                return try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
+            },
+            clearSelection: { [weak self] in
+                self?.clearSelectionCount += 1
+                self?.persistedIdentity = nil
+            }
+        )
     }
 }
 

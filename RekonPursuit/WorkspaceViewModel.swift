@@ -2,6 +2,73 @@ import Combine
 import CryptoKit
 import Foundation
 
+private enum SeparateLocalWorkspaceConfiguration {
+    static let activeIdentityPreferenceKey = "active-separate-local-workspace-identity"
+
+    static func root(for identity: UUID) -> URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("RekonLabs", isDirectory: true)
+            .appendingPathComponent("RekonPursuitLocalWorkspaces", isDirectory: true)
+            .appendingPathComponent(identity.uuidString.lowercased(), isDirectory: true)
+    }
+}
+
+private enum SeparateLocalWorkspaceSelectionError: Error {
+    case identityPersistenceFailed
+}
+
+@MainActor
+struct SeparateLocalWorkspaceDependencies {
+    let selectedIdentity: () -> UUID?
+    let allocateAndPersistIdentity: () throws -> UUID
+    let open: (UUID) throws -> WorkspaceOpenState
+    let create: (UUID) throws -> WorkspaceStore
+    let clearSelection: () throws -> Void
+
+    static func live() -> SeparateLocalWorkspaceDependencies {
+        let defaults = UserDefaults.standard
+        let preferenceKey = SeparateLocalWorkspaceConfiguration.activeIdentityPreferenceKey
+        return SeparateLocalWorkspaceDependencies(
+            selectedIdentity: {
+                guard let rawValue = defaults.string(forKey: preferenceKey) else { return nil }
+                return UUID(uuidString: rawValue)
+            },
+            allocateAndPersistIdentity: {
+                if let rawValue = defaults.string(forKey: preferenceKey),
+                   let identity = UUID(uuidString: rawValue) {
+                    return identity
+                }
+                let identity = UUID()
+                defaults.set(identity.uuidString, forKey: preferenceKey)
+                guard defaults.string(forKey: preferenceKey) == identity.uuidString else {
+                    throw SeparateLocalWorkspaceSelectionError.identityPersistenceFailed
+                }
+                return identity
+            },
+            open: { identity in
+                let session = WorkspaceSession(
+                    root: SeparateLocalWorkspaceConfiguration.root(for: identity),
+                    keyStore: KeychainWorkspaceKeyStore(separateLocalWorkspace: identity)
+                )
+                return try session.open()
+            },
+            create: { identity in
+                let session = WorkspaceSession(
+                    root: SeparateLocalWorkspaceConfiguration.root(for: identity),
+                    keyStore: KeychainWorkspaceKeyStore(separateLocalWorkspace: identity)
+                )
+                return try session.create()
+            },
+            clearSelection: {
+                defaults.removeObject(forKey: preferenceKey)
+                guard defaults.object(forKey: preferenceKey) == nil else {
+                    throw SeparateLocalWorkspaceSelectionError.identityPersistenceFailed
+                }
+            }
+        )
+    }
+}
+
 @MainActor
 final class WorkspaceViewModel: ObservableObject {
     @Published var title = ""
@@ -97,6 +164,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var canCreateWorkspace = false
     @Published private(set) var workspaceReady = false
     @Published private(set) var workspaceRequiresRecovery = false
+    @Published private(set) var usingSeparateLocalWorkspace = false
 
     private let openWorkspace: () throws -> WorkspaceOpenState
     private let openExternalWorkspace: (URL) throws -> WorkspaceOpenState
@@ -104,8 +172,10 @@ final class WorkspaceViewModel: ObservableObject {
     private let createWorkspace: () throws -> WorkspaceStore
     private let restoreWorkspace: (URL) throws -> WorkspaceStore
     private let workspaceLocationBookmarks: WorkspaceLocationBookmarkStore
+    private let separateLocalWorkspace: SeparateLocalWorkspaceDependencies
     private let publicURLChecker: PublicURLChecking
     private var store: WorkspaceStore?
+    private var activeSeparateLocalWorkspaceIdentity: UUID?
     private var externalWorkspaceLease: WorkspaceAccessLease?
     private var stagedRestoreURL: URL?
     private var publicURLCheckTasks: [String: Task<Void, Never>] = [:]
@@ -117,7 +187,8 @@ final class WorkspaceViewModel: ObservableObject {
         workspaceLocationBookmarks: WorkspaceLocationBookmarkStore = WorkspaceLocationBookmarkStore(),
         openExternalWorkspace: @escaping (URL) throws -> WorkspaceOpenState = { _ in .recoveryRequired },
         closeWorkspaceStore: @escaping (WorkspaceStore) throws -> Void = { try $0.close() },
-        publicURLChecker: PublicURLChecking = PublicURLChecker()
+        publicURLChecker: PublicURLChecking = PublicURLChecker(),
+        separateLocalWorkspace: SeparateLocalWorkspaceDependencies = .live()
     ) {
         self.openWorkspace = openWorkspace
         self.openExternalWorkspace = openExternalWorkspace
@@ -126,6 +197,7 @@ final class WorkspaceViewModel: ObservableObject {
         self.restoreWorkspace = restoreWorkspace
         self.workspaceLocationBookmarks = workspaceLocationBookmarks
         self.publicURLChecker = publicURLChecker
+        self.separateLocalWorkspace = separateLocalWorkspace
     }
 
     convenience init() {
@@ -138,14 +210,26 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func start() {
-        if externalWorkspaceLease != nil {
+        if externalWorkspaceLease != nil || (usingSeparateLocalWorkspace && store != nil) {
             do {
-                try closeExternalWorkspaceForTransition()
+                try closeCurrentWorkspace()
             } catch {
                 presentWorkspaceCloseFailure()
                 return
             }
         }
+        if let identity = separateLocalWorkspace.selectedIdentity() {
+            activeSeparateLocalWorkspaceIdentity = identity
+            usingSeparateLocalWorkspace = true
+            do {
+                apply(try separateLocalWorkspace.open(identity))
+            } catch {
+                apply(.unavailable)
+            }
+            return
+        }
+        activeSeparateLocalWorkspaceIdentity = nil
+        usingSeparateLocalWorkspace = false
         switch workspaceLocationBookmarks.resolve() {
         case let .available(lease):
             openExternalWorkspace(with: lease)
@@ -162,6 +246,10 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func createWorkspaceIfNeeded() {
+        if usingSeparateLocalWorkspace {
+            createSeparateLocalWorkspace()
+            return
+        }
         do {
             apply(.ready(try createWorkspace()))
             statusMessage = "Local workspace created."
@@ -175,6 +263,53 @@ final class WorkspaceViewModel: ObservableObject {
                 apply(.unavailable)
             }
         }
+    }
+
+    func createSeparateLocalWorkspace() {
+        do {
+            let identity: UUID
+            if let activeSeparateLocalWorkspaceIdentity {
+                identity = activeSeparateLocalWorkspaceIdentity
+            } else {
+                identity = try separateLocalWorkspace.allocateAndPersistIdentity()
+                activeSeparateLocalWorkspaceIdentity = identity
+            }
+            usingSeparateLocalWorkspace = true
+            apply(.ready(try separateLocalWorkspace.create(identity)))
+            statusMessage = "Separate local workspace created."
+        } catch {
+            guard let identity = activeSeparateLocalWorkspaceIdentity ?? separateLocalWorkspace.selectedIdentity() else {
+                apply(.unavailable)
+                statusMessage = "The separate local workspace identity could not be saved."
+                return
+            }
+            activeSeparateLocalWorkspaceIdentity = identity
+            usingSeparateLocalWorkspace = true
+            do {
+                apply(try separateLocalWorkspace.open(identity))
+                if !workspaceReady {
+                    statusMessage = "The separate local workspace could not be created. Retry to continue with the same local workspace."
+                }
+            } catch {
+                apply(.unavailable)
+                statusMessage = "The separate local workspace could not be opened. Its identity remains selected for recovery."
+            }
+        }
+    }
+
+    func returnToPreservedWorkspaceRecovery() {
+        guard usingSeparateLocalWorkspace else { return }
+        do {
+            try closeCurrentWorkspace()
+            try separateLocalWorkspace.clearSelection()
+        } catch {
+            statusMessage = "The separate local workspace could not close safely. The preserved workspace was not selected."
+            return
+        }
+        activeSeparateLocalWorkspaceIdentity = nil
+        usingSeparateLocalWorkspace = false
+        apply(.recoveryRequired)
+        statusMessage = "Returned to the preserved workspace recovery state. No workspace data was changed."
     }
 
     func retryWorkspaceOpen() {

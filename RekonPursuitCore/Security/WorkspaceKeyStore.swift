@@ -20,6 +20,12 @@ nonisolated enum WorkspaceKeychainConfiguration {
         let compiledBundleID = Bundle.main.bundleIdentifier ?? productionBundleID
         return "\(compiledBundleID).workspace"
     }()
+
+    static func separateLocalWorkspaceService(for identity: UUID) -> String {
+        let productionBundleID = "com.rekonlabs.RekonPursuit"
+        let compiledBundleID = Bundle.main.bundleIdentifier ?? productionBundleID
+        return "\(compiledBundleID).local-workspace.\(identity.uuidString.lowercased())"
+    }
 }
 
 enum WorkspaceKeyStoreError: Error {
@@ -29,10 +35,22 @@ enum WorkspaceKeyStoreError: Error {
 }
 
 nonisolated final class KeychainWorkspaceKeyStore: WorkspaceKeyStore {
-    private let service = WorkspaceKeychainConfiguration.service
+    private let service: String
     static let primaryAccount = "primary-workspace-key"
-    private let account = KeychainWorkspaceKeyStore.primaryAccount
-    private let pendingAccount = "pending-workspace-key"
+    private let account: String
+    private let pendingAccount: String
+
+    init() {
+        service = WorkspaceKeychainConfiguration.service
+        account = KeychainWorkspaceKeyStore.primaryAccount
+        pendingAccount = "pending-workspace-key"
+    }
+
+    init(separateLocalWorkspace identity: UUID) {
+        service = WorkspaceKeychainConfiguration.separateLocalWorkspaceService(for: identity)
+        account = "local-primary-workspace-key"
+        pendingAccount = "local-pending-workspace-key"
+    }
 
     func readWorkspaceKey() throws -> Data? {
         try readKey(account: account)
