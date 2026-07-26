@@ -284,15 +284,18 @@ final class WorkspaceViewModel: ObservableObject {
         contacts.first { $0.id == selectedContactID }
     }
 
-    func open(_ task: TaskReminder) {
-        guard let store = readyStore() else { return }
+    @discardableResult
+    func open(_ task: TaskReminder) -> Bool {
+        guard let store = readyStore() else { return false }
         do {
             try store.openTask(id: task.id)
             selectedOpportunityID = task.opportunityID
             refreshCounts()
             statusMessage = "Opened opportunity locally."
+            return true
         } catch {
             statusMessage = "The opportunity could not be opened."
+            return false
         }
     }
 
@@ -326,6 +329,17 @@ final class WorkspaceViewModel: ObservableObject {
             return false
         }
         return selectRouteOpportunity(id: id)
+    }
+
+    /// A sidebar change may leave the current opportunity route only when no
+    /// bounded R5 URL check is still responsible for a selected record.
+    @discardableResult
+    func canLeaveOpportunityRoute() -> Bool {
+        guard checkingPublicURLOpportunityIDs.isEmpty else {
+            statusMessage = "Finish or cancel the active public URL check before leaving this opportunity."
+            return false
+        }
+        return true
     }
 
     func saveSelectedOpportunity() {
@@ -543,11 +557,40 @@ final class WorkspaceViewModel: ObservableObject {
         statusMessage = "Cancelling the public URL check…"
     }
 
-    func confirmReconciliationClosure() {
-        guard let store = readyStore(), !selectedOpportunityID.isEmpty else { return }
-        do { try store.confirmReconciliationClosure(forOpportunityID: selectedOpportunityID); refreshCounts(); statusMessage = "Closure confirmed locally." }
-        catch let error as LocalizedError { statusMessage = error.errorDescription ?? "Closure could not be confirmed." }
-        catch { statusMessage = "Closure could not be confirmed." }
+    @discardableResult
+    func openReconciliationReviewAction(forOpportunityID opportunityID: String) -> Bool {
+        guard navigateToRouteOpportunity(id: opportunityID) else { return false }
+        guard let task = selectedReconciliationTask else {
+            statusMessage = "No reconciliation review action is available for this opportunity."
+            return false
+        }
+        return open(task)
+    }
+
+    @discardableResult
+    func confirmReconciliationClosure(forOpportunityID opportunityID: String) -> Bool {
+        guard selectRouteOpportunity(id: opportunityID) else {
+            statusMessage = "The opportunity could not be found."
+            return false
+        }
+        return confirmReconciliationClosure()
+    }
+
+    @discardableResult
+    func confirmReconciliationClosure() -> Bool {
+        guard let store = readyStore(), !selectedOpportunityID.isEmpty else { return false }
+        do {
+            try store.confirmReconciliationClosure(forOpportunityID: selectedOpportunityID)
+            refreshCounts()
+            statusMessage = "Closure confirmed locally."
+            return true
+        } catch let error as LocalizedError {
+            statusMessage = error.errorDescription ?? "Closure could not be confirmed."
+            return false
+        } catch {
+            statusMessage = "Closure could not be confirmed."
+            return false
+        }
     }
 
     func exportOpportunitiesCSV() -> String? {

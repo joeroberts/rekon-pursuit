@@ -37,7 +37,11 @@ struct ContentView: View {
     @State private var closureConfirmationID: String?
 
     var body: some View {
-        AppShellView(selection: $page) {
+        AppShellView(
+            selection: $page,
+            detailTitle: detailTitle,
+            selectDestination: selectDestination
+        ) {
             if !model.workspaceReady {
                 WorkspaceOnboardingView(model: model)
             } else if let route = opportunityRoute {
@@ -124,7 +128,7 @@ struct ContentView: View {
 
     @ViewBuilder private var dailyDestination: some View {
         switch page {
-        case .needsAttention: NeedsAttentionView(model: model, open: openOpportunity, addOpportunity: { page = .addOpportunity }, reschedule: { task in taskToReschedule = task; rescheduledDueAt = task.dueAt ?? .now })
+        case .needsAttention: NeedsAttentionView(model: model, open: openAttentionTask, addOpportunity: { page = .addOpportunity }, reschedule: { task in taskToReschedule = task; rescheduledDueAt = task.dueAt ?? .now })
         case .pipeline: PipelineView(model: model, showsBoard: $showsPipelineBoard, anchorID: $pipelineAnchorID, open: openOpportunity, delete: { pendingDeletion = $0 })
         case .addOpportunity: AddOpportunityView(model: model)
         case .importCSV: CSVImportView(model: model, chooseFile: chooseCSVFile, open: openOpportunity)
@@ -150,9 +154,36 @@ struct ContentView: View {
         openRoute(.overview(opportunity.id))
     }
 
+    private func openAttentionTask(_ task: TaskReminder) {
+        guard model.navigateToRouteOpportunity(id: task.opportunityID) else { return }
+        guard model.open(task) else { return }
+        pipelineAnchorID = task.opportunityID
+        opportunityRoute = .overview(task.opportunityID)
+        page = .pipeline
+    }
+
     private func openRoute(_ route: OpportunityRoute) {
         guard model.navigateToRouteOpportunity(id: route.opportunityID) else { return }
         opportunityRoute = route
+    }
+
+    private var detailTitle: String {
+        guard let opportunityRoute else { return page.rawValue }
+        switch opportunityRoute {
+        case .overview: return "Opportunity"
+        case .history: return "Activity & history"
+        case .reconcile: return "Reconcile posting"
+        }
+    }
+
+    private func selectDestination(_ destination: AppDestination) {
+        guard opportunityRoute != nil else {
+            page = destination
+            return
+        }
+        guard model.canLeaveOpportunityRoute() else { return }
+        opportunityRoute = nil
+        page = destination
     }
 
     private func returnToPipeline() { opportunityRoute = nil; page = .pipeline }
@@ -232,19 +263,29 @@ private struct PipelineView: View {
             if model.filteredOpportunities.isEmpty {
                 ContentUnavailableView("No opportunities match", systemImage: "briefcase", description: Text("Try another search or add an opportunity."))
             } else if showsBoard {
-                ScrollView(.horizontal) {
-                    HStack(alignment: .top, spacing: 14) {
-                        ForEach(PipelineStage.allCases, id: \.self) { stage in
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(stage.rawValue).font(.headline)
-                                ScrollView {
-                                    ForEach(model.filteredOpportunities.filter { $0.stage == stage }, id: \.id) { opportunity in
-                                        OpportunityCard(opportunity: opportunity) { anchorID = opportunity.id; open(opportunity) }
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal) {
+                        HStack(alignment: .top, spacing: 14) {
+                            ForEach(PipelineStage.allCases, id: \.self) { stage in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(stage.rawValue).font(.headline)
+                                    ScrollView {
+                                        ForEach(model.filteredOpportunities.filter { $0.stage == stage }, id: \.id) { opportunity in
+                                            OpportunityCard(opportunity: opportunity) { anchorID = opportunity.id; open(opportunity) }
+                                                .id(opportunity.id)
+                                        }
                                     }
                                 }
-                            }.frame(width: 210, alignment: .leading)
-                        }
-                    }.padding(.bottom, 4)
+                                .id(stage)
+                                .frame(width: 210, alignment: .leading)
+                            }
+                        }.padding(.bottom, 4)
+                    }
+                    .onAppear {
+                        guard let anchorID, let opportunity = model.opportunity(id: anchorID) else { return }
+                        proxy.scrollTo(opportunity.stage, anchor: .center)
+                        proxy.scrollTo(anchorID, anchor: .center)
+                    }
                 }
             } else {
                 ScrollViewReader { proxy in
@@ -429,6 +470,15 @@ private struct ReconcilePostingView: View {
                                 Picker("Confidence", selection: $model.reconciliationConfidence) { ForEach(ReconciliationConfidence.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
                                 TextField("Evidence or error reviewed", text: $model.reconciliationEvidence, axis: .vertical)
                                 HStack { Button("Record local review") { _ = model.selectRouteOpportunity(id: opportunityID); model.recordReconciliation() }; Button("Record offline — check not run") { _ = model.selectRouteOpportunity(id: opportunityID); model.reconciliationOutcome = .needsManualReview; model.reconciliationClassification = .offlineUnchecked; model.reconciliationReason = .offlineUnchecked; model.reconciliationEvidence = "Offline — check not run"; model.recordReconciliation() }; Button("Confirm closure…", action: confirmClosure) }
+                                if let task = model.selectedReconciliationTask {
+                                    HStack {
+                                        Button("Open review action") { _ = model.openReconciliationReviewAction(forOpportunityID: opportunityID) }
+                                            .accessibilityIdentifier("open-reconciliation-review-action")
+                                        Text(task.isComplete ? "Review action completed" : "Review action open")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
                             }
                         }
                         if !model.selectedReconciliationResults.isEmpty { HistorySection(title: "Reconciliation history", empty: "") { ForEach(model.selectedReconciliationResults, id: \.id) { result in VStack(alignment: .leading, spacing: 3) { Text("\(result.outcome.rawValue) · \(result.classification.rawValue) · \(result.recordedAt.formatted(date: .abbreviated, time: .shortened))").font(.headline); Text(result.evidence.isEmpty ? result.error : result.evidence); Text("Closure: \(result.closureConfirmedAt == nil ? (result.outcome == .closedSuggested ? "Awaiting confirmation" : "Not closed") : "Confirmed")").font(.caption).foregroundStyle(.secondary) } } } }
@@ -448,7 +498,7 @@ private struct ClosureConfirmationView: View {
             Text("Confirm closure").font(.title2.bold())
             if model.selectedOpportunityID == opportunityID, let result = model.selectedClosureSuggestion { Text("\(result.url)\n\(result.evidence)\n\(result.recordedAt.formatted(date: .abbreviated, time: .shortened))") } else { Text("Record an unconfirmed Closed suggested result before confirming closure.") }
             Text("This changes the stage to Closed and completes only the dedicated reconciliation review action.")
-            HStack { Button("Keep active", action: dismiss); Button("Confirm closure") { guard model.selectRouteOpportunity(id: opportunityID) else { dismiss(); return }; model.confirmReconciliationClosure(); dismiss() }.keyboardShortcut(.defaultAction).disabled(model.selectedClosureSuggestion == nil) }
+            HStack { Button("Keep active", action: dismiss); Button("Confirm closure") { if model.confirmReconciliationClosure(forOpportunityID: opportunityID) { dismiss() } }.keyboardShortcut(.defaultAction).disabled(model.selectedClosureSuggestion == nil) }
         }.padding().frame(minWidth: 420)
     }
 }
@@ -456,8 +506,8 @@ private struct ClosureConfirmationView: View {
 private struct MissingOpportunityView: View { let back: () -> Void; var body: some View { ContentUnavailableView("Opportunity unavailable", systemImage: "exclamationmark.triangle", description: Text("It may have been deleted while this screen was open.")); Button("Return to Pipeline", action: back) } }
 
 private struct NeedsAttentionView: View {
-    @ObservedObject var model: WorkspaceViewModel; let open: (Opportunity) -> Void; let addOpportunity: () -> Void; let reschedule: (TaskReminder) -> Void
-    var body: some View { ScrollView { VStack(alignment: .leading, spacing: 16) { Text("Needs Attention").font(.largeTitle.bold()).accessibilityIdentifier("needs-attention-home"); if model.needsAttention.isEmpty { ContentUnavailableView("No next actions", systemImage: "checkmark.circle", description: Text("Add an opportunity when you are ready.")); Button("Add an opportunity", action: addOpportunity).accessibilityIdentifier("show-add-opportunity") } else { ForEach(model.needsAttention, id: \.id) { task in HStack { VStack(alignment: .leading) { Text(task.title).font(.headline); Text(task.dueAt?.formatted(date: .abbreviated, time: .shortened) ?? "No due date").foregroundStyle(.secondary) }; Spacer(); if let opportunity = model.opportunities.first(where: { $0.id == task.opportunityID }) { Button("Open") { open(opportunity) } }; Button("Snooze 1 day") { model.snoozeOneDay(task) }; Button("Reschedule…") { reschedule(task) }; Button("Complete") { model.complete(task) } }.padding().background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: 10)) } } }.padding(28).frame(maxWidth: .infinity, alignment: .leading) } }
+    @ObservedObject var model: WorkspaceViewModel; let open: (TaskReminder) -> Void; let addOpportunity: () -> Void; let reschedule: (TaskReminder) -> Void
+    var body: some View { ScrollView { VStack(alignment: .leading, spacing: 16) { Text("Needs Attention").font(.largeTitle.bold()).accessibilityIdentifier("needs-attention-home"); if model.needsAttention.isEmpty { ContentUnavailableView("No next actions", systemImage: "checkmark.circle", description: Text("Add an opportunity when you are ready.")); Button("Add an opportunity", action: addOpportunity).accessibilityIdentifier("show-add-opportunity") } else { ForEach(model.needsAttention, id: \.id) { task in HStack { VStack(alignment: .leading) { Text(task.title).font(.headline); Text(task.dueAt?.formatted(date: .abbreviated, time: .shortened) ?? "No due date").foregroundStyle(.secondary) }; Spacer(); Button("Open") { open(task) }; Button("Snooze 1 day") { model.snoozeOneDay(task) }; Button("Reschedule…") { reschedule(task) }; Button("Complete") { model.complete(task) } }.padding().background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: 10)) } } }.padding(28).frame(maxWidth: .infinity, alignment: .leading) } }
 }
 
 private struct AddOpportunityView: View {

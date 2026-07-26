@@ -52,10 +52,19 @@ enum RekonTheme {
 
 struct AppShellView<Detail: View>: View {
     @Binding private var selection: AppDestination
+    private let detailTitle: String
+    private let selectDestination: (AppDestination) -> Void
     private let detail: Detail
 
-    init(selection: Binding<AppDestination>, @ViewBuilder detail: () -> Detail) {
+    init(
+        selection: Binding<AppDestination>,
+        detailTitle: String,
+        selectDestination: @escaping (AppDestination) -> Void,
+        @ViewBuilder detail: () -> Detail
+    ) {
         _selection = selection
+        self.detailTitle = detailTitle
+        self.selectDestination = selectDestination
         self.detail = detail()
     }
 
@@ -73,7 +82,10 @@ struct AppShellView<Detail: View>: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 14)
-                List(selection: $selection) {
+                List(selection: Binding(
+                    get: { selection },
+                    set: { selectDestination($0) }
+                )) {
                     ForEach(AppDestination.allCases) { destination in
                         Label(destination.rawValue, systemImage: destination.icon)
                             .tag(destination)
@@ -86,7 +98,7 @@ struct AppShellView<Detail: View>: View {
         } detail: {
             detail
                 .background(RekonTheme.background)
-                .navigationTitle(selection.rawValue)
+                .navigationTitle(detailTitle)
         }
         .tint(RekonTheme.accent)
         .navigationSplitViewStyle(.balanced)

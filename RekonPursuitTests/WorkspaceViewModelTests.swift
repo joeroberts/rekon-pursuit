@@ -347,6 +347,78 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.activityEvents.last?.kind, "task_opened")
     }
 
+    func testOpeningReconciliationReviewActionTargetsThatOpportunityAndRecordsActivity() throws {
+        let store = try makeStore()
+        let first = try store.create(CreateOpportunity(title: "First", company: "Rekon Labs", jobURL: "https://jobs.example.com/first"))
+        let second = try store.create(CreateOpportunity(title: "Second", company: "Rekon Labs"))
+        _ = try store.recordReconciliationResult(RecordReconciliationResult(
+            opportunityID: first.id,
+            url: first.jobURL,
+            outcome: .needsManualReview,
+            classification: .offlineUnchecked,
+            reason: .offlineUnchecked,
+            evidence: "Offline — check not run"
+        ))
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        model.start()
+        model.select(second)
+
+        XCTAssertTrue(model.openReconciliationReviewAction(forOpportunityID: first.id))
+
+        XCTAssertEqual(model.selectedOpportunityID, first.id)
+        XCTAssertEqual(model.activityEvents.last?.kind, "task_opened")
+    }
+
+    func testClosureConfirmationUsesTheExplicitOpportunityID() throws {
+        let store = try makeStore()
+        let first = try store.create(CreateOpportunity(title: "First", company: "Rekon Labs", jobURL: "https://jobs.example.com/first"))
+        let second = try store.create(CreateOpportunity(title: "Second", company: "Rekon Labs"))
+        _ = try store.recordReconciliationResult(RecordReconciliationResult(
+            opportunityID: first.id,
+            url: first.jobURL,
+            outcome: .closedSuggested,
+            classification: .confirmed,
+            reason: .manualReview,
+            confidence: .medium,
+            evidence: "Posting closed"
+        ))
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        model.start()
+        model.select(second)
+
+        XCTAssertTrue(model.confirmReconciliationClosure(forOpportunityID: first.id))
+
+        XCTAssertEqual(model.opportunity(id: first.id)?.stage, .closed)
+        XCTAssertNotEqual(model.opportunity(id: second.id)?.stage, .closed)
+        XCTAssertEqual(model.selectedOpportunityID, first.id)
+    }
+
+    func testRunningPublicURLCheckBlocksCrossRecordRouteUntilCancellationCompletes() async throws {
+        let store = try makeStore()
+        let first = try store.create(CreateOpportunity(title: "First", company: "Rekon Labs", jobURL: "https://jobs.example.com/first"))
+        let second = try store.create(CreateOpportunity(title: "Second", company: "Rekon Labs", jobURL: "https://jobs.example.com/second"))
+        let checker = BlockingFixturePublicURLChecker(request: PublicURLRequest(originalURL: first.jobURL, hostname: "jobs.example.com", requestTarget: "/first"))
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, publicURLChecker: checker)
+        model.start()
+        model.select(first)
+
+        model.checkSelectedPublicURL()
+        await checker.waitForStart()
+        XCTAssertTrue(model.isCheckingSelectedPublicURL)
+        XCTAssertFalse(model.canLeaveOpportunityRoute())
+        XCTAssertFalse(model.navigateToRouteOpportunity(id: second.id))
+        XCTAssertEqual(model.selectedOpportunityID, first.id)
+
+        model.cancelSelectedPublicURLCheck()
+        await checker.waitForCancellation()
+        for _ in 0..<20 where model.isCheckingSelectedPublicURL { await Task.yield() }
+
+        XCTAssertFalse(model.isCheckingSelectedPublicURL)
+        XCTAssertTrue(model.canLeaveOpportunityRoute())
+        XCTAssertTrue(model.navigateToRouteOpportunity(id: second.id))
+        XCTAssertEqual(model.selectedOpportunityID, second.id)
+    }
+
     func testQueueRescheduleChangesOnlyTheSelectedTaskAndRecordsActivity() throws {
         let store = try makeStore()
         let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
@@ -565,5 +637,39 @@ private final class FixturePublicURLChecker: PublicURLChecking {
         while !didCheck {
             await Task.yield()
         }
+    }
+}
+
+@MainActor
+private final class BlockingFixturePublicURLChecker: PublicURLChecking {
+    private let request: PublicURLRequest
+    private var didStart = false
+    private var didCancel = false
+
+    init(request: PublicURLRequest) {
+        self.request = request
+    }
+
+    func prepare(_ savedURL: String) -> PublicURLPreparation { .eligible(request) }
+
+    func check(_ request: PublicURLRequest, opportunityTitle: String) async -> PublicURLCheckCompletion {
+        didStart = true
+        while !Task.isCancelled { await Task.yield() }
+        didCancel = true
+        return PublicURLCheckCompletion(
+            terminalState: .cancelled,
+            outcome: .needsManualReview,
+            classification: .offlineUnchecked,
+            reason: .offlineUnchecked,
+            evidence: "Check cancelled locally."
+        )
+    }
+
+    func waitForStart() async {
+        while !didStart { await Task.yield() }
+    }
+
+    func waitForCancellation() async {
+        while !didCancel { await Task.yield() }
     }
 }
