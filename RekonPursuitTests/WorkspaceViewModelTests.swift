@@ -220,7 +220,17 @@ final class WorkspaceViewModelTests: XCTestCase {
 
         model.start()
 
-        XCTAssertEqual(model.csvImportReport, report)
+        let restored = try XCTUnwrap(model.csvImportReport)
+        XCTAssertEqual(restored.id, report.id)
+        XCTAssertEqual(restored.importedCount, report.importedCount)
+        XCTAssertEqual(restored.updatedCount, report.updatedCount)
+        XCTAssertEqual(restored.skippedCount, report.skippedCount)
+        XCTAssertEqual(restored.duplicateKeptCount, report.duplicateKeptCount)
+        XCTAssertEqual(restored.invalidCount, report.invalidCount)
+        XCTAssertEqual(restored.failedCount, report.failedCount)
+        XCTAssertEqual(restored.sourceBasename, report.sourceBasename)
+        XCTAssertEqual(restored.mappingSummary, report.mappingSummary)
+        XCTAssertEqual(restored.createdAt.timeIntervalSince1970, report.createdAt.timeIntervalSince1970, accuracy: 0.001)
     }
 
     func testExportReturnsCSVAndRecordsOnlyAnAuditEvent() throws {

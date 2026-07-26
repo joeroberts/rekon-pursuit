@@ -169,6 +169,15 @@ ordinary sequencing.
 | TPM | Approved | `RP-R3` is the sole dependency-safe successor. `RP-R3a` is explicitly deferred; all other tasks remain blocked. |
 | Delivery Manager | Approved — released for implementation | Product-owner scope decision and all amended plan approvals are recorded. Release `RP-R3` only. |
 
+### RP-R3 corrective verification record
+
+| Role | Decision | Evidence / boundary |
+| --- | --- | --- |
+| Product owner | Passed targeted corrective verification | The user verified the fresh isolated app after the two reported defects were corrected: CRLF CSV files now present only their header row in mapping menus, and **Open resulting opportunity** now navigates to the imported record in Pipeline. This accepts those corrections only; the broader R3 map → validate → decide → import → reopen-report workflow remains in progress. |
+| Code Reviewer | Approved | `8467af7` keeps the report-row selection behavior and adds the missing Pipeline destination change; no import or persistence behavior changed. |
+| QA | Approved | Focused Debug build passed for the open-result correction. |
+| Architect | Approved | The CRLF parser correction (`0ef9f90`) and report-navigation correction (`8467af7`) preserve the local-only import and opportunity-record boundaries. |
+
 ## Release log
 
 | Date | Task | Delivery decision | Scope boundary |
