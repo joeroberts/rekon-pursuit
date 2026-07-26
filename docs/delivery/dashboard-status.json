@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "RP-R6",
-  "nextEligibleTaskId": "RP-R6",
+  "activeTaskId": "UX-R1",
+  "nextEligibleTaskId": "UX-R1",
   "tasks": [
     {
       "id": "RP-R0",
@@ -95,12 +95,38 @@
       "needsUserAction": false
     },
     {
+      "id": "UX-R1",
+      "title": "Shell and opportunity navigation",
+      "workType": "UX",
+      "status": "next_up",
+      "releaseCondition": "Requires an approved UX-R1 brief and dependency-safe gate; no implementation is released yet.",
+      "latestTransition": "Product owner sequenced the approved shell/navigation remediation ahead of R6.",
+      "evidence": {
+        "label": "Remediation ledger",
+        "href": "../remediation-ledger.md"
+      },
+      "needsUserAction": false
+    },
+    {
+      "id": "UX-R2",
+      "title": "Core workflow forms",
+      "workType": "UX",
+      "status": "backlog",
+      "releaseCondition": "Release after UX-R1 acceptance; no implementation is released yet.",
+      "latestTransition": "Product owner approved the scope and placed it after shell/navigation remediation.",
+      "evidence": {
+        "label": "Remediation ledger",
+        "href": "../remediation-ledger.md"
+      },
+      "needsUserAction": false
+    },
+    {
       "id": "RP-R6",
       "title": "Durable document references",
       "workType": "Data",
-      "status": "next_up",
-      "releaseCondition": "Requires its own approved plan and dependency-safe release; no implementation is released yet.",
-      "latestTransition": "Eligible after RP-R5 acceptance; awaiting its planning and release gate.",
+      "status": "backlog",
+      "releaseCondition": "Release after UX-R2 acceptance into the compact document area; no implementation is released yet.",
+      "latestTransition": "Deferred behind the approved UX-R1 and UX-R2 remediation sequence.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
@@ -164,7 +190,7 @@
       "title": "Clean-state remediation acceptance",
       "workType": "Acceptance",
       "status": "backlog",
-      "releaseCondition": "Release after RP-R1a through RP-R9 are accepted.",
+      "releaseCondition": "Release after RP-R1a through RP-R9 and UX-R1/UX-R2 are accepted.",
       "latestTransition": "Planned remediation work.",
       "evidence": {
         "label": "Remediation ledger",

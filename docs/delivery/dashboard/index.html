@@ -20,14 +20,36 @@
   <main>
     <header><div class="eyebrow">Rekon Pursuit</div><h1>Delivery dashboard</h1><p class="subhead">Local operational view. This page refreshes every 30 seconds.</p></header>
     <section class="summary" aria-label="Delivery summary">
-      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">RP-R6 — Durable document references</span></div>
-      <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">RP-R6 — Durable document references</span></div>
+      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">UX-R1 — Shell and opportunity navigation</span></div>
+      <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">UX-R1 — Shell and opportunity navigation</span></div>
       <div class="summary-item"><span class="summary-label">Accepted</span><span class="summary-value">7</span></div>
-      <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">5</span></div>
+      <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">7</span></div>
       <div class="summary-item"><span class="summary-label">Blocked</span><span class="summary-value">0</span></div>
     </section>
     <section class="attention" aria-label="Attention queue"><h2>Attention queue</h2><p class="attention-empty">Nothing needs your attention.</p></section>
-    <section class="board" aria-label="Delivery status board"><section class="lane lane-backlog"><header><h2>Backlog</h2><span class="lane-count">5</span></header>
+    <section class="board" aria-label="Delivery status board"><section class="lane lane-backlog"><header><h2>Backlog</h2><span class="lane-count">7</span></header>
+      <article class="task-card status-backlog">
+        <div class="card-heading"><span class="task-id">UX-R2</span><span class="work-type">UX</span></div>
+        <h3>Core workflow forms</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Release after UX-R1 acceptance; no implementation is released yet.</dd></div>
+          <div><dt>Latest transition</dt><dd>Product owner approved the scope and placed it after shell/navigation remediation.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="details-link" href="remediation.html#UX-R2">View task details</a>
+      </article>
+
+      <article class="task-card status-backlog">
+        <div class="card-heading"><span class="task-id">RP-R6</span><span class="work-type">Data</span></div>
+        <h3>Durable document references</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Release after UX-R2 acceptance into the compact document area; no implementation is released yet.</dd></div>
+          <div><dt>Latest transition</dt><dd>Deferred behind the approved UX-R1 and UX-R2 remediation sequence.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="details-link" href="remediation.html#RP-R6">View task details</a>
+      </article>
+
       <article class="task-card status-backlog">
         <div class="card-heading"><span class="task-id">RP-R7a</span><span class="work-type">Data lifecycle</span></div>
         <h3>Portable recovery and encrypted export</h3>
@@ -76,21 +98,21 @@
         <div class="card-heading"><span class="task-id">RP-R10</span><span class="work-type">Acceptance</span></div>
         <h3>Clean-state remediation acceptance</h3>
         <dl>
-          <div><dt>Release condition</dt><dd>Release after RP-R1a through RP-R9 are accepted.</dd></div>
+          <div><dt>Release condition</dt><dd>Release after RP-R1a through RP-R9 and UX-R1/UX-R2 are accepted.</dd></div>
           <div><dt>Latest transition</dt><dd>Planned remediation work.</dd></div>
         </dl>
         <p class="action">No action needed</p>
         <a class="details-link" href="remediation.html#RP-R10">View task details</a>
       </article></section><section class="lane lane-next_up"><header><h2>Next up</h2><span class="lane-count">1</span></header>
       <article class="task-card status-next_up">
-        <div class="card-heading"><span class="task-id">RP-R6</span><span class="work-type">Data</span></div>
-        <h3>Durable document references</h3>
+        <div class="card-heading"><span class="task-id">UX-R1</span><span class="work-type">UX</span></div>
+        <h3>Shell and opportunity navigation</h3>
         <dl>
-          <div><dt>Release condition</dt><dd>Requires its own approved plan and dependency-safe release; no implementation is released yet.</dd></div>
-          <div><dt>Latest transition</dt><dd>Eligible after RP-R5 acceptance; awaiting its planning and release gate.</dd></div>
+          <div><dt>Release condition</dt><dd>Requires an approved UX-R1 brief and dependency-safe gate; no implementation is released yet.</dd></div>
+          <div><dt>Latest transition</dt><dd>Product owner sequenced the approved shell/navigation remediation ahead of R6.</dd></div>
         </dl>
         <p class="action">No action needed</p>
-        <a class="details-link" href="remediation.html#RP-R6">View task details</a>
+        <a class="details-link" href="remediation.html#UX-R1">View task details</a>
       </article></section><section class="lane lane-in_progress"><header><h2>In progress</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">7</span></header>
       <article class="task-card status-accepted">
         <div class="card-heading"><span class="task-id">RP-R0</span><span class="work-type">Foundation</span></div>
