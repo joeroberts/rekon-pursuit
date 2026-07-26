@@ -25,7 +25,7 @@ struct SeparateLocalWorkspaceDependencies {
     let create: (UUID) throws -> WorkspaceStore
     let clearSelection: () throws -> Void
 
-    static func live() -> SeparateLocalWorkspaceDependencies {
+    fileprivate static func live() -> SeparateLocalWorkspaceDependencies {
         let defaults = UserDefaults.standard
         let preferenceKey = SeparateLocalWorkspaceConfiguration.activeIdentityPreferenceKey
         return SeparateLocalWorkspaceDependencies(
@@ -188,7 +188,7 @@ final class WorkspaceViewModel: ObservableObject {
         openExternalWorkspace: @escaping (URL) throws -> WorkspaceOpenState = { _ in .recoveryRequired },
         closeWorkspaceStore: @escaping (WorkspaceStore) throws -> Void = { try $0.close() },
         publicURLChecker: PublicURLChecking = PublicURLChecker(),
-        separateLocalWorkspace: SeparateLocalWorkspaceDependencies = .live()
+        separateLocalWorkspace: SeparateLocalWorkspaceDependencies
     ) {
         self.openWorkspace = openWorkspace
         self.openExternalWorkspace = openExternalWorkspace
@@ -205,7 +205,8 @@ final class WorkspaceViewModel: ObservableObject {
         self.init(
             openWorkspace: session.open,
             createWorkspace: session.create,
-            restoreWorkspace: session.restore
+            restoreWorkspace: session.restore,
+            separateLocalWorkspace: .live()
         )
     }
 
@@ -301,9 +302,16 @@ final class WorkspaceViewModel: ObservableObject {
         guard usingSeparateLocalWorkspace else { return }
         do {
             try closeCurrentWorkspace()
-            try separateLocalWorkspace.clearSelection()
         } catch {
             statusMessage = "The separate local workspace could not close safely. The preserved workspace was not selected."
+            return
+        }
+        do {
+            try separateLocalWorkspace.clearSelection()
+        } catch {
+            apply(.unavailable)
+            usingSeparateLocalWorkspace = true
+            statusMessage = "The separate local workspace closed, but its selection could not be cleared. Retry returning to the preserved workspace."
             return
         }
         activeSeparateLocalWorkspaceIdentity = nil
@@ -317,6 +325,10 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func chooseExistingWorkspaceFolder(_ url: URL?) {
+        guard !usingSeparateLocalWorkspace else {
+            statusMessage = "Return to the preserved workspace recovery state before choosing its folder."
+            return
+        }
         guard let url else {
             if hasActiveExternalWorkspace {
                 statusMessage = "Workspace selection was cancelled. The current external workspace remains open."

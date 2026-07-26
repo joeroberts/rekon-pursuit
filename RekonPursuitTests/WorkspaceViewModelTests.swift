@@ -16,7 +16,8 @@ final class WorkspaceViewModelTests: XCTestCase {
             openExternalWorkspace: { url in
                 openedURL = url
                 return .ready(store)
-            }
+            },
+            separateLocalWorkspace: .disabledForTesting
         )
 
         model.chooseExistingWorkspaceFolder(folder)
@@ -40,7 +41,8 @@ final class WorkspaceViewModelTests: XCTestCase {
         let model = WorkspaceViewModel(
             openWorkspace: { .createAvailable },
             createWorkspace: { store },
-            workspaceLocationBookmarks: bookmarkFixture.makeStore()
+            workspaceLocationBookmarks: bookmarkFixture.makeStore(),
+            separateLocalWorkspace: .disabledForTesting
         )
 
         model.start()
@@ -57,7 +59,8 @@ final class WorkspaceViewModelTests: XCTestCase {
         let model = WorkspaceViewModel(
             openWorkspace: { .createAvailable },
             createWorkspace: { store },
-            workspaceLocationBookmarks: bookmarkFixture.makeStore()
+            workspaceLocationBookmarks: bookmarkFixture.makeStore(),
+            separateLocalWorkspace: .disabledForTesting
         )
 
         model.chooseExistingWorkspaceFolder(nil)
@@ -75,7 +78,8 @@ final class WorkspaceViewModelTests: XCTestCase {
             openWorkspace: { .createAvailable },
             createWorkspace: { store },
             workspaceLocationBookmarks: bookmarkFixture.makeStore(),
-            openExternalWorkspace: { _ in .recoveryRequired }
+            openExternalWorkspace: { _ in .recoveryRequired },
+            separateLocalWorkspace: .disabledForTesting
         )
 
         model.chooseExistingWorkspaceFolder(folder)
@@ -95,7 +99,8 @@ final class WorkspaceViewModelTests: XCTestCase {
             createWorkspace: { store },
             workspaceLocationBookmarks: bookmarkFixture.makeStore(),
             openExternalWorkspace: { _ in .ready(store) },
-            closeWorkspaceStore: { _ in throw WorkspaceStoreError.injectedFailure }
+            closeWorkspaceStore: { _ in throw WorkspaceStoreError.injectedFailure },
+            separateLocalWorkspace: .disabledForTesting
         )
 
         model.chooseExistingWorkspaceFolder(folder)
@@ -115,7 +120,8 @@ final class WorkspaceViewModelTests: XCTestCase {
             openWorkspace: { .createAvailable },
             createWorkspace: { store },
             workspaceLocationBookmarks: bookmarkFixture.makeStore(),
-            openExternalWorkspace: { _ in .ready(store) }
+            openExternalWorkspace: { _ in .ready(store) },
+            separateLocalWorkspace: .disabledForTesting
         )
         model.chooseExistingWorkspaceFolder(folder)
 
@@ -130,7 +136,7 @@ final class WorkspaceViewModelTests: XCTestCase {
         let store = try makeStore()
         let first = try store.create(CreateOpportunity(title: "First", company: "Rekon Labs"))
         let second = try store.create(CreateOpportunity(title: "Second", company: "Rekon Labs"))
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
 
         model.start()
         let activityCountBeforeNavigation = model.activityCount
@@ -147,7 +153,7 @@ final class WorkspaceViewModelTests: XCTestCase {
 
     func testCreateValidationKeepsWorkspaceUnchanged() throws {
         let store = try makeStore()
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
 
         model.start()
         model.createOpportunity()
@@ -158,7 +164,7 @@ final class WorkspaceViewModelTests: XCTestCase {
 
     func testSuccessfulCreateUpdatesVisibleLocalCount() throws {
         let store = try makeStore()
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
 
         model.start()
         model.title = "Product Manager"
@@ -174,7 +180,7 @@ final class WorkspaceViewModelTests: XCTestCase {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", jobURL: "https://jobs.example.com/role"))
         let result = try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: opportunity.id, url: opportunity.jobURL, outcome: .needsManualReview, classification: .offlineUnchecked, reason: .offlineUnchecked, evidence: "Offline; check not run"))
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
 
         model.start()
 
@@ -185,7 +191,7 @@ final class WorkspaceViewModelTests: XCTestCase {
 
     func testSuccessfulCreateResetsDateDraftsBeforeTheNextOpportunity() throws {
         let store = try makeStore()
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
         let priorDate = Date(timeIntervalSince1970: 1_704_067_200)
         model.start()
         model.title = "First opportunity"
@@ -203,7 +209,7 @@ final class WorkspaceViewModelTests: XCTestCase {
 
     func testSecondSuccessfulCreatePersistsFreshDatesAfterDraftReset() throws {
         let store = try makeStore()
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
         let priorDate = Date(timeIntervalSince1970: 1_704_067_200)
         model.start()
         model.title = "First opportunity"
@@ -231,7 +237,7 @@ final class WorkspaceViewModelTests: XCTestCase {
 
     func testCreatePersistsJobDescriptionAndNotes() throws {
         let store = try makeStore()
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
         model.showClosedOpportunities = true
         defer { model.showClosedOpportunities = true }
         model.start()
@@ -247,7 +253,7 @@ final class WorkspaceViewModelTests: XCTestCase {
     }
 
     func testFreshLaunchShowsVisibleWorkspaceCreationState() {
-        let model = WorkspaceViewModel(openWorkspace: { .createAvailable }, createWorkspace: { throw WorkspaceStoreError.injectedFailure })
+        let model = WorkspaceViewModel(openWorkspace: { .createAvailable }, createWorkspace: { throw WorkspaceStoreError.injectedFailure }, separateLocalWorkspace: .disabledForTesting)
 
         model.start()
 
@@ -263,7 +269,8 @@ final class WorkspaceViewModelTests: XCTestCase {
                 opens += 1
                 return opens == 1 ? .createAvailable : .recoveryRequired
             },
-            createWorkspace: { throw WorkspaceStoreError.injectedFailure }
+            createWorkspace: { throw WorkspaceStoreError.injectedFailure },
+            separateLocalWorkspace: .disabledForTesting
         )
 
         model.start()
@@ -277,7 +284,7 @@ final class WorkspaceViewModelTests: XCTestCase {
     }
 
     func testExistingWorkspaceMissingKeyDoesNotOfferReplacement() {
-        let model = WorkspaceViewModel(openWorkspace: { .recoveryRequired }, createWorkspace: { throw WorkspaceStoreError.injectedFailure })
+        let model = WorkspaceViewModel(openWorkspace: { .recoveryRequired }, createWorkspace: { throw WorkspaceStoreError.injectedFailure }, separateLocalWorkspace: .disabledForTesting)
 
         model.start()
 
@@ -294,7 +301,8 @@ final class WorkspaceViewModelTests: XCTestCase {
                 opens += 1
                 return .recoveryRequired
             },
-            createWorkspace: { throw WorkspaceStoreError.injectedFailure }
+            createWorkspace: { throw WorkspaceStoreError.injectedFailure },
+            separateLocalWorkspace: .disabledForTesting
         )
 
         model.start()
@@ -457,6 +465,74 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(bookmarkFixture.saveCount, 0)
     }
 
+    func testSeparateWorkspaceRecoveryGuardsPreservedFolderSelection() {
+        let bookmarkFixture = ViewModelBookmarkFixture()
+        let preservedBookmark = Data("preserved-bookmark".utf8)
+        bookmarkFixture.bookmark = preservedBookmark
+        let selectedFolder = bookmarkFixture.makeFolder(withDatabase: true)
+        let separate = SeparateWorkspaceFixture()
+        separate.creationFailure = WorkspaceStoreError.injectedFailure
+        let model = WorkspaceViewModel(
+            openWorkspace: { .recoveryRequired },
+            createWorkspace: { throw WorkspaceStoreError.injectedFailure },
+            workspaceLocationBookmarks: bookmarkFixture.makeStore(),
+            separateLocalWorkspace: separate.dependencies
+        )
+        model.start()
+        model.createSeparateLocalWorkspace()
+        let bookmarkLoadsBeforeSelection = bookmarkFixture.loadCount
+
+        model.chooseExistingWorkspaceFolder(selectedFolder)
+
+        XCTAssertTrue(model.usingSeparateLocalWorkspace)
+        XCTAssertEqual(separate.persistedIdentity, separate.identity)
+        XCTAssertEqual(bookmarkFixture.bookmark, preservedBookmark)
+        XCTAssertEqual(bookmarkFixture.loadCount, bookmarkLoadsBeforeSelection)
+        XCTAssertEqual(bookmarkFixture.saveCount, 0)
+        XCTAssertTrue(model.statusMessage.contains("Return to the preserved workspace"))
+    }
+
+    func testSelectorClearFailureAfterCloseIsNonReadyAndRetryableAtSameIdentity() throws {
+        let bookmarkFixture = ViewModelBookmarkFixture()
+        let preservedBookmark = Data("preserved-bookmark".utf8)
+        bookmarkFixture.bookmark = preservedBookmark
+        let separate = SeparateWorkspaceFixture()
+        separate.clearFailure = WorkspaceStoreError.injectedFailure
+        var closeCount = 0
+        let model = WorkspaceViewModel(
+            openWorkspace: { .recoveryRequired },
+            createWorkspace: { throw WorkspaceStoreError.injectedFailure },
+            workspaceLocationBookmarks: bookmarkFixture.makeStore(),
+            closeWorkspaceStore: {
+                closeCount += 1
+                try $0.close()
+            },
+            separateLocalWorkspace: separate.dependencies
+        )
+        model.start()
+        model.createSeparateLocalWorkspace()
+        let selectedIdentity = separate.persistedIdentity
+        let bookmarkLoadsBeforeReturn = bookmarkFixture.loadCount
+
+        model.returnToPreservedWorkspaceRecovery()
+
+        XCTAssertEqual(closeCount, 1)
+        XCTAssertFalse(model.workspaceReady)
+        XCTAssertTrue(model.usingSeparateLocalWorkspace)
+        XCTAssertEqual(separate.persistedIdentity, selectedIdentity)
+        XCTAssertEqual(bookmarkFixture.bookmark, preservedBookmark)
+        XCTAssertEqual(bookmarkFixture.loadCount, bookmarkLoadsBeforeReturn)
+        XCTAssertEqual(bookmarkFixture.saveCount, 0)
+        XCTAssertTrue(model.statusMessage.contains("Retry returning"))
+
+        separate.clearFailure = nil
+        model.returnToPreservedWorkspaceRecovery()
+
+        XCTAssertNil(separate.persistedIdentity)
+        XCTAssertFalse(model.usingSeparateLocalWorkspace)
+        XCTAssertTrue(model.workspaceRequiresRecovery)
+    }
+
     func testRecheckToRecoveryRequiredClearsLiveWorkspaceDataAndBlocksMutation() throws {
         let store = try makeStore()
         var opens = 0
@@ -465,7 +541,8 @@ final class WorkspaceViewModelTests: XCTestCase {
                 opens += 1
                 return opens == 1 ? .ready(store) : .recoveryRequired
             },
-            createWorkspace: { store }
+            createWorkspace: { store },
+            separateLocalWorkspace: .disabledForTesting
         )
         model.start()
         model.title = "Product Manager"
@@ -493,7 +570,7 @@ final class WorkspaceViewModelTests: XCTestCase {
     }
 
     func testCorruptWorkspaceDoesNotOfferReplacement() {
-        let model = WorkspaceViewModel(openWorkspace: { .corrupt }, createWorkspace: { throw WorkspaceStoreError.injectedFailure })
+        let model = WorkspaceViewModel(openWorkspace: { .corrupt }, createWorkspace: { throw WorkspaceStoreError.injectedFailure }, separateLocalWorkspace: .disabledForTesting)
 
         model.start()
 
@@ -503,7 +580,7 @@ final class WorkspaceViewModelTests: XCTestCase {
 
     func testDeleteRefreshesVisibleRecordsAndKeepsOnlyActivityKind() throws {
         let store = try makeStore()
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
         model.start()
         model.title = "Product Manager"
         model.company = "Rekon Labs"
@@ -520,7 +597,7 @@ final class WorkspaceViewModelTests: XCTestCase {
         let store = try makeStore()
         let preview = try CSVOpportunityImporter.preview(data: Data("title,company\nProduct Manager,Rekon Labs\n".utf8))
         let report = try store.importCSV(try store.csvImportPlan(for: preview), invalidCount: preview.invalidRowCount)
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
 
         model.start()
 
@@ -539,7 +616,7 @@ final class WorkspaceViewModelTests: XCTestCase {
 
     func testExportReturnsCSVAndRecordsOnlyAnAuditEvent() throws {
         let store = try makeStore()
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
         model.start()
         model.title = "Product Manager"
         model.company = "Rekon Labs"
@@ -554,7 +631,7 @@ final class WorkspaceViewModelTests: XCTestCase {
 
     func testActivitySearchMatchesLocalActionAndRelatedOpportunity() throws {
         let store = try makeStore()
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
         model.start()
         model.title = "Product Manager"
         model.company = "Rekon Labs"
@@ -567,7 +644,7 @@ final class WorkspaceViewModelTests: XCTestCase {
 
     func testPipelineVisibilitySettingCanHideClosedOpportunities() throws {
         let store = try makeStore()
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
         model.showClosedOpportunities = true
         defer { model.showClosedOpportunities = true }
         model.start()
@@ -586,7 +663,7 @@ final class WorkspaceViewModelTests: XCTestCase {
 
     func testSavingSelectedOpportunityUpdatesItsVisibleRecord() throws {
         let store = try makeStore()
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
         model.start()
         model.title = "Product Manager"
         model.company = "Rekon Labs"
@@ -606,7 +683,7 @@ final class WorkspaceViewModelTests: XCTestCase {
 
     func testOpenQueueActionSelectsOpportunityAndRecordsActivity() throws {
         let store = try makeStore()
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
         model.start()
         model.title = "Product Manager"
         model.company = "Rekon Labs"
@@ -631,7 +708,7 @@ final class WorkspaceViewModelTests: XCTestCase {
             reason: .offlineUnchecked,
             evidence: "Offline — check not run"
         ))
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
         model.start()
         model.select(second)
 
@@ -654,7 +731,7 @@ final class WorkspaceViewModelTests: XCTestCase {
             confidence: .medium,
             evidence: "Posting closed"
         ))
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
         model.start()
         model.select(second)
 
@@ -670,7 +747,7 @@ final class WorkspaceViewModelTests: XCTestCase {
         let first = try store.create(CreateOpportunity(title: "First", company: "Rekon Labs", jobURL: "https://jobs.example.com/first"))
         let second = try store.create(CreateOpportunity(title: "Second", company: "Rekon Labs", jobURL: "https://jobs.example.com/second"))
         let checker = BlockingFixturePublicURLChecker(request: PublicURLRequest(originalURL: first.jobURL, hostname: "jobs.example.com", requestTarget: "/first"))
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, publicURLChecker: checker)
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, publicURLChecker: checker, separateLocalWorkspace: .disabledForTesting)
         model.start()
         model.select(first)
 
@@ -696,7 +773,7 @@ final class WorkspaceViewModelTests: XCTestCase {
 
     func testQueueRescheduleChangesOnlyTheSelectedTaskAndRecordsActivity() throws {
         let store = try makeStore()
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
         model.start()
         model.title = "Product Manager"
         model.company = "Rekon Labs"
@@ -716,7 +793,7 @@ final class WorkspaceViewModelTests: XCTestCase {
 
     func testSelectedOpportunityShowsCompletedTaskState() throws {
         let store = try makeStore()
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
         model.start()
         model.title = "Product Manager"
         model.company = "Rekon Labs"
@@ -733,7 +810,7 @@ final class WorkspaceViewModelTests: XCTestCase {
 
     func testSelectedOpportunityShowsStageHistory() throws {
         let store = try makeStore()
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
         model.start()
         model.title = "Product Manager"
         model.company = "Rekon Labs"
@@ -752,7 +829,7 @@ final class WorkspaceViewModelTests: XCTestCase {
         let linked = try store.createContact(CreateContact(name: "Alex Morgan", employer: "Rekon Labs", title: "Recruiter"))
         let discovery = try store.createContact(CreateContact(name: "Jordan Lee", employer: "Rekon Labs", title: "VP People"))
         try store.linkContact(contactID: linked.id, toOpportunityID: first.id)
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
 
         model.start()
         model.contactSearch = "Jordan"
@@ -770,7 +847,7 @@ final class WorkspaceViewModelTests: XCTestCase {
         let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
         let contact = try store.createContact(CreateContact(name: "Alex Morgan", employer: "Rekon Labs"))
         try store.linkContact(contactID: contact.id, toOpportunityID: opportunity.id)
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
 
         model.start()
         model.selectContact(contact)
@@ -796,7 +873,7 @@ final class WorkspaceViewModelTests: XCTestCase {
         let contact = try store.createContact(CreateContact(name: "Alex Morgan"))
         try store.linkContact(contactID: contact.id, toOpportunityID: opportunity.id)
         _ = try store.recordContactInteraction(CreateContactInteraction(contactID: contact.id, opportunityID: opportunity.id, kind: .meeting, summary: "Met the hiring manager.", occurredAt: Date(timeIntervalSince1970: 1_704_067_200)))
-        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
 
         model.start()
         model.select(opportunity)
@@ -830,7 +907,8 @@ final class WorkspaceViewModelTests: XCTestCase {
         let model = WorkspaceViewModel(
             openWorkspace: { .ready(store) },
             createWorkspace: { store },
-            publicURLChecker: checker
+            publicURLChecker: checker,
+            separateLocalWorkspace: .disabledForTesting
         )
         model.start()
         model.select(opportunity)
@@ -866,7 +944,8 @@ final class WorkspaceViewModelTests: XCTestCase {
         let model = WorkspaceViewModel(
             openWorkspace: { .ready(store) },
             createWorkspace: { store },
-            publicURLChecker: checker
+            publicURLChecker: checker,
+            separateLocalWorkspace: .disabledForTesting
         )
         model.start()
         model.select(opportunity)
@@ -994,6 +1073,7 @@ private final class SeparateWorkspaceFixture {
     let identity = UUID(uuidString: "A11CE000-0000-4000-8000-000000000001")!
     var persistedIdentity: UUID?
     var creationFailure: Error?
+    var clearFailure: Error?
     private(set) var allocatedIdentities: [UUID] = []
     private(set) var createdIdentities: [UUID] = []
     private(set) var openedIdentities: [UUID] = []
@@ -1027,6 +1107,7 @@ private final class SeparateWorkspaceFixture {
                 return try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
             },
             clearSelection: { [weak self] in
+                if let clearFailure = self?.clearFailure { throw clearFailure }
                 self?.clearSelectionCount += 1
                 self?.persistedIdentity = nil
             }
@@ -1036,4 +1117,17 @@ private final class SeparateWorkspaceFixture {
 
 private enum ViewModelBookmarkFixtureError: Error {
     case unresolvable
+}
+
+@MainActor
+private extension SeparateLocalWorkspaceDependencies {
+    static var disabledForTesting: SeparateLocalWorkspaceDependencies {
+        SeparateLocalWorkspaceDependencies(
+            selectedIdentity: { nil },
+            allocateAndPersistIdentity: { throw WorkspaceStoreError.injectedFailure },
+            open: { _ in .unavailable },
+            create: { _ in throw WorkspaceStoreError.injectedFailure },
+            clearSelection: {}
+        )
+    }
 }

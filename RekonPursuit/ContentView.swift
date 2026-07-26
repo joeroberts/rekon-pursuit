@@ -226,11 +226,16 @@ private struct WorkspaceOnboardingView: View {
             GroupBox {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(model.statusMessage).accessibilityIdentifier("workspace-gate-status")
-                    if model.canCreateWorkspace {
-                        Button(model.usingSeparateLocalWorkspace ? "Retry separate local workspace" : "Create local workspace") {
-                            model.createWorkspaceIfNeeded()
-                        }
-                            .buttonStyle(.borderedProminent).accessibilityIdentifier("create-local-workspace")
+                    if model.usingSeparateLocalWorkspace {
+                        Button("Retry separate local workspace") { model.createSeparateLocalWorkspace() }
+                            .buttonStyle(.borderedProminent)
+                            .accessibilityIdentifier("retry-separate-local-workspace")
+                        Button("Return to preserved workspace recovery") { model.returnToPreservedWorkspaceRecovery() }
+                            .accessibilityIdentifier("return-to-preserved-workspace-recovery")
+                    } else if model.canCreateWorkspace {
+                        Button("Create local workspace") { model.createWorkspaceIfNeeded() }
+                            .buttonStyle(.borderedProminent)
+                            .accessibilityIdentifier("create-local-workspace")
                     } else if model.workspaceRequiresRecovery {
                         Text("Recovery is required before this workspace can be opened. Rekon Pursuit kept existing local material unchanged and will not create over it.").foregroundStyle(.secondary)
                         Button("Recheck local workspace") { model.retryWorkspaceOpen() }.accessibilityIdentifier("recheck-local-workspace")
