@@ -2,8 +2,8 @@
 
 **Status:** The current evidence-backed operational state is: `RP-R0`,
 `RP-R1a`, `RP-R1b`, `RP-R2`, `RP-R3`, `RP-R4`, and `RP-R5` Accepted; `UX-R1`
-is Next up; `UX-R2`, `RP-R6`, and `RP-R7a`–`RP-R10` are Backlog; and no task
-is Blocked. No UX or R6 implementation has been released.
+is In progress; `UX-R2`, `RP-R6`, and `RP-R7a`–`RP-R10` are Backlog; and no
+task is Blocked. No successor implementation is released.
 
 **Authority:** [dashboard-status.json](dashboard-status.json) is the canonical
 machine-readable operational view for the current remediation queue. This
@@ -69,7 +69,7 @@ ordinary sequencing.
 | `RP-R3a` | Resumable in-progress batch and bounded Undo Import. | `RP-R3` | Deferred by product owner | Separate recovery/history design and evidence. | Explicitly deferred to keep R3 focused; not released. |
 | `RP-R4` | Reconciliation contract and local workflow states only: safe URL validation, classifications, evidence/error, confidence, retry de-duplication, closure confirmation; no request yet. | `RP-R3` | **Accepted** | Focused migration/task-isolation/startup verification, independent Architect/QA/Code Review approval, and product-owner hands-on verification. | Accepted; no network capability was released. R5 is Next up for its own plan and privacy/network gate. |
 | `RP-R5` | User-initiated public-URL check: direct GET only, bounded/no-auth/no-script request, offline/manual-review handling, retry task, no auto-close. | `RP-R4` | **Accepted** | Focused correction verification, independent Code Review/QA/Architect approvals, and product-owner hands-on verification. | Accepted after the corrected implementation proved peer-bound, bounded, no-redirect public URL checking with manual closure only. The later product-owner UX-R1 → UX-R2 → R6 sequence now governs successor release. |
-| `UX-R1` | Shell and opportunity navigation: native icon/compact sidebar emblem, first-run onboarding, remove persistent workspace/status clutter, scrollable Pipeline → dedicated opportunity overview, Activity & history and Reconcile posting sub-screens, and a compact overview document area. | `RP-R5` | Next up | Focused navigation/layout/state verification and product-owner hands-on review. | Requires its own brief and independent plan/release gate; no implementation is released. |
+| `UX-R1` | Shell and opportunity navigation: native icon/compact sidebar emblem, first-run onboarding, remove persistent workspace/status clutter, scrollable Pipeline → dedicated opportunity overview, Activity & history and Reconcile posting sub-screens, and a compact overview document area. | `RP-R5` | **In progress** | Focused navigation/layout/state verification and product-owner hands-on review. | Released after independent Planning, Architect, QA, TPM, and Delivery approval. UX-R2 and R6 remain unreleased. |
 | `UX-R2` | Core workflow forms: Add Opportunity layout/validation/structured action details; contact validation/employer association/expandable text; and CSV completion/report redesign. | `UX-R1` | Backlog | Focused workflow/form verification and product-owner hands-on review. | Product-owner approved; release only after UX-R1 acceptance. |
 | `RP-R6` | Security-scoped document bookmark, open/verify/relink, hash revalidation, and relink-required after portable restore. No copy/edit/parse. | `UX-R2` | Backlog | PDF/DOCX attach, relaunch/open, moved-file relink, permission failure smoke. | Deferred until UX-R2 creates the approved compact document area. |
 | `RP-R7a` | Recovery-key enrollment/verification, authenticated portable archive/export default, manifest, and restore-as-new-workspace. | `RP-R6` | Backlog | Recovery-key, portable restore, encrypted/default-export evidence. | Requires Architect + Security/Privacy approval before release. |
@@ -254,6 +254,8 @@ not release R5.
 | 2026-07-26 | `RP-R5` | **Released for implementation** | Independent plan/privacy gates approved the exact R5 brief. Implement only its explicit public URL check; R6 and all unrelated network capabilities remain unreleased. |
 | 2026-07-26 | `RP-R5` | **Accepted — historical successor routing superseded** | Corrected implementation reviews and product-owner hands-on verification completed R5. The same-day UX sequence later superseded the interim R6-next routing; use the current controlled queue, not this historical record, for eligibility. |
 | 2026-07-26 | `UX-R1` | **UX sequence approved — UX-R1 Next up** | Product owner approved UX-R1 → UX-R2 → R6. Move only UX-R1 to Next up; return R6 to Backlog and do not release any implementation. |
+| 2026-07-26 | `UX-R1` | **Planning / Architect / QA / TPM approved** | The corrected brief resolves dashboard sequence semantics, stale UI-test wording, and route identity during reconciliation. |
+| 2026-07-26 | `UX-R1` | **Released for implementation** | Delivery released UX-R1 only. Implement the committed brief; UX-R2 and R6 remain unreleased. |
 
 ## Risks and decisions
 

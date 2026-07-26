@@ -143,10 +143,12 @@ def load_and_validate(source: Path) -> dict:
     active = data.get("activeTaskId")
     if active is not None:
         active = require_string(active, "activeTaskId")
-    next_eligible = require_string(data.get("nextEligibleTaskId"), "nextEligibleTaskId")
+    next_eligible = data.get("nextEligibleTaskId")
+    if next_eligible is not None:
+        next_eligible = require_string(next_eligible, "nextEligibleTaskId")
     if active is not None and active not in ids:
         raise DashboardContractError(f"activeTaskId {active!r} does not match a task.")
-    if next_eligible not in ids:
+    if next_eligible is not None and next_eligible not in ids:
         raise DashboardContractError(
             f"nextEligibleTaskId {next_eligible!r} does not match a task."
         )
@@ -206,7 +208,8 @@ def render_dashboard(status: dict) -> str:
     )
     active_id = status.get("activeTaskId")
     active = task_by_id.get(active_id) if active_id else None
-    next_eligible = task_by_id[status["nextEligibleTaskId"]]
+    next_eligible_id = status.get("nextEligibleTaskId")
+    next_eligible = task_by_id.get(next_eligible_id) if next_eligible_id else None
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -230,7 +233,7 @@ def render_dashboard(status: dict) -> str:
     <header><div class="eyebrow">Rekon Pursuit</div><h1>Delivery dashboard</h1><p class="subhead">Local operational view. This page refreshes every 30 seconds.</p></header>
     <section class="summary" aria-label="Delivery summary">
       <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">{escape(active['id']) + ' — ' + escape(active['title']) if active else 'No task in progress'}</span></div>
-      <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">{escape(next_eligible['id'])} — {escape(next_eligible['title'])}</span></div>
+      <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">{escape(next_eligible['id']) + ' — ' + escape(next_eligible['title']) if next_eligible else 'No successor eligible'}</span></div>
       <div class="summary-item"><span class="summary-label">Accepted</span><span class="summary-value">{counts['accepted']}</span></div>
       <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">{counts['backlog']}</span></div>
       <div class="summary-item"><span class="summary-label">Blocked</span><span class="summary-value">{counts['blocked']}</span></div>

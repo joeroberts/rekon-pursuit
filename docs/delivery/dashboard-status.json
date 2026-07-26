@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": null,
-  "nextEligibleTaskId": "UX-R1",
+  "activeTaskId": "UX-R1",
+  "nextEligibleTaskId": null,
   "tasks": [
     {
       "id": "RP-R0",
@@ -98,9 +98,9 @@
       "id": "UX-R1",
       "title": "Shell and opportunity navigation",
       "workType": "UX",
-      "status": "next_up",
-      "releaseCondition": "Requires an approved UX-R1 brief and dependency-safe gate; no implementation is released yet.",
-      "latestTransition": "Product owner sequenced the approved shell/navigation remediation ahead of R6.",
+      "status": "in_progress",
+      "releaseCondition": "Implement only the approved shell/navigation brief; UX-R2 and RP-R6 remain unreleased.",
+      "latestTransition": "Released after independent Planning, Architect, QA, TPM, and Delivery approval.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"

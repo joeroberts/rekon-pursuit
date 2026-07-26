@@ -1,6 +1,6 @@
 # UX-R1 — Shell and opportunity navigation
 
-**State:** Next up — planning/release gate required  
+**State:** Released for implementation
 **Depends on:** `RP-R5` accepted  
 **Blocks:** `UX-R2`; `RP-R6` remains unreleased until `UX-R2` is accepted  
 **Implementation release requires:** Planning, Architect, TPM, QA, and Delivery
@@ -231,6 +231,5 @@ Architect reviews any architectural deviation before TPM/Delivery acceptance.
 Security/Privacy review is required only if implementation changes document
 scope, persistence, entitlements, or network behavior; none is planned.
 
-UX-R1 remains **Next up** until the independent plan/release gate approves this
-brief. The dashboard must move `UX-R1: Next up → In progress` only at Delivery
-release. `UX-R2` and `RP-R6` remain unreleased.
+UX-R1 is released for implementation after the independent plan/release gate
+approved this brief. `UX-R2` and `RP-R6` remain unreleased.

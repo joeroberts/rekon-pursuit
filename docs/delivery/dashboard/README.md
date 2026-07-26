@@ -41,7 +41,8 @@ for ordinary sequencing. Every task needs an explicit `needsUserAction` boolean;
 the attention queue is empty unless a task has a material action detail.
 Set `activeTaskId` to `null` while no task is in progress; the dashboard then
 shows “No task in progress” while `nextEligibleTaskId` identifies the planned
-next task.
+next task. Set `nextEligibleTaskId` to `null` while the active task has no
+dependency-safe successor; the dashboard then shows “No successor eligible.”
 
 The renderer uses only Python's standard library. It embeds state into the
 HTML so the page works over `file://`; it does not fetch JSON from the browser.
