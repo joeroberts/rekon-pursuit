@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "RP-R3",
-  "nextEligibleTaskId": "RP-R3",
+  "activeTaskId": "RP-R4",
+  "nextEligibleTaskId": "RP-R4",
   "tasks": [
     {
       "id": "RP-R0",
@@ -54,9 +54,9 @@
     {
       "id": "RP-R3",
       "title": "CSV mapping and atomic import",
-      "status": "in_progress",
-      "releaseCondition": "R3 is the sole active remediation task; do not release any successor.",
-      "latestTransition": "Released by the product owner to correct the CSV mapping dropdown and complete the core import workflow.",
+      "status": "accepted",
+      "releaseCondition": "Accepted; R4 is next for its required plan and privacy/network gate.",
+      "latestTransition": "Accepted after a passed end-to-end product-owner verification of mapping, validation, decisions, import, record opening, and report persistence.",
       "evidence": {
         "label": "R3 task brief",
         "href": "../task-briefs/RP-R3-csv-mapping-and-import.md"
@@ -66,9 +66,9 @@
     {
       "id": "RP-R4",
       "title": "Reconciliation contract and local states",
-      "status": "backlog",
-      "releaseCondition": "Release after predecessor work and the required privacy/network contract approval.",
-      "latestTransition": "Planned remediation work.",
+      "status": "next_up",
+      "releaseCondition": "Requires its approved plan and privacy/network contract gate before implementation begins.",
+      "latestTransition": "Became the next eligible remediation task when R3 was accepted; implementation is not yet released.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
