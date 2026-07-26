@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 18)
+        XCTAssertEqual(try store.schemaVersion(), 19)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -39,7 +39,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 18)
+        XCTAssertEqual(try store.schemaVersion(), 19)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -58,6 +58,7 @@ final class WorkspaceStoreTests: XCTestCase {
                 , [.integer(16), .text(WorkspaceMigrations.versionSixteenChecksum)]
                 , [.integer(17), .text(WorkspaceMigrations.versionSeventeenChecksum)]
                 , [.integer(18), .text(WorkspaceMigrations.versionEighteenChecksum)]
+                , [.integer(19), .text(WorkspaceMigrations.versionNineteenChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
@@ -851,6 +852,47 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.postingChecks(forOpportunityID: opportunity.id), [check])
         XCTAssertEqual(try store.opportunities().first?.stage, .applied)
         XCTAssertEqual(try store.activityEvents().last?.kind, "posting_checked")
+    }
+
+    func testReconciliationRejectsInvalidURLAndTupleWithoutWriting() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", jobURL: "https://jobs.example.com/123"))
+        let before = try store.activityEvents().count
+
+        XCTAssertThrowsError(try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: opportunity.id, url: "http://127.0.0.1/role", outcome: .needsManualReview, classification: .offlineUnchecked, reason: .offlineUnchecked, evidence: "Not run")))
+        XCTAssertThrowsError(try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: opportunity.id, url: opportunity.jobURL, outcome: .stillOpen, classification: .ambiguous, confidence: .high, evidence: "Visible")))
+
+        XCTAssertEqual(try store.reconciliationResults(forOpportunityID: opportunity.id), [])
+        XCTAssertEqual(try store.activityEvents().count, before)
+    }
+
+    func testManualReviewReusesOneDedicatedReviewTaskAndKeepsOrdinaryTask() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", nextAction: "Send notes", dueAt: now, jobURL: "https://jobs.example.com/123"))
+        let ordinaryTask = try XCTUnwrap(store.latestTask(forOpportunityID: opportunity.id))
+
+        let first = try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: opportunity.id, url: opportunity.jobURL, outcome: .needsManualReview, classification: .offlineUnchecked, reason: .offlineUnchecked, evidence: "Offline; check not run"))
+        let second = try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: opportunity.id, url: opportunity.jobURL, outcome: .needsManualReview, classification: .ambiguous, reason: .accessBlocked, confidence: .low, evidence: "Blocked page"))
+
+        XCTAssertNotEqual(first.reviewTaskID, ordinaryTask.id)
+        XCTAssertEqual(first.reviewTaskID, second.reviewTaskID)
+        XCTAssertEqual(try store.taskReminder(id: ordinaryTask.id)?.isComplete, false)
+        XCTAssertEqual(try store.reconciliationReviewTask(forOpportunityID: opportunity.id)?.id, first.reviewTaskID)
+    }
+
+    func testClosureSuggestionNeedsExplicitConfirmationToCloseAndCompleteDedicatedTask() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", stage: .applied, nextAction: "Follow up", dueAt: now, jobURL: "https://jobs.example.com/123"))
+        let ordinaryTask = try XCTUnwrap(store.latestTask(forOpportunityID: opportunity.id))
+        let suggestion = try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: opportunity.id, url: opportunity.jobURL, outcome: .closedSuggested, classification: .confirmed, confidence: .high, evidence: "Employer says role filled"))
+
+        XCTAssertEqual(try store.opportunities().first?.stage, .applied)
+        try store.confirmReconciliationClosure(forOpportunityID: opportunity.id)
+
+        XCTAssertEqual(try store.opportunities().first?.stage, .closed)
+        XCTAssertEqual(try store.taskReminder(id: suggestion.reviewTaskID!)?.isComplete, true)
+        XCTAssertEqual(try store.taskReminder(id: ordinaryTask.id)?.isComplete, false)
+        XCTAssertNotNil(try store.reconciliationResults(forOpportunityID: opportunity.id).first?.closureConfirmedAt)
     }
 
     func testOpportunityExportEscapesDataAndRecordsLocalActivity() throws {

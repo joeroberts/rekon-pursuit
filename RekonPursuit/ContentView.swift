@@ -38,6 +38,7 @@ struct ContentView: View {
     @State private var showsCSVExporter = false
     @State private var exportDocument: CSVExportDocument?
     @State private var page: AppDestination = .needsAttention
+    @State private var showsClosureConfirmation = false
 
     var body: some View {
         AppShellView(selection: $page) {
@@ -377,6 +378,19 @@ struct ContentView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Form {
+                            Text("No online check runs in R4. Record what you reviewed locally.")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Picker("Local outcome", selection: $model.reconciliationOutcome) { ForEach(ReconciliationOutcome.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                            Picker("Classification", selection: $model.reconciliationClassification) { ForEach(ReconciliationClassification.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                            Picker("Reason", selection: $model.reconciliationReason) { ForEach(ReconciliationReason.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                            Picker("Confidence", selection: $model.reconciliationConfidence) { ForEach(ReconciliationConfidence.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                            TextField("Evidence or error reviewed", text: $model.reconciliationEvidence, axis: .vertical)
+                            HStack {
+                                Button("Record local review") { model.recordReconciliation() }
+                                Button("Record offline — check not run") { model.reconciliationOutcome = .needsManualReview; model.reconciliationClassification = .offlineUnchecked; model.reconciliationReason = .offlineUnchecked; model.reconciliationEvidence = "Offline — check not run"; model.recordReconciliation() }
+                                if let task = model.selectedReconciliationTask { Button("Open review action") { model.open(task) } }
+                                Button("Confirm closure…") { showsClosureConfirmation = true }
+                            }
                             Picker("Outcome", selection: $model.postingStatus) {
                                 ForEach(PostingStatus.allCases, id: \.self) { status in
                                     Text(status.rawValue).tag(status)
@@ -399,6 +413,14 @@ struct ContentView: View {
                                         .font(.caption)
                                 }
                                 .padding(.vertical, 2)
+                            }
+                        }
+                        if !model.selectedReconciliationResults.isEmpty {
+                            Text("Local review history").font(.headline)
+                            ForEach(model.selectedReconciliationResults, id: \.id) { result in
+                                Text("\(result.outcome.rawValue) · \(result.classification.rawValue) · \(result.reason.rawValue) · \(result.recordedAt.formatted(date: .abbreviated, time: .shortened))")
+                                    .font(.caption)
+                                Text(result.evidence.isEmpty ? result.error : result.evidence).font(.caption)
                             }
                         }
                     }
@@ -707,6 +729,14 @@ struct ContentView: View {
             Text(model.statusMessage)
                 .accessibilityIdentifier("workspace-status")
                 .foregroundStyle(.secondary)
+        }
+        .sheet(isPresented: $showsClosureConfirmation) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Confirm closure").font(.title2.bold())
+                if let result = model.selectedReconciliationResults.first { Text("\(result.url)\n\(result.evidence)\n\(result.recordedAt.formatted(date: .abbreviated, time: .shortened))") }
+                Text("This changes the stage to Closed and completes only the dedicated reconciliation review action.")
+                HStack { Button("Keep active") { showsClosureConfirmation = false }; Button("Confirm closure") { model.confirmReconciliationClosure(); showsClosureConfirmation = false }.keyboardShortcut(.defaultAction) }
+            }.padding().frame(minWidth: 420)
         }
         .padding(28)
         .frame(maxWidth: .infinity, alignment: .topLeading)

@@ -83,6 +83,74 @@ struct RecordPostingCheck {
     let evidence: String
 }
 
+enum ReconciliationOutcome: String, CaseIterable, Equatable {
+    case stillOpen = "Still open"
+    case possiblyClosed = "Possibly closed"
+    case closedSuggested = "Closed suggested"
+    case needsManualReview = "Needs manual review"
+}
+
+enum ReconciliationClassification: String, CaseIterable, Equatable {
+    case confirmed = "Confirmed"
+    case ambiguous = "Ambiguous"
+    case failed = "Failed"
+    case offlineUnchecked = "Offline unchecked"
+}
+
+enum ReconciliationReason: String, CaseIterable, Equatable {
+    case manualReview = "manual review"
+    case changedURL = "changed URL"
+    case accessBlocked = "access blocked"
+    case sourceFailed = "source failed"
+    case offlineUnchecked = "offline — check not run"
+    case other = "other"
+}
+
+enum ReconciliationConfidence: String, CaseIterable, Equatable {
+    case high = "High"
+    case medium = "Medium"
+    case low = "Low"
+}
+
+struct ReconciliationResult: Equatable {
+    let id: String
+    let opportunityID: String
+    let url: String
+    let recordedAt: Date
+    let outcome: ReconciliationOutcome
+    let classification: ReconciliationClassification
+    let reason: ReconciliationReason
+    let confidence: ReconciliationConfidence?
+    let evidence: String
+    let error: String
+    let reviewTaskID: String?
+    let closureConfirmedAt: Date?
+    let legacyPostingCheckID: String?
+    let legacyStatus: String?
+}
+
+struct RecordReconciliationResult {
+    let opportunityID: String
+    let url: String
+    let outcome: ReconciliationOutcome
+    let classification: ReconciliationClassification
+    let reason: ReconciliationReason
+    let confidence: ReconciliationConfidence?
+    let evidence: String
+    let error: String
+
+    init(opportunityID: String, url: String, outcome: ReconciliationOutcome, classification: ReconciliationClassification, reason: ReconciliationReason = .manualReview, confidence: ReconciliationConfidence? = nil, evidence: String = "", error: String = "") {
+        self.opportunityID = opportunityID
+        self.url = url
+        self.outcome = outcome
+        self.classification = classification
+        self.reason = reason
+        self.confidence = confidence
+        self.evidence = evidence
+        self.error = error
+    }
+}
+
 enum DocumentReferenceKind: String, CaseIterable, Equatable {
     case resume = "Résumé"
     case coverLetter = "Cover letter"
@@ -309,6 +377,8 @@ enum WorkspaceStoreError: Error, LocalizedError {
     case invalidContact
     case invalidInteraction
     case invalidPostingCheck
+    case invalidReconciliationResult
+    case closureNotConfirmed
     case invalidDocumentReference
 
     var errorDescription: String? {
@@ -327,6 +397,10 @@ enum WorkspaceStoreError: Error, LocalizedError {
             return "Enter an interaction summary and choose a valid linked opportunity."
         case .invalidPostingCheck:
             return "Enter the posting URL and the evidence you reviewed."
+        case .invalidReconciliationResult:
+            return "Enter a valid public posting URL and the required local review detail."
+        case .closureNotConfirmed:
+            return "Record a Closed suggested result before confirming closure."
         case .invalidDocumentReference:
             return "Choose a PDF or DOCX file to attach as a local reference."
         }

@@ -509,6 +509,78 @@ final class WorkspaceStore {
         }
     }
 
+    func recordReconciliationResult(_ command: RecordReconciliationResult) throws -> ReconciliationResult {
+        let url = command.url
+        let evidence = command.evidence.trimmingCharacters(in: .whitespacesAndNewlines)
+        let error = command.error.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isValidLocalReviewURL(url), isValidReconciliationTuple(command, evidence: evidence, error: error) else {
+            throw WorkspaceStoreError.invalidReconciliationResult
+        }
+        let commandNow = clock()
+        return try synchronized {
+            guard try isActiveOpportunity(command.opportunityID) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+            let requiresReview = command.outcome != .stillOpen
+            let existingReview = try reconciliationReviewTaskID(forOpportunityID: command.opportunityID)
+            let taskID = requiresReview ? (existingReview ?? nextIdentifier()) : nil
+            let result = ReconciliationResult(id: nextIdentifier(), opportunityID: command.opportunityID, url: url, recordedAt: commandNow, outcome: command.outcome, classification: command.classification, reason: command.reason, confidence: command.confidence, evidence: evidence, error: error, reviewTaskID: taskID, closureConfirmedAt: nil, legacyPostingCheckID: nil, legacyStatus: nil)
+            try database.transaction {
+                if requiresReview, existingReview == nil {
+                    try database.execute("INSERT INTO task_reminders (id, opportunity_id, title, due_at, is_complete) VALUES (?, ?, 'Review reconciliation evidence', NULL, 0)", values: [.text(taskID!), .text(command.opportunityID)])
+                    try database.execute("INSERT INTO reconciliation_reviews (opportunity_id, task_reminder_id, created_at, closure_confirmed_at) VALUES (?, ?, ?, NULL)", values: [.text(command.opportunityID), .text(taskID!), .real(commandNow.timeIntervalSince1970)])
+                    try appendActivity(kind: "reconciliation_review_task_created", opportunityID: command.opportunityID, occurredAt: commandNow)
+                } else if requiresReview {
+                    try appendActivity(kind: "reconciliation_review_task_reused", opportunityID: command.opportunityID, occurredAt: commandNow)
+                }
+                try database.execute("INSERT INTO reconciliation_results (id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)", values: reconciliationValues(result))
+                if failBeforeActivityInsert { throw WorkspaceStoreError.injectedFailure }
+                try appendActivity(kind: "reconciliation_result_recorded", opportunityID: command.opportunityID, occurredAt: commandNow)
+            }
+            return result
+        }
+    }
+
+    func reconciliationResults(forOpportunityID opportunityID: String) throws -> [ReconciliationResult] {
+        try synchronized {
+            guard try isActiveOpportunity(opportunityID) else { return [] }
+            return try database.rows("SELECT id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status FROM reconciliation_results WHERE opportunity_id = ? ORDER BY recorded_at DESC, id DESC", values: [.text(opportunityID)]).map(reconciliationResult(from:))
+        }
+    }
+
+    func reconciliationReviewTask(forOpportunityID opportunityID: String) throws -> TaskReminder? {
+        try synchronized {
+            guard let taskID = try reconciliationReviewTaskID(forOpportunityID: opportunityID) else { return nil }
+            return try taskReminder(id: taskID)
+        }
+    }
+
+    func taskReminder(id: String) throws -> TaskReminder? {
+        try synchronized {
+            try database.rows("SELECT id, opportunity_id, title, due_at, is_complete FROM task_reminders WHERE id = ?", values: [.text(id)]).first.map(task(from:))
+        }
+    }
+
+    func confirmReconciliationClosure(forOpportunityID opportunityID: String) throws {
+        let commandNow = clock()
+        try synchronized {
+            guard try isActiveOpportunity(opportunityID), let reviewTaskID = try reconciliationReviewTaskID(forOpportunityID: opportunityID) else { throw WorkspaceStoreError.closureNotConfirmed }
+            guard let latest = try database.rows("SELECT id, outcome, closure_confirmed_at FROM reconciliation_results WHERE opportunity_id = ? ORDER BY recorded_at DESC, id DESC LIMIT 1", values: [.text(opportunityID)]).first,
+                  case let .text(resultID) = latest[0], case let .text(outcome) = latest[1], outcome == ReconciliationOutcome.closedSuggested.rawValue,
+                  case .null = latest[2] else { throw WorkspaceStoreError.closureNotConfirmed }
+            let currentStage = try activeOpportunityStage(id: opportunityID)
+            try database.transaction {
+                try database.execute("UPDATE reconciliation_results SET closure_confirmed_at = ? WHERE id = ?", values: [.real(commandNow.timeIntervalSince1970), .text(resultID)])
+                try database.execute("UPDATE reconciliation_reviews SET closure_confirmed_at = ? WHERE opportunity_id = ?", values: [.real(commandNow.timeIntervalSince1970), .text(opportunityID)])
+                try database.execute("UPDATE task_reminders SET is_complete = 1 WHERE id = ?", values: [.text(reviewTaskID)])
+                if currentStage != .closed {
+                    try database.execute("UPDATE opportunities SET stage = 'Closed', stage_changed_at = ? WHERE id = ?", values: [.real(commandNow.timeIntervalSince1970), .text(opportunityID)])
+                    try database.execute("INSERT INTO opportunity_stage_history (id, opportunity_id, from_stage, to_stage, occurred_at) VALUES (?, ?, ?, 'Closed', ?)", values: [.text(nextIdentifier()), .text(opportunityID), .text(currentStage.rawValue), .real(commandNow.timeIntervalSince1970)])
+                }
+                if failBeforeActivityInsert { throw WorkspaceStoreError.injectedFailure }
+                try appendActivity(kind: "reconciliation_closure_confirmed", opportunityID: opportunityID, occurredAt: commandNow)
+            }
+        }
+    }
+
     func recordOpportunitiesExport() throws {
         let commandNow = clock()
         try synchronized {
@@ -787,6 +859,54 @@ final class WorkspaceStore {
         let nextTouchAt: Date?
         if case let .real(value) = row[6] { nextTouchAt = Date(timeIntervalSince1970: value) } else { nextTouchAt = nil }
         return OpportunityInteraction(id: id, contactID: contactID, contactName: contactName, kind: kind, summary: summary, occurredAt: Date(timeIntervalSince1970: occurredAt), nextTouchAt: nextTouchAt)
+    }
+
+    private func reconciliationReviewTaskID(forOpportunityID opportunityID: String) throws -> String? {
+        guard case let .text(taskID)? = try database.rows("SELECT task_reminder_id FROM reconciliation_reviews WHERE opportunity_id = ?", values: [.text(opportunityID)]).first?.first else { return nil }
+        return taskID
+    }
+
+    private func reconciliationValues(_ result: ReconciliationResult) -> [DatabaseValue] {
+        [.text(result.id), .text(result.opportunityID), .text(result.url), .real(result.recordedAt.timeIntervalSince1970), .text(result.outcome.rawValue), .text(result.classification.rawValue), .text(result.reason.rawValue), result.confidence.map { .text($0.rawValue) } ?? .null, .text(result.evidence), .text(result.error), result.reviewTaskID.map(DatabaseValue.text) ?? .null]
+    }
+
+    private func reconciliationResult(from row: [DatabaseValue]) throws -> ReconciliationResult {
+        guard row.count == 14,
+              case let .text(id) = row[0], case let .text(opportunityID) = row[1], case let .text(url) = row[2], case let .real(recordedAt) = row[3],
+              case let .text(outcomeValue) = row[4], let outcome = ReconciliationOutcome(rawValue: outcomeValue),
+              case let .text(classificationValue) = row[5], let classification = ReconciliationClassification(rawValue: classificationValue),
+              case let .text(reasonValue) = row[6], let reason = ReconciliationReason(rawValue: reasonValue),
+              case let .text(evidence) = row[8], case let .text(error) = row[9] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+        let confidence: ReconciliationConfidence? = if case let .text(value) = row[7] { ReconciliationConfidence(rawValue: value) } else { nil }
+        guard row[7] == .null || confidence != nil else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+        let reviewTaskID: String? = if case let .text(value) = row[10] { value } else { nil }
+        let closureConfirmedAt: Date? = if case let .real(value) = row[11] { Date(timeIntervalSince1970: value) } else { nil }
+        let legacyPostingCheckID: String? = if case let .text(value) = row[12] { value } else { nil }
+        let legacyStatus: String? = if case let .text(value) = row[13] { value } else { nil }
+        return ReconciliationResult(id: id, opportunityID: opportunityID, url: url, recordedAt: Date(timeIntervalSince1970: recordedAt), outcome: outcome, classification: classification, reason: reason, confidence: confidence, evidence: evidence, error: error, reviewTaskID: reviewTaskID, closureConfirmedAt: closureConfirmedAt, legacyPostingCheckID: legacyPostingCheckID, legacyStatus: legacyStatus)
+    }
+
+    private func isValidReconciliationTuple(_ command: RecordReconciliationResult, evidence: String, error: String) -> Bool {
+        switch command.outcome {
+        case .stillOpen:
+            return command.classification == .confirmed && !evidence.isEmpty && command.confidence != nil
+        case .possiblyClosed:
+            return command.classification == .ambiguous && !evidence.isEmpty && (command.confidence == .low || command.confidence == .medium)
+        case .closedSuggested:
+            return (command.classification == .confirmed || command.classification == .ambiguous) && !evidence.isEmpty && command.confidence != nil
+        case .needsManualReview:
+            return (command.classification == .ambiguous || command.classification == .failed || command.classification == .offlineUnchecked) && (!evidence.isEmpty || !error.isEmpty)
+        }
+    }
+
+    private func isValidLocalReviewURL(_ value: String) -> Bool {
+        guard let components = URLComponents(string: value), let scheme = components.scheme?.lowercased(), (scheme == "http" || scheme == "https"), let host = components.host?.lowercased(), !host.isEmpty, components.user == nil, components.password == nil, host != "localhost" else { return false }
+        if host.contains(":") { return host != "::1" && !host.hasPrefix("fe80:") && !host.hasPrefix("fc") && !host.hasPrefix("fd") }
+        let pieces = host.split(separator: ".").compactMap { Int($0) }
+        if pieces.count == 4 && pieces.allSatisfy({ (0...255).contains($0) }) {
+            return !(pieces[0] == 127 || pieces[0] == 10 || (pieces[0] == 192 && pieces[1] == 168) || (pieces[0] == 169 && pieces[1] == 254) || (pieces[0] == 172 && (16...31).contains(pieces[1])))
+        }
+        return true
     }
 
     private func postingCheck(from row: [DatabaseValue]) throws -> PostingCheck {

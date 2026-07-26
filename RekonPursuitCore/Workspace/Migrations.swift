@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 enum WorkspaceMigrations {
-    static let currentVersion = 18
+    static let currentVersion = 19
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
@@ -18,8 +18,9 @@ enum WorkspaceMigrations {
     static let versionSixteenChecksum = checksum(for: "16|opportunities.core_tracker_fields|opportunity_response_history")
     static let versionSeventeenChecksum = checksum(for: "17|import_reports.completed_detail|import_report_rows")
     static let versionEighteenChecksum = checksum(for: "18|import_reports.failed_count")
+    static let versionNineteenChecksum = checksum(for: "19|reconciliation_reviews|reconciliation_results|legacy_posting_check_provenance")
 
-    static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false, failVersionSixteen: Bool = false, failVersionSeventeen: Bool = false) throws {
+    static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false, failVersionSixteen: Bool = false, failVersionSeventeen: Bool = false, failVersionNineteen: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
         let versions = try database.rows("SELECT version FROM schema_migrations LIMIT 1")
         if versions.isEmpty {
@@ -277,6 +278,57 @@ enum WorkspaceMigrations {
                 try database.execute("UPDATE schema_migrations SET version = 18")
             }
         }
+        if version < 19 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    try database.execute("CREATE TABLE reconciliation_reviews (opportunity_id TEXT PRIMARY KEY NOT NULL REFERENCES opportunities(id), task_reminder_id TEXT NOT NULL UNIQUE REFERENCES task_reminders(id), created_at REAL NOT NULL, closure_confirmed_at REAL)")
+                    try database.execute("CREATE INDEX reconciliation_reviews_task_reminder_id ON reconciliation_reviews(task_reminder_id)")
+                    try database.execute("CREATE TABLE reconciliation_results (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), url TEXT NOT NULL, recorded_at REAL NOT NULL, outcome TEXT NOT NULL, classification TEXT NOT NULL, reason TEXT NOT NULL, confidence TEXT, evidence TEXT NOT NULL, error TEXT NOT NULL, review_task_reminder_id TEXT REFERENCES task_reminders(id), closure_confirmed_at REAL, legacy_posting_check_id TEXT UNIQUE, legacy_status TEXT)")
+                    try database.execute("CREATE INDEX reconciliation_results_opportunity_recorded_at ON reconciliation_results(opportunity_id, recorded_at DESC, id DESC)")
+
+                    let legacyRows = try database.rows("SELECT id, opportunity_id, url, status, evidence, checked_at FROM posting_checks ORDER BY checked_at, id")
+                    var reviewOpportunityIDs = Set<String>()
+                    for row in legacyRows {
+                        guard row.count == 6,
+                              case let .text(id) = row[0],
+                              case let .text(opportunityID) = row[1],
+                              case let .text(url) = row[2],
+                              case let .text(status) = row[3],
+                              case let .text(evidence) = row[4],
+                              case let .real(checkedAt) = row[5] else {
+                            throw WorkspaceStoreError.unexpectedDatabaseValue
+                        }
+                        let mapping: (outcome: String, classification: String) = switch status {
+                        case "Still open": ("Still open", "Confirmed")
+                        case "Possibly closed": ("Possibly closed", "Ambiguous")
+                        case "Closed": ("Closed suggested", "Confirmed")
+                        case "Needs manual review": ("Needs manual review", "Ambiguous")
+                        default: throw WorkspaceStoreError.unexpectedDatabaseValue
+                        }
+                        try database.execute("INSERT INTO reconciliation_results (id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status) VALUES (?, ?, ?, ?, ?, ?, 'manual review', NULL, ?, '', NULL, NULL, ?, ?)", values: [.text("legacy-reconciliation-" + id), .text(opportunityID), .text(url), .real(checkedAt), .text(mapping.outcome), .text(mapping.classification), .text(evidence), .text(id), .text(status)])
+                        if mapping.outcome != "Still open" { reviewOpportunityIDs.insert(opportunityID) }
+                    }
+                    for opportunityID in reviewOpportunityIDs.sorted() where try isActiveOpportunity(opportunityID, in: database) {
+                        let taskID = UUID().uuidString
+                        try database.execute("INSERT INTO task_reminders (id, opportunity_id, title, due_at, is_complete) VALUES (?, ?, 'Review reconciliation evidence', NULL, 0)", values: [.text(taskID), .text(opportunityID)])
+                        try database.execute("INSERT INTO reconciliation_reviews (opportunity_id, task_reminder_id, created_at, closure_confirmed_at) VALUES (?, ?, ?, NULL)", values: [.text(opportunityID), .text(taskID), .real(Date.now.timeIntervalSince1970)])
+                        try database.execute("UPDATE reconciliation_results SET review_task_reminder_id = ? WHERE opportunity_id = ? AND outcome != 'Still open'", values: [.text(taskID), .text(opportunityID)])
+                    }
+                    if failVersionNineteen { throw WorkspaceStoreError.injectedFailure }
+                    try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(19), .text(versionNineteenChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 19")
+                }
+                database.removeMigrationSnapshot()
+            } catch {
+                throw error
+            }
+        }
+    }
+
+    private static func isActiveOpportunity(_ opportunityID: String, in database: EncryptedDatabase) throws -> Bool {
+        guard case .text? = try database.rows("SELECT id FROM opportunities WHERE id = ? AND deleted_at IS NULL", values: [.text(opportunityID)]).first?.first else { return false }
+        return true
     }
 
     private static func checksum(for manifest: String) -> String {

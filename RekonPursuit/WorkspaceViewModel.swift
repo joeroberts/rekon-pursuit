@@ -81,6 +81,13 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var postingStatus: PostingStatus = .stillOpen
     @Published var postingEvidence = ""
     @Published private(set) var selectedPostingChecks: [PostingCheck] = []
+    @Published var reconciliationOutcome: ReconciliationOutcome = .stillOpen
+    @Published var reconciliationClassification: ReconciliationClassification = .confirmed
+    @Published var reconciliationReason: ReconciliationReason = .manualReview
+    @Published var reconciliationConfidence: ReconciliationConfidence = .medium
+    @Published var reconciliationEvidence = ""
+    @Published private(set) var selectedReconciliationResults: [ReconciliationResult] = []
+    @Published private(set) var selectedReconciliationTask: TaskReminder?
     @Published var documentReferenceKind: DocumentReferenceKind = .resume
     @Published private(set) var selectedDocumentReferences: [DocumentReference] = []
     @Published private(set) var csvPreview: CSVImportPreview?
@@ -425,6 +432,24 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
+    func recordReconciliation() {
+        guard let store = readyStore(), !selectedOpportunityID.isEmpty else { return }
+        do {
+            _ = try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: selectedOpportunityID, url: selectedJobURL, outcome: reconciliationOutcome, classification: reconciliationClassification, reason: reconciliationReason, confidence: reconciliationOutcome == .needsManualReview && reconciliationClassification == .offlineUnchecked ? nil : reconciliationConfidence, evidence: reconciliationEvidence))
+            reconciliationEvidence = ""
+            refreshCounts()
+            statusMessage = "Local review recorded. No online check ran."
+        } catch let error as LocalizedError { statusMessage = error.errorDescription ?? "The local review could not be saved." }
+        catch { statusMessage = "The local review could not be saved." }
+    }
+
+    func confirmReconciliationClosure() {
+        guard let store = readyStore(), !selectedOpportunityID.isEmpty else { return }
+        do { try store.confirmReconciliationClosure(forOpportunityID: selectedOpportunityID); refreshCounts(); statusMessage = "Closure confirmed locally." }
+        catch let error as LocalizedError { statusMessage = error.errorDescription ?? "Closure could not be confirmed." }
+        catch { statusMessage = "Closure could not be confirmed." }
+    }
+
     func exportOpportunitiesCSV() -> String? {
         guard let store = readyStore() else { return nil }
         do {
@@ -720,6 +745,7 @@ final class WorkspaceViewModel: ObservableObject {
             refreshSelectedTask()
             refreshRelationshipMemory()
             refreshSelectedPostingChecks()
+            refreshSelectedReconciliation()
             refreshSelectedDocumentReferences()
             contacts = try store?.contacts() ?? []
             refreshSelectedContactInteraction()
@@ -750,6 +776,13 @@ final class WorkspaceViewModel: ObservableObject {
         } catch {
             statusMessage = "The reconciliation history could not be read."
         }
+    }
+
+    private func refreshSelectedReconciliation() {
+        do {
+            selectedReconciliationResults = selectedOpportunityID.isEmpty ? [] : try store?.reconciliationResults(forOpportunityID: selectedOpportunityID) ?? []
+            selectedReconciliationTask = selectedOpportunityID.isEmpty ? nil : try store?.reconciliationReviewTask(forOpportunityID: selectedOpportunityID)
+        } catch { statusMessage = "The reconciliation history could not be read." }
     }
 
     private func refreshSelectedDocumentReferences() {
