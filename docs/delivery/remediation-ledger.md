@@ -119,6 +119,7 @@ ordinary sequencing.
 | Code Review / QA | **Implementation approved** | Commits `a9d827d` and `9ed80e7` isolate the UUID-derived local workspace from recovery data, prevent test access to live storage, and preserve recovery-only actions after failure. Focused lifecycle tests passed. |
 | Product owner | **Hands-on verification requested** | A fresh signed Debug build is open. Verify: recovery onboarding → Create separate local workspace → create one opportunity → quit/relaunch → opportunity remains; then Settings → Return to preserved workspace recovery leaves the original recovery state intact. |
 | Code Review / QA | **Correction approved** | The failed first-run path was traced to a missing signed Keychain access group. The corrected build carries `2UA854NLX4.com.rekonlabs.RekonPursuit`; retry removes only an otherwise empty `.staging` journal, while every database/key-bearing or later-phase state remains recovery-only. Focused regression test and full local test run passed. |
+| Product owner | **Accepted** | The corrected separate local workspace creation flow worked in the fresh app. |
 
 ## Review record
 

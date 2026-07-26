@@ -100,13 +100,12 @@
       "workType": "UX",
       "status": "in_progress",
       "releaseCondition": "UX-R1-W1 separate local workspace escape hatch is released. It must isolate its UUID-derived local path and Keychain namespace from the preserved recovery workspace. Task 2b/Task 3 recovery handoff, UX-R2, and RP-R6 remain unreleased.",
-      "latestTransition": "UX-R1-W1 verification correction is independently approved: the signed Debug app now has its app-specific Keychain access group and safely retries only a pristine staging-only creation attempt. A fresh app is open for product-owner verification.",
+      "latestTransition": "UX-R1-W1 accepted by the product owner: the separate local workspace created successfully after the signed Keychain correction, and the preserved-workspace boundary held.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
       },
-      "needsUserAction": true,
-      "userActionDetail": "Verify the open Debug app: create a separate local workspace from recovery, add one opportunity, relaunch, then return to preserved recovery from Settings."
+      "needsUserAction": false
     },
     {
       "id": "UX-R2",
