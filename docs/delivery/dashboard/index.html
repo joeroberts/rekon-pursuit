@@ -26,7 +26,7 @@
       <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">7</span></div>
       <div class="summary-item"><span class="summary-label">Blocked</span><span class="summary-value">0</span></div>
     </section>
-    <section class="attention" aria-label="Attention queue"><h2>Attention queue</h2><p class="attention-empty">Nothing needs your attention.</p></section>
+    <section class="attention" aria-label="Attention queue"><h2>Attention queue</h2><ul><li><strong>UX-R1:</strong> Verify the open Debug app: create a separate local workspace from recovery, add one opportunity, relaunch, then return to preserved recovery from Settings.</li></ul></section>
     <section class="board" aria-label="Delivery status board"><section class="lane lane-backlog"><header><h2>Backlog</h2><span class="lane-count">7</span></header>
       <article class="task-card status-backlog">
         <div class="card-heading"><span class="task-id">UX-R2</span><span class="work-type">UX</span></div>
@@ -109,9 +109,9 @@
         <h3>Shell and opportunity navigation</h3>
         <dl>
           <div><dt>Release condition</dt><dd>UX-R1-W1 separate local workspace escape hatch is released. It must isolate its UUID-derived local path and Keychain namespace from the preserved recovery workspace. Task 2b/Task 3 recovery handoff, UX-R2, and RP-R6 remain unreleased.</dd></div>
-          <div><dt>Latest transition</dt><dd>Product owner approved a non-destructive separate local workspace. Independent Architect/Security, QA, and TPM/Delivery review released only UX-R1-W1 after Task 2a acceptance.</dd></div>
+          <div><dt>Latest transition</dt><dd>UX-R1-W1 implementation passed independent code review and QA. A fresh signed Debug app is open for product-owner verification of the separate local workspace flow.</dd></div>
         </dl>
-        <p class="action">No action needed</p>
+        <p class="action required">Action needed: Verify the open Debug app: create a separate local workspace from recovery, add one opportunity, relaunch, then return to preserved recovery from Settings.</p>
         <a class="details-link" href="remediation.html#UX-R1">View task details</a>
       </article></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">7</span></header>
       <article class="task-card status-accepted">

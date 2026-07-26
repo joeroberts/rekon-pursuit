@@ -116,6 +116,8 @@ ordinary sequencing.
 | Architect / Security | **Approved with isolation conditions** | Use a persisted UUID selector, compiled local-root derivation, and a distinct local Keychain service/accounts. Preserve the recovery bookmark and forbid legacy/production Keychain access. |
 | QA | **Approved** | Focused proof covers isolated create, relaunch, preserved-material no-call/no-change, failure retention, and return-to-recovery. |
 | TPM / Delivery | **Released — UX-R1-W1 only** | This is a recovery-onboarding usability bridge, not Task 3. UX-R1 stays In progress; Task 2b/Task 3, UX-R2, and R6 remain unreleased. |
+| Code Review / QA | **Implementation approved** | Commits `a9d827d` and `9ed80e7` isolate the UUID-derived local workspace from recovery data, prevent test access to live storage, and preserve recovery-only actions after failure. Focused lifecycle tests passed. |
+| Product owner | **Hands-on verification requested** | A fresh signed Debug build is open. Verify: recovery onboarding → Create separate local workspace → create one opportunity → quit/relaunch → opportunity remains; then Settings → Return to preserved workspace recovery leaves the original recovery state intact. |
 
 ## Review record
 
