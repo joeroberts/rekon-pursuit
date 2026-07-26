@@ -258,6 +258,9 @@ not release R5.
 | 2026-07-26 | `UX-R1` | **Released for implementation** | Delivery released UX-R1 only. Implement the committed brief; UX-R2 and R6 remain unreleased. |
 | 2026-07-26 | `UX-R1` / `UX-R2` | **Home/Pipeline IA amendment approved** | Home is the default launch screen with Needs Attention first. Add Opportunity and Import CSV move from sidebar destinations into Pipeline actions. Rekon visual-token consistency and responsive empty states amend UX-R1; form, date-default, staged import, and Contacts improvements belong to UX-R2. URL detail extraction remains deferred. |
 | 2026-07-26 | `UX-R1` | **Home/Pipeline amendment gate pending** | Original brief authority is limited to delivered work. The amendment brief controls the remaining Home/Pipeline scope and must clear Architect, TPM, QA, and Delivery before implementation or UX-R1 acceptance. |
+| 2026-07-26 | `UX-R1` | **Home/Pipeline amendment — Architect approved** | No persistence, migration, network, or R5 route-safety conflict. The pure daily route seam preserves the existing guarded opportunity departure path. |
+| 2026-07-26 | `UX-R1` | **Home/Pipeline amendment — TPM approved** | Amendment authority, active UX-R1 state, and UX-R2/R6 dependency boundaries are unambiguous. |
+| 2026-07-26 | `UX-R1` | **Home/Pipeline amendment — QA approved** | The pure route-state seam and ready-state Home identifier provide focused evidence without UI-harness or coverage expansion. |
 
 ## Risks and decisions
 

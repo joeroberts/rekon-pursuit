@@ -100,7 +100,7 @@
       "workType": "UX",
       "status": "in_progress",
       "releaseCondition": "Initial shell/navigation implementation is delivered; the approved Home/Pipeline amendment must clear its gate before implementation. UX-R2 and RP-R6 remain unreleased.",
-      "latestTransition": "Initial implementation delivered; Home/Pipeline amendment is gate-pending.",
+      "latestTransition": "Initial implementation delivered; Home/Pipeline amendment cleared Architect, TPM, and QA and awaits Delivery release.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
