@@ -231,6 +231,8 @@ private struct WorkspaceOnboardingView: View {
                     } else if model.workspaceRequiresRecovery {
                         Text("Recovery is required before this workspace can be opened. Rekon Pursuit kept existing local material unchanged and will not create over it.").foregroundStyle(.secondary)
                         Button("Recheck local workspace") { model.retryWorkspaceOpen() }.accessibilityIdentifier("recheck-local-workspace")
+                        Button("Choose existing workspace folder…", action: chooseExistingWorkspaceFolder)
+                            .accessibilityIdentifier("choose-existing-workspace-folder")
                     } else {
                         Button("Retry opening workspace") { model.retryWorkspaceOpen() }.accessibilityIdentifier("retry-local-workspace")
                     }
@@ -242,6 +244,19 @@ private struct WorkspaceOnboardingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(36)
         .accessibilityIdentifier("workspace-onboarding")
+    }
+
+    private func chooseExistingWorkspaceFolder() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Existing Rekon Pursuit Workspace"
+        panel.message = "Choose the folder that directly contains workspace.sqlite."
+        panel.prompt = "Choose workspace"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = false
+        let selectedURL = panel.runModal() == .OK ? panel.url : nil
+        model.chooseExistingWorkspaceFolder(selectedURL)
     }
 }
 

@@ -4,6 +4,88 @@ import XCTest
 
 @MainActor
 final class WorkspaceViewModelTests: XCTestCase {
+    func testExternalFolderLeaseIsRetainedForTheOpenedStoreThenReleasedOnClose() throws {
+        let store = try makeStore()
+        let bookmarkFixture = ViewModelBookmarkFixture()
+        let folder = bookmarkFixture.makeFolder(withDatabase: true)
+        var openedURL: URL?
+        let model = WorkspaceViewModel(
+            openWorkspace: { .createAvailable },
+            createWorkspace: { store },
+            workspaceLocationBookmarks: bookmarkFixture.makeStore(),
+            openExternalWorkspace: { url in
+                openedURL = url
+                return .ready(store)
+            }
+        )
+
+        model.chooseExistingWorkspaceFolder(folder)
+
+        XCTAssertEqual(openedURL, folder)
+        XCTAssertTrue(model.workspaceReady)
+        XCTAssertEqual(bookmarkFixture.startedURLs, [folder])
+        XCTAssertEqual(bookmarkFixture.stoppedURLs, [])
+
+        model.closeWorkspace()
+
+        XCTAssertEqual(bookmarkFixture.stoppedURLs, [folder])
+    }
+
+    func testStaleExternalBookmarkIsRecoveryOnlyAndNeverOffersCreation() throws {
+        let store = try makeStore()
+        let bookmarkFixture = ViewModelBookmarkFixture()
+        let bookmark = Data("stale-bookmark".utf8)
+        bookmarkFixture.bookmark = bookmark
+        bookmarkFixture.resolvedBookmarks[bookmark] = (bookmarkFixture.makeFolder(withDatabase: false), true)
+        let model = WorkspaceViewModel(
+            openWorkspace: { .createAvailable },
+            createWorkspace: { store },
+            workspaceLocationBookmarks: bookmarkFixture.makeStore()
+        )
+
+        model.start()
+
+        XCTAssertTrue(model.workspaceRequiresRecovery)
+        XCTAssertFalse(model.canCreateWorkspace)
+    }
+
+    func testCancelledExternalFolderSelectionRemainsRecoveryOnlyWithoutReplacingBookmark() throws {
+        let store = try makeStore()
+        let bookmarkFixture = ViewModelBookmarkFixture()
+        let priorBookmark = Data("prior-bookmark".utf8)
+        bookmarkFixture.bookmark = priorBookmark
+        let model = WorkspaceViewModel(
+            openWorkspace: { .createAvailable },
+            createWorkspace: { store },
+            workspaceLocationBookmarks: bookmarkFixture.makeStore()
+        )
+
+        model.chooseExistingWorkspaceFolder(nil)
+
+        XCTAssertEqual(bookmarkFixture.bookmark, priorBookmark)
+        XCTAssertTrue(model.workspaceRequiresRecovery)
+        XCTAssertFalse(model.canCreateWorkspace)
+    }
+
+    func testExternalFolderWithoutTaskTwoKeySupportReturnsToRecoveryAndReleasesLease() throws {
+        let store = try makeStore()
+        let bookmarkFixture = ViewModelBookmarkFixture()
+        let folder = bookmarkFixture.makeFolder(withDatabase: true)
+        let model = WorkspaceViewModel(
+            openWorkspace: { .createAvailable },
+            createWorkspace: { store },
+            workspaceLocationBookmarks: bookmarkFixture.makeStore(),
+            openExternalWorkspace: { _ in .recoveryRequired }
+        )
+
+        model.chooseExistingWorkspaceFolder(folder)
+
+        XCTAssertTrue(model.workspaceRequiresRecovery)
+        XCTAssertFalse(model.canCreateWorkspace)
+        XCTAssertEqual(bookmarkFixture.startedURLs, [folder])
+        XCTAssertEqual(bookmarkFixture.stoppedURLs, [folder])
+    }
+
     func testRouteSelectionRejectsAnAbsentOpportunityWithoutMutatingTheCurrentSelection() throws {
         let store = try makeStore()
         let first = try store.create(CreateOpportunity(title: "First", company: "Rekon Labs"))
@@ -675,4 +757,38 @@ private final class BlockingFixturePublicURLChecker: PublicURLChecking {
     func waitForCancellation() async {
         while !didCancel { await Task.yield() }
     }
+}
+
+@MainActor
+private final class ViewModelBookmarkFixture {
+    var bookmark: Data?
+    var resolvedBookmarks: [Data: (URL, Bool)] = [:]
+    private var databaseURLs: Set<URL> = []
+    private(set) var startedURLs: [URL] = []
+    private(set) var stoppedURLs: [URL] = []
+
+    func makeFolder(withDatabase: Bool) -> URL {
+        let folder = URL(fileURLWithPath: "/fixture/\(UUID().uuidString)", isDirectory: true)
+        if withDatabase { databaseURLs.insert(folder.appendingPathComponent("workspace.sqlite")) }
+        return folder
+    }
+
+    func makeStore() -> WorkspaceLocationBookmarkStore {
+        WorkspaceLocationBookmarkStore(dependencies: .init(
+            loadBookmark: { [weak self] in self?.bookmark },
+            saveBookmark: { [weak self] bookmark in self?.bookmark = bookmark },
+            createBookmark: { url in Data("bookmark:\(url.lastPathComponent)".utf8) },
+            resolveBookmark: { [weak self] bookmark in
+                guard let result = self?.resolvedBookmarks[bookmark] else { throw ViewModelBookmarkFixtureError.unresolvable }
+                return result
+            },
+            startAccessing: { [weak self] url in self?.startedURLs.append(url); return true },
+            stopAccessing: { [weak self] url in self?.stoppedURLs.append(url) },
+            containsWorkspaceDatabase: { [weak self] url in self?.databaseURLs.contains(url) ?? false }
+        ))
+    }
+}
+
+private enum ViewModelBookmarkFixtureError: Error {
+    case unresolvable
 }

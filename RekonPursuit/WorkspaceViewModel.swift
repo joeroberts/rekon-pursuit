@@ -99,10 +99,13 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var workspaceRequiresRecovery = false
 
     private let openWorkspace: () throws -> WorkspaceOpenState
+    private let openExternalWorkspace: (URL) throws -> WorkspaceOpenState
     private let createWorkspace: () throws -> WorkspaceStore
     private let restoreWorkspace: (URL) throws -> WorkspaceStore
+    private let workspaceLocationBookmarks: WorkspaceLocationBookmarkStore
     private let publicURLChecker: PublicURLChecking
     private var store: WorkspaceStore?
+    private var externalWorkspaceLease: WorkspaceAccessLease?
     private var stagedRestoreURL: URL?
     private var publicURLCheckTasks: [String: Task<Void, Never>] = [:]
 
@@ -110,24 +113,41 @@ final class WorkspaceViewModel: ObservableObject {
         openWorkspace: @escaping () throws -> WorkspaceOpenState,
         createWorkspace: @escaping () throws -> WorkspaceStore,
         restoreWorkspace: @escaping (URL) throws -> WorkspaceStore = { _ in throw WorkspaceStoreError.injectedFailure },
+        workspaceLocationBookmarks: WorkspaceLocationBookmarkStore = WorkspaceLocationBookmarkStore(),
+        openExternalWorkspace: @escaping (URL) throws -> WorkspaceOpenState = { _ in .recoveryRequired },
         publicURLChecker: PublicURLChecking = PublicURLChecker()
     ) {
         self.openWorkspace = openWorkspace
+        self.openExternalWorkspace = openExternalWorkspace
         self.createWorkspace = createWorkspace
         self.restoreWorkspace = restoreWorkspace
+        self.workspaceLocationBookmarks = workspaceLocationBookmarks
         self.publicURLChecker = publicURLChecker
     }
 
     convenience init() {
         let session = WorkspaceSession(root: Self.defaultWorkspaceRoot())
-        self.init(openWorkspace: session.open, createWorkspace: session.create, restoreWorkspace: session.restore)
+        self.init(
+            openWorkspace: session.open,
+            createWorkspace: session.create,
+            restoreWorkspace: session.restore
+        )
     }
 
     func start() {
-        do {
-            apply(try openWorkspace())
-        } catch {
-            apply(.unavailable)
+        closeExternalWorkspace()
+        switch workspaceLocationBookmarks.resolve() {
+        case let .available(lease):
+            openExternalWorkspace(with: lease)
+        case .stale:
+            apply(.recoveryRequired)
+            statusMessage = "The selected workspace folder needs recovery. Choose the existing workspace folder again; nothing was created or replaced."
+        case .missing:
+            do {
+                apply(try openWorkspace())
+            } catch {
+                apply(.unavailable)
+            }
         }
     }
 
@@ -149,6 +169,31 @@ final class WorkspaceViewModel: ObservableObject {
 
     func retryWorkspaceOpen() {
         start()
+    }
+
+    func chooseExistingWorkspaceFolder(_ url: URL?) {
+        guard let url else {
+            apply(.recoveryRequired)
+            statusMessage = "Workspace selection was cancelled. Choose the existing workspace folder to continue recovery."
+            return
+        }
+        do {
+            let lease = try workspaceLocationBookmarks.validateAndSave(url: url)
+            closeExternalWorkspace()
+            openExternalWorkspace(with: lease)
+        } catch {
+            apply(.recoveryRequired)
+            statusMessage = "Choose an existing workspace folder that directly contains workspace.sqlite. Nothing was created or replaced."
+        }
+    }
+
+    func closeWorkspace() {
+        closeExternalWorkspace()
+        clearWorkspaceDerivedState()
+        workspaceReady = false
+        canCreateWorkspace = false
+        workspaceRequiresRecovery = true
+        statusMessage = "Workspace closed. Choose an existing workspace folder to recover it."
     }
 
     func createOpportunity() {
@@ -844,6 +889,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     private func clearWorkspaceDerivedState() {
+        try? store?.close()
         publicURLCheckTasks.values.forEach { $0.cancel() }
         publicURLCheckTasks = [:]
         checkingPublicURLOpportunityIDs = []
@@ -873,6 +919,31 @@ final class WorkspaceViewModel: ObservableObject {
         csvImportPlan = []
         csvImportReport = nil
         csvImportReportRows = []
+    }
+
+    private func openExternalWorkspace(with lease: WorkspaceAccessLease) {
+        externalWorkspaceLease = lease
+        do {
+            let state = try openExternalWorkspace(lease.url)
+            if case .ready = state {
+                apply(state)
+            } else {
+                closeExternalWorkspace()
+                apply(state == .createAvailable ? .recoveryRequired : state)
+            }
+        } catch {
+            closeExternalWorkspace()
+            apply(.recoveryRequired)
+        }
+    }
+
+    private func closeExternalWorkspace() {
+        if externalWorkspaceLease != nil {
+            try? store?.close()
+            store = nil
+            externalWorkspaceLease?.close()
+            externalWorkspaceLease = nil
+        }
     }
 
     private func refreshCounts() {
