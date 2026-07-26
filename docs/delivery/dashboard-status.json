@@ -99,14 +99,14 @@
       "title": "Shell and opportunity navigation",
       "workType": "UX",
       "status": "blocked",
-      "releaseCondition": "A stable development signing identity and app-scoped Keychain access must be configured before the sandboxed handoff can reopen the preserved workspace. UX-R2 and RP-R6 remain unreleased.",
-      "latestTransition": "Blocked: the ad-hoc-signed sandboxed handoff cannot access the existing Keychain key; filesystem and Keychain evidence confirm the workspace was preserved.",
+      "releaseCondition": "An Architect- and Security/Privacy-approved, one-time legacy-Keychain migration design must be released before the stable sandboxed app can open the preserved workspace. UX-R2 and RP-R6 remain unreleased.",
+      "latestTransition": "Stable Personal-Team signing is now verified, but the signed sandbox cannot access the legacy key created by the former ad-hoc identity. The database is preserved; no migration has run.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
       },
       "needsUserAction": true,
-      "userActionDetail": "Add or select your Apple ID Personal Team in Xcode so this Mac has a stable development-signing identity; then report back for a sandboxed workspace-open handoff."
+      "userActionDetail": "Approve the design and release of a one-time local migration that copies the legacy workspace key into the stable app-scoped Keychain only after verification; it must retain the original database and legacy key for rollback."
     },
     {
       "id": "UX-R2",
