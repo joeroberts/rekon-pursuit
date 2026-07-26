@@ -87,7 +87,13 @@ final class WorkspaceSession {
     }
 
     func create() throws -> WorkspaceStore {
-        guard try materials().isEmpty else { throw WorkspaceSessionError.workspaceAlreadyExists }
+        let existingMaterials = try materials()
+        if !existingMaterials.isEmpty {
+            guard try retryableStagingAttempt(existingMaterials) else {
+                throw WorkspaceSessionError.workspaceAlreadyExists
+            }
+            try FileManager.default.removeItem(at: journalURL)
+        }
 
         let key = try newKey()
         guard key.count == 32 else { throw EncryptedDatabaseError.invalidKeyLength }
@@ -219,6 +225,17 @@ final class WorkspaceSession {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let data = try JSONEncoder().encode(WorkspaceCreationJournal(attemptID: attemptID, phase: phase))
         try data.write(to: journalURL, options: .atomic)
+    }
+
+    private func retryableStagingAttempt(_ material: WorkspaceMaterialState) throws -> Bool {
+        guard !material.hasDatabase,
+              !material.hasSidecars,
+              material.hasJournal,
+              !material.hasPrimaryKey,
+              !material.hasPendingKey else {
+            return false
+        }
+        return try creationJournal()?.phase == .staging
     }
 
     private func throwIfInjected(_ point: WorkspaceCreationFault) throws {
