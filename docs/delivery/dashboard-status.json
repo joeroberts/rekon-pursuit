@@ -98,15 +98,14 @@
       "id": "UX-R1",
       "title": "Shell and opportunity navigation",
       "workType": "UX",
-      "status": "blocked",
-      "releaseCondition": "A storage-access architecture for the preserved external workspace, then a revised Keychain handoff design, must be independently approved. UX-R2 and RP-R6 remain unreleased.",
-      "latestTransition": "Independent review found two material preflight failures: the sandbox has no writable access to the legacy external workspace, and the planned database check was not truly read-only. No migration has run; the database and legacy key are preserved.",
+      "status": "in_progress",
+      "releaseCondition": "Task 1 only: ADR-003 user-selected read/write external-workspace bookmark and recovery slice. Task 2 true read-only verifier plus signed synthetic Keychain transfer and Task 3 live handoff require separate approval/release. UX-R2 and RP-R6 remain unreleased.",
+      "latestTransition": "Product owner accepted ADR-003; independent Architect, QA, Planning, TPM, and Delivery review approved and released Task 1 only. No Keychain migration or user-workspace handoff has run.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
       },
-      "needsUserAction": true,
-      "userActionDetail": "Choose the storage model for the preserved workspace: recommended—select its existing folder once and grant Rekon Pursuit persistent read/write access via a security-scoped bookmark, with no data copy; alternative—approve a verified copy into the sandbox while retaining the source unchanged."
+      "needsUserAction": false
     },
     {
       "id": "UX-R2",

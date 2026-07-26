@@ -24,9 +24,9 @@
       <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">No successor eligible</span></div>
       <div class="summary-item"><span class="summary-label">Accepted</span><span class="summary-value">7</span></div>
       <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">7</span></div>
-      <div class="summary-item"><span class="summary-label">Blocked</span><span class="summary-value">1</span></div>
+      <div class="summary-item"><span class="summary-label">Blocked</span><span class="summary-value">0</span></div>
     </section>
-    <section class="attention" aria-label="Attention queue"><h2>Attention queue</h2><ul><li><strong>UX-R1:</strong> Choose the storage model for the preserved workspace: recommended—select its existing folder once and grant Rekon Pursuit persistent read/write access via a security-scoped bookmark, with no data copy; alternative—approve a verified copy into the sandbox while retaining the source unchanged.</li></ul></section>
+    <section class="attention" aria-label="Attention queue"><h2>Attention queue</h2><p class="attention-empty">Nothing needs your attention.</p></section>
     <section class="board" aria-label="Delivery status board"><section class="lane lane-backlog"><header><h2>Backlog</h2><span class="lane-count">7</span></header>
       <article class="task-card status-backlog">
         <div class="card-heading"><span class="task-id">UX-R2</span><span class="work-type">UX</span></div>
@@ -103,7 +103,17 @@
         </dl>
         <p class="action">No action needed</p>
         <a class="details-link" href="remediation.html#RP-R10">View task details</a>
-      </article></section><section class="lane lane-next_up"><header><h2>Next up</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section><section class="lane lane-in_progress"><header><h2>In progress</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">7</span></header>
+      </article></section><section class="lane lane-next_up"><header><h2>Next up</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section><section class="lane lane-in_progress"><header><h2>In progress</h2><span class="lane-count">1</span></header>
+      <article class="task-card status-in_progress">
+        <div class="card-heading"><span class="task-id">UX-R1</span><span class="work-type">UX</span></div>
+        <h3>Shell and opportunity navigation</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Task 1 only: ADR-003 user-selected read/write external-workspace bookmark and recovery slice. Task 2 true read-only verifier plus signed synthetic Keychain transfer and Task 3 live handoff require separate approval/release. UX-R2 and RP-R6 remain unreleased.</dd></div>
+          <div><dt>Latest transition</dt><dd>Product owner accepted ADR-003; independent Architect, QA, Planning, TPM, and Delivery review approved and released Task 1 only. No Keychain migration or user-workspace handoff has run.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="details-link" href="remediation.html#UX-R1">View task details</a>
+      </article></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">7</span></header>
       <article class="task-card status-accepted">
         <div class="card-heading"><span class="task-id">RP-R0</span><span class="work-type">Foundation</span></div>
         <h3>Evidence-only remediation baseline</h3>
@@ -179,17 +189,7 @@
         </dl>
         <p class="action">No action needed</p>
         <a class="details-link" href="remediation.html#RP-R5">View task details</a>
-      </article></section><section class="lane lane-blocked"><header><h2>Blocked</h2><span class="lane-count">1</span></header>
-      <article class="task-card status-blocked">
-        <div class="card-heading"><span class="task-id">UX-R1</span><span class="work-type">UX</span></div>
-        <h3>Shell and opportunity navigation</h3>
-        <dl>
-          <div><dt>Release condition</dt><dd>A storage-access architecture for the preserved external workspace, then a revised Keychain handoff design, must be independently approved. UX-R2 and RP-R6 remain unreleased.</dd></div>
-          <div><dt>Latest transition</dt><dd>Independent review found two material preflight failures: the sandbox has no writable access to the legacy external workspace, and the planned database check was not truly read-only. No migration has run; the database and legacy key are preserved.</dd></div>
-        </dl>
-        <p class="action required">Action needed: Choose the storage model for the preserved workspace: recommended—select its existing folder once and grant Rekon Pursuit persistent read/write access via a security-scoped bookmark, with no data copy; alternative—approve a verified copy into the sandbox while retaining the source unchanged.</p>
-        <a class="details-link" href="remediation.html#UX-R1">View task details</a>
-      </article></section></section>
+      </article></section><section class="lane lane-blocked"><header><h2>Blocked</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section></section>
     <footer>Source: <code>docs/delivery/dashboard-status.json</code> · Generated locally · No server required</footer>
   </main>
 </body>

@@ -1,8 +1,8 @@
 # Legacy Keychain Migration Design
 
-**Status:** Superseded pending a storage-access decision. Product owner
-approved the original Keychain-only direction; independent review found it
-cannot open the preserved workspace from the sandbox.
+**Status:** Revised and product-owner approved. ADR-003 supplies the required
+storage-access boundary; independent gates must still approve the implementation
+plan before any workspace migration runs.
 
 ## Goal
 
@@ -25,18 +25,16 @@ bundle ID (`com.rekonlabs.RekonPursuit`) and Personal Team (`2UA854NLX4`). It
 has a compile-time-only migration entry point and no sandbox entitlement. The
 ordinary product build stays sandboxed.
 
-That candidate is rejected until a revised architecture has been approved. The
-revised design must choose one of these storage models:
+That candidate was rejected until a revised architecture was approved. The
+product owner selected this storage model:
 
-1. **Recommended — persistent user-selected folder bookmark:** the user selects
+1. **Selected — persistent user-selected folder bookmark:** the user selects
    the existing Rekon Pursuit workspace folder once. The production sandbox is
    granted read/write security-scoped access only to that folder and stores the
    opaque bookmark locally. The original database remains authoritative; no
    copy is made.
-2. **Alternative — verified copy into the sandbox:** create a distinct copy
-   only after read-only source verification, retain the original untouched, and
-   make the destination authoritative only after explicit user confirmation.
-   This creates duplicate-state risk and needs separate product approval.
+2. **Rejected alternative — verified copy into the sandbox:** not selected
+   because it creates duplicate-state risk.
 
 Whichever model is selected, the migration build may perform this bounded
 Keychain sequence in memory:
@@ -74,6 +72,15 @@ product sandbox.
   failure, or failed target re-open aborts safely and retains all artifacts.
 - The migration utility is not shipped and cannot be reached by the normal app
   UI or normal build configuration.
+- A stale/missing bookmark never falls back to silently creating a workspace in
+  a different folder. It returns the user to the explicit recovery chooser.
+- Before persisting or replacing a bookmark, a temporary scope must prove that
+  the selected directory directly contains `workspace.sqlite`. Empty, wrong,
+  inaccessible, stale, or cancelled selections retain any prior bookmark and
+  remain in recovery; they never surface a Create action for that folder.
+- The view model owns the successful access lease for the entire external store
+  lifetime and releases it exactly once on store close, failed open,
+  re-selection, or teardown.
 
 ## Acceptance evidence
 
