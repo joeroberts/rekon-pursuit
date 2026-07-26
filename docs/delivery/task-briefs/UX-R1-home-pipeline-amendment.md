@@ -1,6 +1,6 @@
 # UX-R1 amendment — Home and Pipeline navigation
 
-**State:** Planned amendment — not released for implementation  
+**State:** Released for implementation
 **Depends on:** `UX-R1` implementation at `5a88a00`; approved [Home and Pipeline information architecture](../../superpowers/specs/2026-07-26-home-pipeline-ia-design.md)  
 **Blocks:** UX-R1 acceptance; `UX-R2` and `RP-R6` remain unreleased  
 **Implementation release requires:** Architect, TPM, QA, and Delivery approval of this amendment.

@@ -261,6 +261,7 @@ not release R5.
 | 2026-07-26 | `UX-R1` | **Home/Pipeline amendment — Architect approved** | No persistence, migration, network, or R5 route-safety conflict. The pure daily route seam preserves the existing guarded opportunity departure path. |
 | 2026-07-26 | `UX-R1` | **Home/Pipeline amendment — TPM approved** | Amendment authority, active UX-R1 state, and UX-R2/R6 dependency boundaries are unambiguous. |
 | 2026-07-26 | `UX-R1` | **Home/Pipeline amendment — QA approved** | The pure route-state seam and ready-state Home identifier provide focused evidence without UI-harness or coverage expansion. |
+| 2026-07-26 | `UX-R1` | **Home/Pipeline amendment released** | Delivery released only the approved Home/Pipeline navigation, token-consistency, and responsive-empty-state amendment. UX-R2 and RP-R6 remain unreleased. |
 
 ## Risks and decisions
 
