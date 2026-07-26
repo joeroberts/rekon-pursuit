@@ -439,9 +439,112 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.selectedOpportunityInteractions.map(\.summary), ["Met the hiring manager."])
     }
 
+    func testExplicitPublicURLCheckPersistsAndRefreshesTheSelectedResult() async throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(
+            title: "Platform Engineer",
+            company: "Rekon Labs",
+            jobURL: "https://jobs.example.com/role"
+        ))
+        let checker = FixturePublicURLChecker(
+            preparation: .eligible(PublicURLRequest(
+                originalURL: opportunity.jobURL,
+                hostname: "jobs.example.com",
+                requestTarget: "/role"
+            )),
+            completion: PublicURLCheckCompletion(
+                terminalState: .completed,
+                outcome: .stillOpen,
+                classification: .confirmed,
+                confidence: .high,
+                evidence: "The visible posting title and active application marker matched.",
+                httpStatus: 200
+            )
+        )
+        let model = WorkspaceViewModel(
+            openWorkspace: { .ready(store) },
+            createWorkspace: { store },
+            publicURLChecker: checker
+        )
+        model.start()
+        model.select(opportunity)
+
+        model.checkSelectedPublicURL()
+        await checker.waitForCheck()
+        await Task.yield()
+
+        XCTAssertFalse(model.isCheckingSelectedPublicURL)
+        XCTAssertEqual(model.selectedReconciliationResults.first?.outcome, .stillOpen)
+        XCTAssertEqual(model.selectedReconciliationResults.first?.httpStatus, 200)
+        XCTAssertEqual(model.statusMessage, "Public URL check completed. Review the limited local evidence.")
+    }
+
+    func testIneligiblePublicURLCheckRecordsManualReviewWithoutCallingTransport() async throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(
+            title: "Platform Engineer",
+            company: "Rekon Labs",
+            jobURL: "http://jobs.example.com/role"
+        ))
+        let checker = FixturePublicURLChecker(
+            preparation: .ineligible(PublicURLCheckCompletion(
+                terminalState: .failed,
+                outcome: .needsManualReview,
+                classification: .failed,
+                reason: .sourceFailed,
+                evidence: "The saved posting URL is not eligible for a bounded public HTTPS check.",
+                redactedErrorCode: "url_ineligible"
+            )),
+            completion: nil
+        )
+        let model = WorkspaceViewModel(
+            openWorkspace: { .ready(store) },
+            createWorkspace: { store },
+            publicURLChecker: checker
+        )
+        model.start()
+        model.select(opportunity)
+
+        model.checkSelectedPublicURL()
+        await Task.yield()
+
+        XCTAssertEqual(checker.checkCount, 0)
+        XCTAssertEqual(model.selectedReconciliationResults.first?.redactedErrorCode, "url_ineligible")
+        XCTAssertNotNil(model.selectedReconciliationTask)
+    }
+
     private func makeStore() throws -> WorkspaceStore {
         let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent("rekon-view-model-\(UUID().uuidString).sqlite")
         let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 5, count: 32))
         return try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
+    }
+}
+
+@MainActor
+private final class FixturePublicURLChecker: PublicURLChecking {
+    let preparation: PublicURLPreparation
+    let completion: PublicURLCheckCompletion?
+    private(set) var checkCount = 0
+    private var didCheck = false
+
+    init(preparation: PublicURLPreparation, completion: PublicURLCheckCompletion?) {
+        self.preparation = preparation
+        self.completion = completion
+    }
+
+    func prepare(_ savedURL: String) -> PublicURLPreparation {
+        preparation
+    }
+
+    func check(_ request: PublicURLRequest, opportunityTitle: String) async -> PublicURLCheckCompletion {
+        checkCount += 1
+        didCheck = true
+        return completion!
+    }
+
+    func waitForCheck() async {
+        while !didCheck {
+            await Task.yield()
+        }
     }
 }

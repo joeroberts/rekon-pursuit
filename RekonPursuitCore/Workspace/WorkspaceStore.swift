@@ -10,6 +10,7 @@ final class WorkspaceStore {
     private let correlationID: String
     private let failBeforeActivityInsert: Bool
     private let lock = NSLock()
+    private let reconciliationResultSelect = "SELECT id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status, check_operation_id, method, checker_version, http_status, mime_type, declared_bytes, received_bytes, content_sha256, response_date, last_modified, etag, retry_after, redirect_target_redacted, evidence_excerpt, redacted_error_code"
 
     init(
         database: EncryptedDatabase,
@@ -27,6 +28,7 @@ final class WorkspaceStore {
         self.correlationID = correlationID
         self.failBeforeActivityInsert = failBeforeActivityInsert
         try WorkspaceMigrations.apply(to: database)
+        try interruptAbandonedPublicURLChecksAtLaunch()
     }
 
     func schemaVersion() throws -> Int {
@@ -200,7 +202,17 @@ final class WorkspaceStore {
             guard try isActiveOpportunity(id) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
             let reference = try deletedOpportunityReferenceUnlocked(for: id)
             let event = ActivityEvent(id: nextIdentifier(), kind: "opportunity_deleted", opportunityID: id, actorID: actorID, correlationID: correlationID, occurredAt: commandNow)
+            let activeOperations = try database.rows("SELECT id, url_snapshot FROM reconciliation_check_operations WHERE opportunity_id = ? AND state = 'started'", values: [.text(id)])
             try database.transaction {
+                for row in activeOperations {
+                    guard row.count == 2, case let .text(operationID) = row[0], case let .text(urlSnapshot) = row[1] else {
+                        throw WorkspaceStoreError.unexpectedDatabaseValue
+                    }
+                    try database.execute(
+                        "UPDATE reconciliation_check_operations SET state = 'cancelled', terminal_at = ?, url_snapshot = ? WHERE id = ? AND state = 'started'",
+                        values: [.real(commandNow.timeIntervalSince1970), .text(redactedURLSnapshot(urlSnapshot)), .text(operationID)]
+                    )
+                }
                 try database.execute("UPDATE opportunities SET deleted_at = ? WHERE id = ?", values: [.real(commandNow.timeIntervalSince1970), .text(id)])
                 try database.execute("DELETE FROM task_reminders WHERE opportunity_id = ? AND NOT EXISTS (SELECT 1 FROM reconciliation_reviews WHERE reconciliation_reviews.task_reminder_id = task_reminders.id)", values: [.text(id)])
                 try database.execute(
@@ -528,10 +540,165 @@ final class WorkspaceStore {
         }
     }
 
+    func beginPublicURLCheck(opportunityID: String, urlSnapshot: String) throws -> BeginPublicURLCheck {
+        let startedAt = clock()
+        return try synchronized {
+            guard try isActiveOpportunity(opportunityID),
+                  case let .text(savedURL)? = try database.rows("SELECT job_url FROM opportunities WHERE id = ? AND deleted_at IS NULL", values: [.text(opportunityID)]).first?.first,
+                  savedURL == urlSnapshot,
+                  let host = URLComponents(string: urlSnapshot)?.host?.lowercased(),
+                  !host.isEmpty else {
+                throw WorkspaceStoreError.invalidPublicURLCheck
+            }
+
+            for row in try database.rows("SELECT id, opportunity_id, correlation_id, url_snapshot, state, started_at, terminal_at FROM reconciliation_check_operations WHERE state = 'started' ORDER BY started_at, id") {
+                let operation = try publicURLCheckOperation(from: row)
+                if operation.opportunityID == opportunityID || URLComponents(string: operation.urlSnapshot)?.host?.lowercased() == host {
+                    return BeginPublicURLCheck(operation: operation, isNew: false)
+                }
+            }
+
+            let operation = ReconciliationCheckOperation(
+                id: nextIdentifier(),
+                opportunityID: opportunityID,
+                correlationID: nextIdentifier(),
+                urlSnapshot: urlSnapshot,
+                state: .started,
+                startedAt: startedAt,
+                terminalAt: nil
+            )
+            try database.transaction {
+                try database.execute(
+                    "INSERT INTO reconciliation_check_operations (id, opportunity_id, correlation_id, url_snapshot, state, started_at, terminal_at) VALUES (?, ?, ?, ?, 'started', ?, NULL)",
+                    values: [.text(operation.id), .text(operation.opportunityID), .text(operation.correlationID), .text(operation.urlSnapshot), .real(operation.startedAt.timeIntervalSince1970)]
+                )
+                try appendActivity(kind: "public_url_check_started", opportunityID: opportunityID, occurredAt: startedAt)
+            }
+            return BeginPublicURLCheck(operation: operation, isNew: true)
+        }
+    }
+
+    func finishPublicURLCheck(operationID: String, completion: PublicURLCheckCompletion) throws -> ReconciliationResult? {
+        let terminalAt = clock()
+        return try synchronized {
+            guard let row = try database.rows("SELECT id, opportunity_id, correlation_id, url_snapshot, state, started_at, terminal_at FROM reconciliation_check_operations WHERE id = ?", values: [.text(operationID)]).first else {
+                throw WorkspaceStoreError.invalidPublicURLCheck
+            }
+            let operation = try publicURLCheckOperation(from: row)
+            guard operation.state == .started else {
+                return try database.rows(reconciliationResultSelect + " FROM reconciliation_results WHERE check_operation_id = ? ORDER BY recorded_at DESC, id DESC LIMIT 1", values: [.text(operationID)]).first.map(reconciliationResult(from:))
+            }
+
+            guard try isActiveOpportunity(operation.opportunityID),
+                  case let .text(currentURL)? = try database.rows("SELECT job_url FROM opportunities WHERE id = ? AND deleted_at IS NULL", values: [.text(operation.opportunityID)]).first?.first else {
+                try database.execute(
+                    "UPDATE reconciliation_check_operations SET state = 'cancelled', terminal_at = ?, url_snapshot = ? WHERE id = ? AND state = 'started'",
+                    values: [.real(terminalAt.timeIntervalSince1970), .text(redactedURLSnapshot(operation.urlSnapshot)), .text(operationID)]
+                )
+                return nil
+            }
+
+            let effectiveCompletion: PublicURLCheckCompletion
+            if currentURL != operation.urlSnapshot {
+                effectiveCompletion = PublicURLCheckCompletion(
+                    terminalState: .failed,
+                    outcome: .needsManualReview,
+                    classification: .failed,
+                    reason: .sourceFailed,
+                    evidence: "The saved posting URL changed while the check was running.",
+                    redactedErrorCode: "url_changed"
+                )
+            } else {
+                effectiveCompletion = completion
+            }
+            guard isValidPublicURLCheckCompletion(effectiveCompletion) else {
+                throw WorkspaceStoreError.invalidPublicURLCheck
+            }
+
+            let evidence = effectiveCompletion.evidence.trimmingCharacters(in: .whitespacesAndNewlines)
+            let error = effectiveCompletion.error.trimmingCharacters(in: .whitespacesAndNewlines)
+            let requiresReview = effectiveCompletion.outcome != .stillOpen
+            let existingReview = try activeReconciliationReviewTaskID(forOpportunityID: operation.opportunityID)
+            let taskID = requiresReview ? (existingReview ?? nextIdentifier()) : nil
+            let result = ReconciliationResult(
+                id: nextIdentifier(),
+                opportunityID: operation.opportunityID,
+                url: operation.urlSnapshot,
+                recordedAt: terminalAt,
+                outcome: effectiveCompletion.outcome,
+                classification: effectiveCompletion.classification,
+                reason: effectiveCompletion.reason,
+                confidence: effectiveCompletion.confidence,
+                evidence: evidence,
+                error: error,
+                reviewTaskID: taskID,
+                closureConfirmedAt: nil,
+                legacyPostingCheckID: nil,
+                legacyStatus: nil,
+                checkOperationID: operation.id,
+                method: effectiveCompletion.method,
+                checkerVersion: effectiveCompletion.checkerVersion,
+                httpStatus: effectiveCompletion.httpStatus,
+                mimeType: effectiveCompletion.mimeType,
+                declaredBytes: effectiveCompletion.declaredBytes,
+                receivedBytes: effectiveCompletion.receivedBytes,
+                contentSHA256: effectiveCompletion.contentSHA256,
+                responseDate: effectiveCompletion.responseDate,
+                lastModified: effectiveCompletion.lastModified,
+                etag: effectiveCompletion.etag,
+                retryAfter: effectiveCompletion.retryAfter,
+                redirectTargetRedacted: effectiveCompletion.redirectTargetRedacted,
+                evidenceExcerpt: effectiveCompletion.evidenceExcerpt,
+                redactedErrorCode: effectiveCompletion.redactedErrorCode
+            )
+
+            try database.transaction {
+                if requiresReview, existingReview == nil {
+                    try database.execute("INSERT INTO task_reminders (id, opportunity_id, title, due_at, is_complete) VALUES (?, ?, 'Review reconciliation evidence', NULL, 0)", values: [.text(taskID!), .text(operation.opportunityID)])
+                    if try reconciliationReviewTaskID(forOpportunityID: operation.opportunityID) == nil {
+                        try database.execute("INSERT INTO reconciliation_reviews (opportunity_id, task_reminder_id, created_at, closure_confirmed_at) VALUES (?, ?, ?, NULL)", values: [.text(operation.opportunityID), .text(taskID!), .real(terminalAt.timeIntervalSince1970)])
+                    } else {
+                        try database.execute("UPDATE reconciliation_reviews SET task_reminder_id = ?, created_at = ?, closure_confirmed_at = NULL WHERE opportunity_id = ?", values: [.text(taskID!), .real(terminalAt.timeIntervalSince1970), .text(operation.opportunityID)])
+                    }
+                    try appendActivity(kind: "reconciliation_review_task_created", opportunityID: operation.opportunityID, occurredAt: terminalAt)
+                } else if requiresReview {
+                    try appendActivity(kind: "reconciliation_review_task_reused", opportunityID: operation.opportunityID, occurredAt: terminalAt)
+                } else if let currentReviewTaskID = try reconciliationReviewTaskID(forOpportunityID: operation.opportunityID) {
+                    try database.execute("UPDATE task_reminders SET is_complete = 1 WHERE id = ?", values: [.text(currentReviewTaskID)])
+                    try database.execute("DELETE FROM reconciliation_reviews WHERE opportunity_id = ?", values: [.text(operation.opportunityID)])
+                    try appendActivity(kind: "reconciliation_review_task_resolved", opportunityID: operation.opportunityID, occurredAt: terminalAt)
+                }
+                try database.execute(
+                    "INSERT INTO reconciliation_results (id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status, check_operation_id, method, checker_version, http_status, mime_type, declared_bytes, received_bytes, content_sha256, response_date, last_modified, etag, retry_after, redirect_target_redacted, evidence_excerpt, redacted_error_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    values: publicURLCheckResultValues(result)
+                )
+                try database.execute(
+                    "UPDATE reconciliation_check_operations SET state = ?, terminal_at = ? WHERE id = ? AND state = 'started'",
+                    values: [.text(effectiveCompletion.terminalState.rawValue), .real(terminalAt.timeIntervalSince1970), .text(operationID)]
+                )
+                if failBeforeActivityInsert { throw WorkspaceStoreError.injectedFailure }
+                try appendActivity(kind: "public_url_check_\(effectiveCompletion.terminalState.rawValue)", opportunityID: operation.opportunityID, occurredAt: terminalAt)
+            }
+            return result
+        }
+    }
+
+    func publicURLCheckOperations() throws -> [ReconciliationCheckOperation] {
+        try synchronized {
+            try database.rows("SELECT id, opportunity_id, correlation_id, url_snapshot, state, started_at, terminal_at FROM reconciliation_check_operations ORDER BY started_at, id").map(publicURLCheckOperation(from:))
+        }
+    }
+
+    func publicURLCheckOperation(id: String) throws -> ReconciliationCheckOperation? {
+        try synchronized {
+            try database.rows("SELECT id, opportunity_id, correlation_id, url_snapshot, state, started_at, terminal_at FROM reconciliation_check_operations WHERE id = ?", values: [.text(id)]).first.map(publicURLCheckOperation(from:))
+        }
+    }
+
     func reconciliationResults(forOpportunityID opportunityID: String) throws -> [ReconciliationResult] {
         try synchronized {
             guard try isActiveOpportunity(opportunityID) else { return [] }
-            return try database.rows("SELECT id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status FROM reconciliation_results WHERE opportunity_id = ? ORDER BY recorded_at DESC, id DESC", values: [.text(opportunityID)]).map(reconciliationResult(from:))
+            return try database.rows(reconciliationResultSelect + " FROM reconciliation_results WHERE opportunity_id = ? ORDER BY recorded_at DESC, id DESC", values: [.text(opportunityID)]).map(reconciliationResult(from:))
         }
     }
 
@@ -646,6 +813,30 @@ final class WorkspaceStore {
     func responseHistory(forOpportunityID opportunityID: String) throws -> [ResponseHistoryEntry] {
         try synchronized {
             try database.rows("SELECT id, opportunity_id, from_state, to_state, occurred_at FROM opportunity_response_history WHERE opportunity_id = ? ORDER BY occurred_at DESC, id DESC", values: [.text(opportunityID)]).map(responseHistoryEntry(from:))
+        }
+    }
+
+    private func interruptAbandonedPublicURLChecksAtLaunch() throws {
+        let operationIDs = try synchronized {
+            try database.rows(
+                "SELECT id FROM reconciliation_check_operations WHERE state = 'started' ORDER BY started_at, id"
+            ).compactMap { row -> String? in
+                guard case let .text(operationID)? = row.first else { return nil }
+                return operationID
+            }
+        }
+        for operationID in operationIDs {
+            _ = try finishPublicURLCheck(
+                operationID: operationID,
+                completion: PublicURLCheckCompletion(
+                    terminalState: .interrupted,
+                    outcome: .needsManualReview,
+                    classification: .failed,
+                    reason: .sourceFailed,
+                    evidence: "The previous public URL check ended before completion.",
+                    redactedErrorCode: "interrupted"
+                )
+            )
         }
     }
 
@@ -875,7 +1066,7 @@ final class WorkspaceStore {
     }
 
     private func reconciliationResult(from row: [DatabaseValue]) throws -> ReconciliationResult {
-        guard row.count == 14,
+        guard row.count == 29,
               case let .text(id) = row[0], case let .text(opportunityID) = row[1], case let .text(url) = row[2], case let .real(recordedAt) = row[3],
               case let .text(outcomeValue) = row[4], let outcome = ReconciliationOutcome(rawValue: outcomeValue),
               case let .text(classificationValue) = row[5], let classification = ReconciliationClassification(rawValue: classificationValue),
@@ -887,7 +1078,160 @@ final class WorkspaceStore {
         let closureConfirmedAt: Date? = if case let .real(value) = row[11] { Date(timeIntervalSince1970: value) } else { nil }
         let legacyPostingCheckID: String? = if case let .text(value) = row[12] { value } else { nil }
         let legacyStatus: String? = if case let .text(value) = row[13] { value } else { nil }
-        return ReconciliationResult(id: id, opportunityID: opportunityID, url: url, recordedAt: Date(timeIntervalSince1970: recordedAt), outcome: outcome, classification: classification, reason: reason, confidence: confidence, evidence: evidence, error: error, reviewTaskID: reviewTaskID, closureConfirmedAt: closureConfirmedAt, legacyPostingCheckID: legacyPostingCheckID, legacyStatus: legacyStatus)
+        return ReconciliationResult(
+            id: id,
+            opportunityID: opportunityID,
+            url: url,
+            recordedAt: Date(timeIntervalSince1970: recordedAt),
+            outcome: outcome,
+            classification: classification,
+            reason: reason,
+            confidence: confidence,
+            evidence: evidence,
+            error: error,
+            reviewTaskID: reviewTaskID,
+            closureConfirmedAt: closureConfirmedAt,
+            legacyPostingCheckID: legacyPostingCheckID,
+            legacyStatus: legacyStatus,
+            checkOperationID: optionalText(row[14]),
+            method: optionalText(row[15]),
+            checkerVersion: optionalText(row[16]),
+            httpStatus: optionalInteger(row[17]),
+            mimeType: optionalText(row[18]),
+            declaredBytes: optionalInteger(row[19]),
+            receivedBytes: optionalInteger(row[20]),
+            contentSHA256: optionalText(row[21]),
+            responseDate: optionalText(row[22]),
+            lastModified: optionalText(row[23]),
+            etag: optionalText(row[24]),
+            retryAfter: optionalText(row[25]),
+            redirectTargetRedacted: optionalText(row[26]),
+            evidenceExcerpt: optionalText(row[27]),
+            redactedErrorCode: optionalText(row[28])
+        )
+    }
+
+    private func publicURLCheckOperation(from row: [DatabaseValue]) throws -> ReconciliationCheckOperation {
+        guard row.count == 7,
+              case let .text(id) = row[0],
+              case let .text(opportunityID) = row[1],
+              case let .text(correlationID) = row[2],
+              case let .text(urlSnapshot) = row[3],
+              case let .text(stateValue) = row[4],
+              let state = ReconciliationCheckOperationState(rawValue: stateValue),
+              case let .real(startedAt) = row[5] else {
+            throw WorkspaceStoreError.unexpectedDatabaseValue
+        }
+        let terminalAt: Date? = if case let .real(value) = row[6] { Date(timeIntervalSince1970: value) } else { nil }
+        return ReconciliationCheckOperation(id: id, opportunityID: opportunityID, correlationID: correlationID, urlSnapshot: urlSnapshot, state: state, startedAt: Date(timeIntervalSince1970: startedAt), terminalAt: terminalAt)
+    }
+
+    private func publicURLCheckResultValues(_ result: ReconciliationResult) -> [DatabaseValue] {
+        reconciliationValues(result) + [
+            result.checkOperationID.map(DatabaseValue.text) ?? .null,
+            result.method.map(DatabaseValue.text) ?? .null,
+            result.checkerVersion.map(DatabaseValue.text) ?? .null,
+            result.httpStatus.map { .integer(Int64($0)) } ?? .null,
+            result.mimeType.map(DatabaseValue.text) ?? .null,
+            result.declaredBytes.map { .integer(Int64($0)) } ?? .null,
+            result.receivedBytes.map { .integer(Int64($0)) } ?? .null,
+            result.contentSHA256.map(DatabaseValue.text) ?? .null,
+            result.responseDate.map(DatabaseValue.text) ?? .null,
+            result.lastModified.map(DatabaseValue.text) ?? .null,
+            result.etag.map(DatabaseValue.text) ?? .null,
+            result.retryAfter.map(DatabaseValue.text) ?? .null,
+            result.redirectTargetRedacted.map(DatabaseValue.text) ?? .null,
+            result.evidenceExcerpt.map(DatabaseValue.text) ?? .null,
+            result.redactedErrorCode.map(DatabaseValue.text) ?? .null
+        ]
+    }
+
+    private func isValidPublicURLCheckCompletion(_ completion: PublicURLCheckCompletion) -> Bool {
+        guard completion.terminalState.isTerminal,
+              completion.method == "GET",
+              completion.checkerVersion == "1",
+              (completion.httpStatus == nil || (100...599).contains(completion.httpStatus!)),
+              (completion.declaredBytes == nil || completion.declaredBytes! >= 0),
+              (completion.receivedBytes == nil || (0...524_288).contains(completion.receivedBytes!)),
+              completion.evidence.count <= 512,
+              completion.error.count <= 256,
+              completion.evidenceExcerpt?.count ?? 0 <= 512,
+              completion.mimeType?.count ?? 0 <= 128,
+              completion.responseDate?.count ?? 0 <= 256,
+              completion.lastModified?.count ?? 0 <= 256,
+              completion.etag?.count ?? 0 <= 256,
+              completion.retryAfter?.count ?? 0 <= 256 else {
+            return false
+        }
+        if let hash = completion.contentSHA256,
+           hash.count != 64 || hash.range(of: "^[0-9a-f]{64}$", options: .regularExpression) == nil {
+            return false
+        }
+        if let code = completion.redactedErrorCode,
+           code.range(of: "^[a-z0-9_]{1,64}$", options: .regularExpression) == nil {
+            return false
+        }
+        if let target = completion.redirectTargetRedacted, !isRedactedRedirectTarget(target) {
+            return false
+        }
+        let command = RecordReconciliationResult(
+            opportunityID: "validation",
+            url: "https://validation.invalid/",
+            outcome: completion.outcome,
+            classification: completion.classification,
+            reason: completion.reason,
+            confidence: completion.confidence,
+            evidence: completion.evidence,
+            error: completion.error
+        )
+        return isValidReconciliationTuple(
+            command,
+            evidence: completion.evidence.trimmingCharacters(in: .whitespacesAndNewlines),
+            error: completion.error.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private func isRedactedRedirectTarget(_ value: String) -> Bool {
+        guard value.count <= 512,
+              let components = URLComponents(string: value),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "https",
+              components.host != nil,
+              components.user == nil,
+              components.password == nil,
+              components.query == nil,
+              components.fragment == nil,
+              components.percentEncodedPath.count <= 256 else {
+            return false
+        }
+        return true
+    }
+
+    private func redactedURLSnapshot(_ value: String) -> String {
+        guard var components = URLComponents(string: value),
+              let scheme = components.scheme?.lowercased(),
+              let host = components.host?.lowercased() else {
+            return "redacted://invalid"
+        }
+        components.scheme = scheme
+        components.host = host
+        components.user = nil
+        components.password = nil
+        components.query = nil
+        components.fragment = nil
+        let path = String(components.percentEncodedPath.prefix(256))
+        components.percentEncodedPath = path.isEmpty ? "/" : path
+        return components.string ?? "\(scheme)://\(host)/"
+    }
+
+    private func optionalText(_ value: DatabaseValue) -> String? {
+        if case let .text(text) = value { return text }
+        return nil
+    }
+
+    private func optionalInteger(_ value: DatabaseValue) -> Int? {
+        if case let .integer(integer) = value { return Int(integer) }
+        return nil
     }
 
     private func isValidReconciliationTuple(_ command: RecordReconciliationResult, evidence: String, error: String) -> Bool {

@@ -368,17 +368,30 @@ struct ContentView: View {
                         }
                     }
                     GroupBox("Reconcile opening") {
-                        Text("Review the posting yourself, then save the outcome and evidence. This app does not check the web or change the opportunity stage automatically.")
+                        Text("Run one bounded public HTTPS check or review the posting yourself. A check never follows redirects, signs in, retries automatically, or changes the opportunity stage.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         if let url = URL(string: model.selectedJobURL), !model.selectedJobURL.isEmpty {
-                            Link("Open job posting", destination: url)
+                            HStack {
+                                Link("Open job posting", destination: url)
+                                if model.isCheckingSelectedPublicURL {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                    Text("Checking")
+                                        .font(.caption)
+                                    Button("Cancel") { model.cancelSelectedPublicURLCheck() }
+                                } else {
+                                    Button("Check public URL") { model.checkSelectedPublicURL() }
+                                        .disabled(!model.canCheckSelectedPublicURL)
+                                        .accessibilityIdentifier("check-public-url")
+                                }
+                            }
                         } else {
                             Text("Add a job URL to review this opening.")
                                 .foregroundStyle(.secondary)
                         }
                         Form {
-                            Text("No online check runs in R4. Record what you reviewed locally.")
+                            Text("Manual review remains available for offline, blocked, ambiguous, or unsupported sources.")
                                 .font(.caption).foregroundStyle(.secondary)
                             Picker("Local outcome", selection: $model.reconciliationOutcome) { ForEach(ReconciliationOutcome.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
                             Picker("Classification", selection: $model.reconciliationClassification) { ForEach(ReconciliationClassification.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
@@ -393,12 +406,39 @@ struct ContentView: View {
                             }
                         }
                         if !model.selectedReconciliationResults.isEmpty {
-                            Text("Local review history").font(.headline)
+                            Text("Reconciliation history").font(.headline)
                             ForEach(model.selectedReconciliationResults, id: \.id) { result in
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("\(result.outcome.rawValue) · \(result.classification.rawValue) · \(result.reason.rawValue) · \(result.recordedAt.formatted(date: .abbreviated, time: .shortened))")
                                         .font(.caption)
                                     Text(result.evidence.isEmpty ? result.error : result.evidence).font(.caption)
+                                    if result.checkOperationID != nil {
+                                        Text([
+                                            "Public URL checked once",
+                                            result.httpStatus.map { "HTTP \($0)" },
+                                            result.mimeType,
+                                            result.receivedBytes.map { "\($0.formatted()) bytes reviewed" }
+                                        ].compactMap { $0 }.joined(separator: " · "))
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                        if let excerpt = result.evidenceExcerpt, !excerpt.isEmpty {
+                                            Text("Visible evidence: \(excerpt)")
+                                                .font(.caption2)
+                                                .textSelection(.enabled)
+                                        }
+                                        if let redirect = result.redirectTargetRedacted {
+                                            Text("Redirect observed, not followed: \(redirect)")
+                                                .font(.caption2)
+                                                .textSelection(.enabled)
+                                        }
+                                        Text("No sign-in, scripts, cookies, subresources, or redirected pages were checked.")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    } else {
+                                        Text("Manual record; no online check ran.")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
                                     Text("Confidence: \(result.confidence?.rawValue ?? "Not recorded") · Review action: \(model.reconciliationReviewTaskState(for: result)) · Closure: \(result.closureConfirmedAt == nil ? (result.outcome == .closedSuggested ? "Awaiting confirmation" : "Not closed") : "Confirmed")")
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)

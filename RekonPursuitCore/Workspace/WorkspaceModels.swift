@@ -104,6 +104,178 @@ struct ReconciliationResult: Equatable {
     let closureConfirmedAt: Date?
     let legacyPostingCheckID: String?
     let legacyStatus: String?
+    let checkOperationID: String?
+    let method: String?
+    let checkerVersion: String?
+    let httpStatus: Int?
+    let mimeType: String?
+    let declaredBytes: Int?
+    let receivedBytes: Int?
+    let contentSHA256: String?
+    let responseDate: String?
+    let lastModified: String?
+    let etag: String?
+    let retryAfter: String?
+    let redirectTargetRedacted: String?
+    let evidenceExcerpt: String?
+    let redactedErrorCode: String?
+
+    init(
+        id: String,
+        opportunityID: String,
+        url: String,
+        recordedAt: Date,
+        outcome: ReconciliationOutcome,
+        classification: ReconciliationClassification,
+        reason: ReconciliationReason,
+        confidence: ReconciliationConfidence?,
+        evidence: String,
+        error: String,
+        reviewTaskID: String?,
+        closureConfirmedAt: Date?,
+        legacyPostingCheckID: String?,
+        legacyStatus: String?,
+        checkOperationID: String? = nil,
+        method: String? = nil,
+        checkerVersion: String? = nil,
+        httpStatus: Int? = nil,
+        mimeType: String? = nil,
+        declaredBytes: Int? = nil,
+        receivedBytes: Int? = nil,
+        contentSHA256: String? = nil,
+        responseDate: String? = nil,
+        lastModified: String? = nil,
+        etag: String? = nil,
+        retryAfter: String? = nil,
+        redirectTargetRedacted: String? = nil,
+        evidenceExcerpt: String? = nil,
+        redactedErrorCode: String? = nil
+    ) {
+        self.id = id
+        self.opportunityID = opportunityID
+        self.url = url
+        self.recordedAt = recordedAt
+        self.outcome = outcome
+        self.classification = classification
+        self.reason = reason
+        self.confidence = confidence
+        self.evidence = evidence
+        self.error = error
+        self.reviewTaskID = reviewTaskID
+        self.closureConfirmedAt = closureConfirmedAt
+        self.legacyPostingCheckID = legacyPostingCheckID
+        self.legacyStatus = legacyStatus
+        self.checkOperationID = checkOperationID
+        self.method = method
+        self.checkerVersion = checkerVersion
+        self.httpStatus = httpStatus
+        self.mimeType = mimeType
+        self.declaredBytes = declaredBytes
+        self.receivedBytes = receivedBytes
+        self.contentSHA256 = contentSHA256
+        self.responseDate = responseDate
+        self.lastModified = lastModified
+        self.etag = etag
+        self.retryAfter = retryAfter
+        self.redirectTargetRedacted = redirectTargetRedacted
+        self.evidenceExcerpt = evidenceExcerpt
+        self.redactedErrorCode = redactedErrorCode
+    }
+}
+
+enum ReconciliationCheckOperationState: String, Equatable {
+    case started
+    case completed
+    case failed
+    case cancelled
+    case interrupted
+
+    var isTerminal: Bool { self != .started }
+}
+
+struct ReconciliationCheckOperation: Equatable {
+    let id: String
+    let opportunityID: String
+    let correlationID: String
+    let urlSnapshot: String
+    let state: ReconciliationCheckOperationState
+    let startedAt: Date
+    let terminalAt: Date?
+}
+
+struct BeginPublicURLCheck: Equatable {
+    let operation: ReconciliationCheckOperation
+    let isNew: Bool
+}
+
+struct PublicURLCheckCompletion: Equatable {
+    let terminalState: ReconciliationCheckOperationState
+    let outcome: ReconciliationOutcome
+    let classification: ReconciliationClassification
+    let reason: ReconciliationReason
+    let confidence: ReconciliationConfidence?
+    let evidence: String
+    let error: String
+    let method: String
+    let checkerVersion: String
+    let httpStatus: Int?
+    let mimeType: String?
+    let declaredBytes: Int?
+    let receivedBytes: Int?
+    let contentSHA256: String?
+    let responseDate: String?
+    let lastModified: String?
+    let etag: String?
+    let retryAfter: String?
+    let redirectTargetRedacted: String?
+    let evidenceExcerpt: String?
+    let redactedErrorCode: String?
+
+    init(
+        terminalState: ReconciliationCheckOperationState,
+        outcome: ReconciliationOutcome,
+        classification: ReconciliationClassification,
+        reason: ReconciliationReason = .manualReview,
+        confidence: ReconciliationConfidence? = nil,
+        evidence: String,
+        error: String = "",
+        method: String = "GET",
+        checkerVersion: String = "1",
+        httpStatus: Int? = nil,
+        mimeType: String? = nil,
+        declaredBytes: Int? = nil,
+        receivedBytes: Int? = nil,
+        contentSHA256: String? = nil,
+        responseDate: String? = nil,
+        lastModified: String? = nil,
+        etag: String? = nil,
+        retryAfter: String? = nil,
+        redirectTargetRedacted: String? = nil,
+        evidenceExcerpt: String? = nil,
+        redactedErrorCode: String? = nil
+    ) {
+        self.terminalState = terminalState
+        self.outcome = outcome
+        self.classification = classification
+        self.reason = reason
+        self.confidence = confidence
+        self.evidence = evidence
+        self.error = error
+        self.method = method
+        self.checkerVersion = checkerVersion
+        self.httpStatus = httpStatus
+        self.mimeType = mimeType
+        self.declaredBytes = declaredBytes
+        self.receivedBytes = receivedBytes
+        self.contentSHA256 = contentSHA256
+        self.responseDate = responseDate
+        self.lastModified = lastModified
+        self.etag = etag
+        self.retryAfter = retryAfter
+        self.redirectTargetRedacted = redirectTargetRedacted
+        self.evidenceExcerpt = evidenceExcerpt
+        self.redactedErrorCode = redactedErrorCode
+    }
 }
 
 struct RecordReconciliationResult {
@@ -357,6 +529,7 @@ enum WorkspaceStoreError: Error, LocalizedError {
     case closureNotConfirmed
     case reconciliationTaskRequiresClosure
     case invalidDocumentReference
+    case invalidPublicURLCheck
 
     var errorDescription: String? {
         switch self {
@@ -380,6 +553,8 @@ enum WorkspaceStoreError: Error, LocalizedError {
             return "A reconciliation review action is completed only when you explicitly confirm a recorded closure."
         case .invalidDocumentReference:
             return "Choose a PDF or DOCX file to attach as a local reference."
+        case .invalidPublicURLCheck:
+            return "The public URL check could not be recorded safely."
         }
     }
 }

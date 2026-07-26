@@ -86,6 +86,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var selectedReconciliationResults: [ReconciliationResult] = []
     @Published private(set) var selectedReconciliationTask: TaskReminder?
     @Published private(set) var selectedReconciliationTaskCompletion: [String: Bool] = [:]
+    @Published private(set) var checkingPublicURLOpportunityIDs: Set<String> = []
     @Published var documentReferenceKind: DocumentReferenceKind = .resume
     @Published private(set) var selectedDocumentReferences: [DocumentReference] = []
     @Published private(set) var csvPreview: CSVImportPreview?
@@ -100,17 +101,21 @@ final class WorkspaceViewModel: ObservableObject {
     private let openWorkspace: () throws -> WorkspaceOpenState
     private let createWorkspace: () throws -> WorkspaceStore
     private let restoreWorkspace: (URL) throws -> WorkspaceStore
+    private let publicURLChecker: PublicURLChecking
     private var store: WorkspaceStore?
     private var stagedRestoreURL: URL?
+    private var publicURLCheckTasks: [String: Task<Void, Never>] = [:]
 
     init(
         openWorkspace: @escaping () throws -> WorkspaceOpenState,
         createWorkspace: @escaping () throws -> WorkspaceStore,
-        restoreWorkspace: @escaping (URL) throws -> WorkspaceStore = { _ in throw WorkspaceStoreError.injectedFailure }
+        restoreWorkspace: @escaping (URL) throws -> WorkspaceStore = { _ in throw WorkspaceStoreError.injectedFailure },
+        publicURLChecker: PublicURLChecking = PublicURLChecker()
     ) {
         self.openWorkspace = openWorkspace
         self.createWorkspace = createWorkspace
         self.restoreWorkspace = restoreWorkspace
+        self.publicURLChecker = publicURLChecker
     }
 
     convenience init() {
@@ -177,7 +182,10 @@ final class WorkspaceViewModel: ObservableObject {
     func deleteOpportunity(_ opportunity: Opportunity) {
         guard let store = readyStore() else { return }
         do {
+            publicURLCheckTasks[opportunity.id]?.cancel()
             try store.deleteOpportunity(id: opportunity.id)
+            publicURLCheckTasks[opportunity.id] = nil
+            checkingPublicURLOpportunityIDs.remove(opportunity.id)
             refreshCounts()
             statusMessage = "Opportunity deleted locally."
         } catch {
@@ -425,6 +433,88 @@ final class WorkspaceViewModel: ObservableObject {
             statusMessage = "Local review recorded. No online check ran."
         } catch let error as LocalizedError { statusMessage = error.errorDescription ?? "The local review could not be saved." }
         catch { statusMessage = "The local review could not be saved." }
+    }
+
+    var isCheckingSelectedPublicURL: Bool {
+        checkingPublicURLOpportunityIDs.contains(selectedOpportunityID)
+    }
+
+    var canCheckSelectedPublicURL: Bool {
+        guard let opportunity = selectedOpportunity else { return false }
+        guard opportunity.stage != .closed,
+              let scheme = URLComponents(string: opportunity.jobURL)?.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            return false
+        }
+        if case .malformed = publicURLChecker.prepare(opportunity.jobURL) { return false }
+        return true
+    }
+
+    func checkSelectedPublicURL() {
+        guard let store = readyStore(),
+              let opportunity = selectedOpportunity,
+              canCheckSelectedPublicURL else {
+            statusMessage = "Select an active opportunity with a saved job URL."
+            return
+        }
+        let urlSnapshot = opportunity.jobURL
+        switch publicURLChecker.prepare(urlSnapshot) {
+        case .malformed:
+            statusMessage = "The saved job URL is malformed. Correct it before checking."
+        case let .ineligible(completion):
+            do {
+                let start = try store.beginPublicURLCheck(opportunityID: opportunity.id, urlSnapshot: urlSnapshot)
+                guard start.isNew else {
+                    statusMessage = "A public URL check is already running for this opportunity or host."
+                    return
+                }
+                _ = try store.finishPublicURLCheck(operationID: start.operation.id, completion: completion)
+                refreshCounts()
+                statusMessage = "No network request ran. Review the local eligibility result."
+            } catch let error as LocalizedError {
+                statusMessage = error.errorDescription ?? "The public URL check could not be started."
+            } catch {
+                statusMessage = "The public URL check could not be started."
+            }
+        case let .eligible(request):
+            do {
+                let start = try store.beginPublicURLCheck(opportunityID: opportunity.id, urlSnapshot: urlSnapshot)
+                guard start.isNew else {
+                    statusMessage = "A public URL check is already running for this opportunity or host."
+                    return
+                }
+                checkingPublicURLOpportunityIDs.insert(opportunity.id)
+                statusMessage = "Checking the saved public URL once…"
+                publicURLCheckTasks[opportunity.id] = Task { [weak self] in
+                    guard let self else { return }
+                    let completion = await publicURLChecker.check(request, opportunityTitle: opportunity.title)
+                    do {
+                        _ = try store.finishPublicURLCheck(operationID: start.operation.id, completion: completion)
+                        checkingPublicURLOpportunityIDs.remove(opportunity.id)
+                        publicURLCheckTasks[opportunity.id] = nil
+                        refreshCounts()
+                        statusMessage = completion.terminalState == .cancelled
+                            ? "Public URL check cancelled. Manual review remains available."
+                            : "Public URL check completed. Review the limited local evidence."
+                    } catch {
+                        checkingPublicURLOpportunityIDs.remove(opportunity.id)
+                        publicURLCheckTasks[opportunity.id] = nil
+                        refreshCounts()
+                        statusMessage = "The public URL check ended, but its local result could not be saved."
+                    }
+                }
+            } catch let error as LocalizedError {
+                statusMessage = error.errorDescription ?? "The public URL check could not be started."
+            } catch {
+                statusMessage = "The public URL check could not be started."
+            }
+        }
+    }
+
+    func cancelSelectedPublicURLCheck() {
+        guard isCheckingSelectedPublicURL else { return }
+        publicURLCheckTasks[selectedOpportunityID]?.cancel()
+        statusMessage = "Cancelling the public URL check…"
     }
 
     func confirmReconciliationClosure() {
@@ -685,6 +775,9 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     private func clearWorkspaceDerivedState() {
+        publicURLCheckTasks.values.forEach { $0.cancel() }
+        publicURLCheckTasks = [:]
+        checkingPublicURLOpportunityIDs = []
         store = nil
         opportunityCount = 0
         activityCount = 0

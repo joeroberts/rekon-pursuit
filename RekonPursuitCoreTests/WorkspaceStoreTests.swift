@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 19)
+        XCTAssertEqual(try store.schemaVersion(), 20)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -39,7 +39,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 19)
+        XCTAssertEqual(try store.schemaVersion(), 20)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -59,6 +59,7 @@ final class WorkspaceStoreTests: XCTestCase {
                 , [.integer(17), .text(WorkspaceMigrations.versionSeventeenChecksum)]
                 , [.integer(18), .text(WorkspaceMigrations.versionEighteenChecksum)]
                 , [.integer(19), .text(WorkspaceMigrations.versionNineteenChecksum)]
+                , [.integer(20), .text(WorkspaceMigrations.versionTwentyChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
@@ -87,7 +88,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 19)
+        XCTAssertEqual(try store.schemaVersion(), 20)
         XCTAssertEqual(try database.rows("SELECT id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at FROM interactions"), [[.text("interaction-1"), .null, .text("opportunity-1"), .text("Note"), .text("Legacy note"), .real(1_704_067_200), .null]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
@@ -159,7 +160,7 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try database.rows("SELECT id FROM import_reports"), [[.text("prior")]])
         XCTAssertTrue(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
         try WorkspaceMigrations.apply(to: database)
-        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(19)]])
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(20)]])
         XCTAssertEqual(try database.rows("SELECT updated_count, source_basename FROM import_reports"), [[.integer(0), .text("")]])
     }
 
@@ -179,7 +180,7 @@ final class WorkspaceStoreTests: XCTestCase {
             [.text("legacy-review"), .text("Needs manual review"), .text("Needs manual review"), .text("Ambiguous"), .null]
         ])
         XCTAssertEqual(try database.rows("SELECT count(*) FROM reconciliation_reviews"), [[.integer(1)]])
-        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(19)]])
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(20)]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
 
@@ -192,6 +193,39 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(18)]])
         XCTAssertEqual(try database.rows("SELECT id, status, evidence FROM posting_checks"), [[.text("legacy-closed"), .text("Closed"), .text("Closed evidence")]])
         XCTAssertEqual(try database.rows("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'reconciliation_results'"), [])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
+    }
+
+    func testVersionNineteenMigratesToTwentyWithoutChangingExistingReconciliationRows() throws {
+        let database = try makeVersionNineteenDatabase(at: databaseURL)
+
+        try WorkspaceMigrations.apply(to: database)
+
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(20)]])
+        XCTAssertEqual(
+            try database.rows("SELECT id, opportunity_id, url, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status, check_operation_id, method, checker_version, http_status, mime_type, declared_bytes, received_bytes, content_sha256, response_date, last_modified, etag, retry_after, redirect_target_redacted, evidence_excerpt, redacted_error_code FROM reconciliation_results"),
+            [[
+                .text("result-v19"), .text("legacy-opportunity"), .text("https://jobs.example.com/role"),
+                .text("Needs manual review"), .text("Ambiguous"), .text("manual review"), .text("Medium"),
+                .text("Existing R4 evidence"), .text(""), .null, .null, .null, .null,
+                .null, .null, .null, .null, .null, .null, .null, .null, .null, .null, .null, .null, .null, .null, .null
+            ]]
+        )
+        XCTAssertEqual(try database.rows("SELECT count(*) FROM reconciliation_check_operations"), [[.integer(0)]])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
+    }
+
+    func testFailedVersionTwentyMigrationKeepsVersionNineteenRowsAndVerifiedSnapshot() throws {
+        let database = try makeVersionNineteenDatabase(at: databaseURL)
+
+        XCTAssertThrowsError(try WorkspaceMigrations.apply(to: database, failVersionTwenty: true))
+
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(19)]])
+        XCTAssertEqual(try database.rows("SELECT id, evidence FROM reconciliation_results"), [[.text("result-v19"), .text("Existing R4 evidence")]])
+        XCTAssertEqual(try database.rows("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'reconciliation_check_operations'"), [])
+        XCTAssertFalse(try database.rows("PRAGMA table_info(reconciliation_results)").contains { row in
+            row.count > 1 && row[1] == .text("check_operation_id")
+        })
         XCTAssertTrue(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
 
@@ -1007,6 +1041,140 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.opportunities().first?.stage, .applied)
     }
 
+    func testBeginningPublicURLCheckPersistsOneStartedOperationPerOpportunityAndHost() throws {
+        let store = try makeStore()
+        let firstOpportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", jobURL: "https://jobs.example.com/role?source=saved"))
+        let secondOpportunity = try store.create(CreateOpportunity(title: "Engineering Manager", company: "Rekon Labs", jobURL: "https://jobs.example.com/other"))
+
+        let first = try store.beginPublicURLCheck(opportunityID: firstOpportunity.id, urlSnapshot: firstOpportunity.jobURL)
+        let repeatedOpportunity = try store.beginPublicURLCheck(opportunityID: firstOpportunity.id, urlSnapshot: firstOpportunity.jobURL)
+        let repeatedHost = try store.beginPublicURLCheck(opportunityID: secondOpportunity.id, urlSnapshot: secondOpportunity.jobURL)
+
+        XCTAssertTrue(first.isNew)
+        XCTAssertFalse(repeatedOpportunity.isNew)
+        XCTAssertFalse(repeatedHost.isNew)
+        XCTAssertEqual(repeatedOpportunity.operation.id, first.operation.id)
+        XCTAssertEqual(repeatedHost.operation.id, first.operation.id)
+        XCTAssertEqual(first.operation.state, .started)
+        XCTAssertEqual(first.operation.urlSnapshot, firstOpportunity.jobURL)
+        XCTAssertEqual(try store.publicURLCheckOperations().map(\.id), [first.operation.id])
+    }
+
+    func testCompletedStillOpenCheckPersistsAllowlistedEvidenceWithoutChangingStage() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", stage: .applied, jobURL: "https://jobs.example.com/role"))
+        let prior = try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: opportunity.id, url: opportunity.jobURL, outcome: .needsManualReview, classification: .offlineUnchecked, reason: .offlineUnchecked, evidence: "Offline — check not run"))
+        let operation = try store.beginPublicURLCheck(opportunityID: opportunity.id, urlSnapshot: opportunity.jobURL).operation
+
+        let result = try XCTUnwrap(store.finishPublicURLCheck(
+            operationID: operation.id,
+            completion: PublicURLCheckCompletion(
+                terminalState: .completed,
+                outcome: .stillOpen,
+                classification: .confirmed,
+                confidence: .high,
+                evidence: "Exact title and apply marker matched.",
+                httpStatus: 200,
+                mimeType: "text/html",
+                declaredBytes: 1_024,
+                receivedBytes: 512,
+                contentSHA256: String(repeating: "a", count: 64),
+                responseDate: "Mon, 01 Jan 2024 00:00:00 GMT",
+                lastModified: "Sun, 31 Dec 2023 00:00:00 GMT",
+                etag: "\"fixture\"",
+                evidenceExcerpt: "Product Manager apply now"
+            )
+        ))
+
+        XCTAssertEqual(try store.opportunities().first?.stage, .applied)
+        XCTAssertEqual(try store.taskReminder(id: try XCTUnwrap(prior.reviewTaskID))?.isComplete, true)
+        XCTAssertEqual(result.checkOperationID, operation.id)
+        XCTAssertEqual(result.method, "GET")
+        XCTAssertEqual(result.checkerVersion, "1")
+        XCTAssertEqual(result.httpStatus, 200)
+        XCTAssertEqual(result.mimeType, "text/html")
+        XCTAssertEqual(result.receivedBytes, 512)
+        XCTAssertEqual(result.contentSHA256, String(repeating: "a", count: 64))
+        XCTAssertEqual(result.responseDate, "Mon, 01 Jan 2024 00:00:00 GMT")
+        XCTAssertEqual(result.evidenceExcerpt, "Product Manager apply now")
+        XCTAssertEqual(try store.publicURLCheckOperations().first?.state, .completed)
+    }
+
+    func testFailedPublicURLCheckCreatesOneDeduplicatedManualReviewTask() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", stage: .applied, jobURL: "https://jobs.example.com/role"))
+        let firstOperation = try store.beginPublicURLCheck(opportunityID: opportunity.id, urlSnapshot: opportunity.jobURL).operation
+        let first = try XCTUnwrap(store.finishPublicURLCheck(
+            operationID: firstOperation.id,
+            completion: PublicURLCheckCompletion(
+                terminalState: .failed,
+                outcome: .needsManualReview,
+                classification: .failed,
+                reason: .sourceFailed,
+                evidence: "The public destination could not be proven.",
+                redactedErrorCode: "dns_non_public"
+            )
+        ))
+        let secondOperation = try store.beginPublicURLCheck(opportunityID: opportunity.id, urlSnapshot: opportunity.jobURL).operation
+        let second = try XCTUnwrap(store.finishPublicURLCheck(
+            operationID: secondOperation.id,
+            completion: PublicURLCheckCompletion(
+                terminalState: .failed,
+                outcome: .needsManualReview,
+                classification: .failed,
+                reason: .sourceFailed,
+                evidence: "The public destination could not be proven.",
+                redactedErrorCode: "dns_non_public"
+            )
+        ))
+
+        XCTAssertEqual(first.reviewTaskID, second.reviewTaskID)
+        XCTAssertEqual(try store.needsAttention().filter { $0.id == first.reviewTaskID }.count, 1)
+        XCTAssertEqual(try store.opportunities().first?.stage, .applied)
+        XCTAssertEqual(second.redactedErrorCode, "dns_non_public")
+    }
+
+    func testStartupInterruptsAbandonedPublicURLCheckAndCreatesManualReview() throws {
+        var store: WorkspaceStore? = try makeStore()
+        let opportunity = try store!.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", stage: .applied, jobURL: "https://jobs.example.com/role"))
+        let operation = try store!.beginPublicURLCheck(opportunityID: opportunity.id, urlSnapshot: opportunity.jobURL).operation
+        try store!.close()
+        store = nil
+
+        let reopened = try makeStore()
+
+        XCTAssertEqual(try reopened.publicURLCheckOperation(id: operation.id)?.state, .interrupted)
+        let result = try XCTUnwrap(try reopened.reconciliationResults(forOpportunityID: opportunity.id).first)
+        XCTAssertEqual(result.classification, .failed)
+        XCTAssertEqual(result.redactedErrorCode, "interrupted")
+        XCTAssertNotNil(result.reviewTaskID)
+        XCTAssertEqual(try reopened.opportunities().first?.stage, .applied)
+    }
+
+    func testDeletingOpportunityCancelsStartedCheckAndDiscardsLateResult() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", stage: .applied, jobURL: "https://jobs.example.com/role?campaign=private"))
+        let operation = try store.beginPublicURLCheck(opportunityID: opportunity.id, urlSnapshot: opportunity.jobURL).operation
+
+        try store.deleteOpportunity(id: opportunity.id)
+        _ = try store.finishPublicURLCheck(
+            operationID: operation.id,
+            completion: PublicURLCheckCompletion(
+                terminalState: .completed,
+                outcome: .stillOpen,
+                classification: .confirmed,
+                confidence: .high,
+                evidence: "Late response must be ignored."
+            )
+        )
+
+        let savedOperation = try XCTUnwrap(try store.publicURLCheckOperation(id: operation.id))
+        XCTAssertEqual(savedOperation.state, .cancelled)
+        XCTAssertEqual(savedOperation.urlSnapshot, "https://jobs.example.com/role")
+        XCTAssertEqual(try store.reconciliationResults(forOpportunityID: opportunity.id), [])
+        XCTAssertEqual(try store.needsAttention(), [])
+    }
+
     func testOpportunityExportEscapesDataAndRecordsLocalActivity() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(title: "Product, Manager", company: "Rekon \"Labs\"", stage: .applied, nextAction: "Send notes", dueAt: now, jobURL: "https://jobs.example.com/123"))
@@ -1106,10 +1274,24 @@ final class WorkspaceStoreTests: XCTestCase {
         let database = try EncryptedDatabase.open(url: url, key: key)
         _ = try WorkspaceStore(database: database, now: now, actorID: "fixture", correlationID: "fixture")
         try database.execute("INSERT INTO opportunities (id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes, compensation, location, work_arrangement, application_date, response_state, stage_changed_at, deleted_at) VALUES ('legacy-opportunity', 'Legacy role', 'Rekon Labs', ?, 'Saved', '', NULL, '', '', '', NULL, NULL, 'Not specified', NULL, 'No response recorded', ?, NULL)", values: [.real(now.timeIntervalSince1970), .real(now.timeIntervalSince1970)])
+        try database.execute("DROP TABLE IF EXISTS reconciliation_check_operations")
         try database.execute("DROP TABLE reconciliation_results")
         try database.execute("DROP TABLE reconciliation_reviews")
+        try database.execute("DELETE FROM migration_history WHERE version = 20")
         try database.execute("DELETE FROM migration_history WHERE version = 19")
         try database.execute("UPDATE schema_migrations SET version = 18")
+        return database
+    }
+
+    private func makeVersionNineteenDatabase(at url: URL) throws -> EncryptedDatabase {
+        let database = try makeVersionEighteenDatabase(at: url)
+        try database.execute("CREATE TABLE reconciliation_reviews (opportunity_id TEXT PRIMARY KEY NOT NULL REFERENCES opportunities(id), task_reminder_id TEXT NOT NULL UNIQUE REFERENCES task_reminders(id), created_at REAL NOT NULL, closure_confirmed_at REAL)")
+        try database.execute("CREATE INDEX reconciliation_reviews_task_reminder_id ON reconciliation_reviews(task_reminder_id)")
+        try database.execute("CREATE TABLE reconciliation_results (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), url TEXT NOT NULL, recorded_at REAL NOT NULL, outcome TEXT NOT NULL, classification TEXT NOT NULL, reason TEXT NOT NULL, confidence TEXT, evidence TEXT NOT NULL, error TEXT NOT NULL, review_task_reminder_id TEXT REFERENCES task_reminders(id), closure_confirmed_at REAL, legacy_posting_check_id TEXT UNIQUE, legacy_status TEXT)")
+        try database.execute("CREATE INDEX reconciliation_results_opportunity_recorded_at ON reconciliation_results(opportunity_id, recorded_at DESC, id DESC)")
+        try database.execute("INSERT INTO reconciliation_results (id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status) VALUES ('result-v19', 'legacy-opportunity', 'https://jobs.example.com/role', ?, 'Needs manual review', 'Ambiguous', 'manual review', 'Medium', 'Existing R4 evidence', '', NULL, NULL, NULL, NULL)", values: [.real(now.timeIntervalSince1970)])
+        try database.execute("INSERT INTO migration_history (version, checksum) VALUES (19, ?)", values: [.text(WorkspaceMigrations.versionNineteenChecksum)])
+        try database.execute("UPDATE schema_migrations SET version = 19")
         return database
     }
 }

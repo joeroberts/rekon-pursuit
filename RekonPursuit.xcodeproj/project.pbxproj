@@ -27,6 +27,8 @@
 		100000000000000000000018 /* WorkspaceViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000023 /* WorkspaceViewModel.swift */; };
 		100000000000000000000019 /* CSVOpportunityImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000024 /* CSVOpportunityImporter.swift */; };
 		100000000000000000000020 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000025 /* AppShellView.swift */; };
+		100000000000000000000021 /* PublicURLChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000026 /* PublicURLChecker.swift */; };
+		100000000000000000000022 /* PublicURLCheckTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000027 /* PublicURLCheckTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,6 +74,8 @@
 		200000000000000000000023 /* WorkspaceViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceViewModel.swift; sourceTree = "<group>"; };
 		200000000000000000000024 /* CSVOpportunityImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Import/CSVOpportunityImporter.swift; sourceTree = "<group>"; };
 		200000000000000000000025 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
+		200000000000000000000026 /* PublicURLChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Reconciliation/PublicURLChecker.swift; sourceTree = "<group>"; };
+		200000000000000000000027 /* PublicURLCheckTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicURLCheckTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -115,6 +119,7 @@
 				200000000000000000000020 /* WorkspaceKeyStore.swift */,
 				200000000000000000000021 /* WorkspaceOpenState.swift */,
 				200000000000000000000024 /* CSVOpportunityImporter.swift */,
+				200000000000000000000026 /* PublicURLChecker.swift */,
 				700000000000000000000005 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -148,6 +153,7 @@
 				200000000000000000000011 /* EncryptedDatabaseTests.swift */,
 				200000000000000000000015 /* WorkspaceStoreTests.swift */,
 				200000000000000000000019 /* WorkspaceOpenTests.swift */,
+				200000000000000000000027 /* PublicURLCheckTests.swift */,
 			);
 			path = RekonPursuitCoreTests;
 			sourceTree = "<group>";
@@ -334,6 +340,7 @@
 				100000000000000000000018 /* WorkspaceViewModel.swift in Sources */,
 				100000000000000000000019 /* CSVOpportunityImporter.swift in Sources */,
 				100000000000000000000020 /* AppShellView.swift in Sources */,
+				100000000000000000000021 /* PublicURLChecker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -347,6 +354,7 @@
 				100000000000000000000010 /* WorkspaceStoreTests.swift in Sources */,
 				100000000000000000000014 /* WorkspaceOpenTests.swift in Sources */,
 				100000000000000000000017 /* WorkspaceViewModelTests.swift in Sources */,
+				100000000000000000000022 /* PublicURLCheckTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

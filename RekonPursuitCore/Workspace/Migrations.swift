@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 enum WorkspaceMigrations {
-    static let currentVersion = 19
+    static let currentVersion = 20
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
@@ -19,8 +19,9 @@ enum WorkspaceMigrations {
     static let versionSeventeenChecksum = checksum(for: "17|import_reports.completed_detail|import_report_rows")
     static let versionEighteenChecksum = checksum(for: "18|import_reports.failed_count")
     static let versionNineteenChecksum = checksum(for: "19|reconciliation_reviews|reconciliation_results|legacy_posting_check_provenance")
+    static let versionTwentyChecksum = checksum(for: "20|reconciliation_check_operations|reconciliation_results.public_url_evidence")
 
-    static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false, failVersionSixteen: Bool = false, failVersionSeventeen: Bool = false, failVersionNineteen: Bool = false) throws {
+    static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false, failVersionSixteen: Bool = false, failVersionSeventeen: Bool = false, failVersionNineteen: Bool = false, failVersionTwenty: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
         let versions = try database.rows("SELECT version FROM schema_migrations LIMIT 1")
         if versions.isEmpty {
@@ -318,6 +319,36 @@ enum WorkspaceMigrations {
                     if failVersionNineteen { throw WorkspaceStoreError.injectedFailure }
                     try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(19), .text(versionNineteenChecksum)])
                     try database.execute("UPDATE schema_migrations SET version = 19")
+                }
+                database.removeMigrationSnapshot()
+            } catch {
+                throw error
+            }
+        }
+        if version < 20 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    try database.execute("CREATE TABLE reconciliation_check_operations (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), correlation_id TEXT NOT NULL UNIQUE, url_snapshot TEXT NOT NULL, state TEXT NOT NULL, started_at REAL NOT NULL, terminal_at REAL)")
+                    try database.execute("CREATE INDEX reconciliation_check_operations_opportunity_state ON reconciliation_check_operations(opportunity_id, state)")
+                    try database.execute("ALTER TABLE reconciliation_results ADD COLUMN check_operation_id TEXT REFERENCES reconciliation_check_operations(id)")
+                    try database.execute("ALTER TABLE reconciliation_results ADD COLUMN method TEXT")
+                    try database.execute("ALTER TABLE reconciliation_results ADD COLUMN checker_version TEXT")
+                    try database.execute("ALTER TABLE reconciliation_results ADD COLUMN http_status INTEGER")
+                    try database.execute("ALTER TABLE reconciliation_results ADD COLUMN mime_type TEXT")
+                    try database.execute("ALTER TABLE reconciliation_results ADD COLUMN declared_bytes INTEGER")
+                    try database.execute("ALTER TABLE reconciliation_results ADD COLUMN received_bytes INTEGER")
+                    try database.execute("ALTER TABLE reconciliation_results ADD COLUMN content_sha256 TEXT")
+                    try database.execute("ALTER TABLE reconciliation_results ADD COLUMN response_date TEXT")
+                    try database.execute("ALTER TABLE reconciliation_results ADD COLUMN last_modified TEXT")
+                    try database.execute("ALTER TABLE reconciliation_results ADD COLUMN etag TEXT")
+                    try database.execute("ALTER TABLE reconciliation_results ADD COLUMN retry_after TEXT")
+                    try database.execute("ALTER TABLE reconciliation_results ADD COLUMN redirect_target_redacted TEXT")
+                    try database.execute("ALTER TABLE reconciliation_results ADD COLUMN evidence_excerpt TEXT")
+                    try database.execute("ALTER TABLE reconciliation_results ADD COLUMN redacted_error_code TEXT")
+                    if failVersionTwenty { throw WorkspaceStoreError.injectedFailure }
+                    try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(20), .text(versionTwentyChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 20")
                 }
                 database.removeMigrationSnapshot()
             } catch {
