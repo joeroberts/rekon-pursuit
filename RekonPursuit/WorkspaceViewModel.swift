@@ -250,6 +250,10 @@ final class WorkspaceViewModel: ObservableObject {
         opportunities.first { $0.id == selectedOpportunityID }
     }
 
+    func opportunity(id: String) -> Opportunity? {
+        opportunities.first { $0.id == id }
+    }
+
     var selectedActivityEvents: [ActivityEvent] {
         activityEvents.filter { $0.opportunityID == selectedOpportunityID }
     }
@@ -300,6 +304,28 @@ final class WorkspaceViewModel: ObservableObject {
         refreshSelectedTask()
         refreshRelationshipMemory()
         refreshSelectedReconciliation()
+    }
+
+    /// Selects an existing opportunity for an ephemeral UI route. Returning a
+    /// result lets navigation safely fall back to the Pipeline when a record
+    /// was deleted while another route was visible.
+    @discardableResult
+    func selectRouteOpportunity(id: String) -> Bool {
+        guard let opportunity = opportunities.first(where: { $0.id == id }) else { return false }
+        select(opportunity)
+        return true
+    }
+
+    /// Cross-record navigation is paused while the bounded R5 check owns a
+    /// record. This keeps a completion, cancellation, or closure action from
+    /// being redirected through the former global selected-record state.
+    @discardableResult
+    func navigateToRouteOpportunity(id: String) -> Bool {
+        guard checkingPublicURLOpportunityIDs.isEmpty || checkingPublicURLOpportunityIDs.contains(id) else {
+            statusMessage = "Finish or cancel the active public URL check before opening another opportunity."
+            return false
+        }
+        return selectRouteOpportunity(id: id)
     }
 
     func saveSelectedOpportunity() {

@@ -4,6 +4,25 @@ import XCTest
 
 @MainActor
 final class WorkspaceViewModelTests: XCTestCase {
+    func testRouteSelectionRejectsAnAbsentOpportunityWithoutMutatingTheCurrentSelection() throws {
+        let store = try makeStore()
+        let first = try store.create(CreateOpportunity(title: "First", company: "Rekon Labs"))
+        let second = try store.create(CreateOpportunity(title: "Second", company: "Rekon Labs"))
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+
+        model.start()
+        let activityCountBeforeNavigation = model.activityCount
+        XCTAssertTrue(model.selectRouteOpportunity(id: second.id))
+        XCTAssertEqual(model.selectedOpportunityID, second.id)
+
+        XCTAssertFalse(model.selectRouteOpportunity(id: "missing-opportunity"))
+
+        XCTAssertEqual(model.selectedOpportunityID, second.id)
+        XCTAssertEqual(model.selectedOpportunity?.id, second.id)
+        XCTAssertNotEqual(model.selectedOpportunityID, first.id)
+        XCTAssertEqual(model.activityCount, activityCountBeforeNavigation)
+    }
+
     func testCreateValidationKeepsWorkspaceUnchanged() throws {
         let store = try makeStore()
         let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
