@@ -14,7 +14,7 @@ The delivery principle is **vertical slices over isolated screens**: each slice 
 | --- | --- |
 | MVP candidate | **Remediation in progress** — an unsigned app candidate contains partial local tracker functionality, but it cannot be represented as a complete MVP. See the remediation ledger for verified gaps and release state. |
 | Package and automation | **Candidate exists** — unsigned `.app` package and build/archive/macOS smoke workflow. Developer ID signing, notarization, and DMG distribution are intentionally deferred. |
-| MVP remediation | **Current work** — resolve required MVP gaps and first-run blockers under the remediation task briefs and independent gates. |
+| MVP remediation | **Current work** — the approved sequence is UX-R1 shell/opportunity navigation, then UX-R2 core workflow forms, then durable document references. The detailed, current queue and gates are in the remediation ledger; no UX or R6 implementation is released until its own brief is approved. |
 | Phase 2a — privacy and AI foundation | **Not started** — local-model runtime, cloud routing/sanitization/consent, populated AI ledger, budgets, and costs. |
 | Phase 2b — Gmail and Google Calendar | **Not started** — follows the privacy/AI foundation. |
 | Phase 2c — documents and research | **Not started** — full document processing/versioning and sourced employer research. |
