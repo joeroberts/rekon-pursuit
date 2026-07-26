@@ -59,6 +59,97 @@ final class LegacyWorkspaceKeyMigrationTests: XCTestCase {
         XCTAssertThrowsError(try EncryptedDatabase.verifyReadOnly(url: missingURL, key: key))
     }
 
+    func testReadOnlyVerifierPreservesOpenFailureAfterManifestComparison() throws {
+        let databaseURL = try makeEncryptedFixture()
+        let verifier = ReadOnlySQLCipherVerifier(driver: .init(
+            open: { _, _ in .init(status: SQLITE_CANTOPEN, handle: nil) },
+            key: { _, _ in XCTFail("must not key"); return SQLITE_ERROR },
+            prepare: { _, _ in XCTFail("must not prepare"); return nil },
+            step: { _ in XCTFail("must not step"); return SQLITE_ERROR },
+            finalize: { _ in XCTFail("must not finalize"); return SQLITE_ERROR },
+            close: { _ in XCTFail("must not close"); return SQLITE_ERROR },
+            errorMessage: { _ in "unused" }
+        ))
+
+        XCTAssertThrowsError(try verifier.verify(url: databaseURL, key: key)) { error in
+            XCTAssertEqual(error as? ReadOnlySQLCipherVerifierError, .openFailed)
+        }
+    }
+
+    func testReadOnlyVerifierReportsArtifactChangeWhenOpenFailureMutatesFixture() throws {
+        let databaseURL = try makeEncryptedFixture()
+        let verifier = ReadOnlySQLCipherVerifier(driver: .init(
+            open: { _, _ in
+                let original = try! Data(contentsOf: databaseURL)
+                try! (original + Data([0x00])).write(to: databaseURL, options: .atomic)
+                return .init(status: SQLITE_CANTOPEN, handle: nil)
+            },
+            key: { _, _ in XCTFail("must not key"); return SQLITE_ERROR },
+            prepare: { _, _ in XCTFail("must not prepare"); return nil },
+            step: { _ in XCTFail("must not step"); return SQLITE_ERROR },
+            finalize: { _ in XCTFail("must not finalize"); return SQLITE_ERROR },
+            close: { _ in XCTFail("must not close"); return SQLITE_ERROR },
+            errorMessage: { _ in "unused" }
+        ))
+
+        XCTAssertThrowsError(try verifier.verify(url: databaseURL, key: key)) { error in
+            XCTAssertEqual(error as? ReadOnlySQLCipherVerifierError, .artifactChanged)
+        }
+    }
+
+    func testReadOnlyVerifierClosesHandleReturnedFromFailedOpen() throws {
+        let databaseURL = try makeEncryptedFixture()
+        var closeCount = 0
+        let verifier = ReadOnlySQLCipherVerifier(driver: .init(
+            open: { _, _ in .init(status: SQLITE_CANTOPEN, handle: OpaquePointer(bitPattern: 11)!) },
+            key: { _, _ in XCTFail("must not key"); return SQLITE_ERROR },
+            prepare: { _, _ in XCTFail("must not prepare"); return nil },
+            step: { _ in XCTFail("must not step"); return SQLITE_ERROR },
+            finalize: { _ in XCTFail("must not finalize"); return SQLITE_ERROR },
+            close: { _ in closeCount += 1; return SQLITE_OK },
+            errorMessage: { _ in "unused" }
+        ))
+
+        XCTAssertThrowsError(try verifier.verify(url: databaseURL, key: key)) { error in
+            XCTAssertEqual(error as? ReadOnlySQLCipherVerifierError, .openFailed)
+        }
+        XCTAssertEqual(closeCount, 1)
+    }
+
+    func testReadOnlyVerifierPreservesKeyFailureAfterManifestComparison() throws {
+        let databaseURL = try makeEncryptedFixture()
+        let verifier = ReadOnlySQLCipherVerifier(driver: .init(
+            open: { _, _ in .init(status: SQLITE_OK, handle: OpaquePointer(bitPattern: 12)!) },
+            key: { _, _ in SQLITE_NOTADB },
+            prepare: { _, _ in XCTFail("must not prepare"); return nil },
+            step: { _ in XCTFail("must not step"); return SQLITE_ERROR },
+            finalize: { _ in XCTFail("must not finalize"); return SQLITE_ERROR },
+            close: { _ in SQLITE_OK },
+            errorMessage: { _ in "unused" }
+        ))
+
+        XCTAssertThrowsError(try verifier.verify(url: databaseURL, key: key)) { error in
+            XCTAssertEqual(error as? ReadOnlySQLCipherVerifierError, .keyFailed)
+        }
+    }
+
+    func testReadOnlyVerifierPreservesSchemaReadFailureAfterManifestComparison() throws {
+        let databaseURL = try makeEncryptedFixture()
+        let verifier = ReadOnlySQLCipherVerifier(driver: .init(
+            open: { _, _ in .init(status: SQLITE_OK, handle: OpaquePointer(bitPattern: 13)!) },
+            key: { _, _ in SQLITE_OK },
+            prepare: { _, _ in OpaquePointer(bitPattern: 14)! },
+            step: { _ in SQLITE_ERROR },
+            finalize: { _ in SQLITE_OK },
+            close: { _ in SQLITE_OK },
+            errorMessage: { _ in "unused" }
+        ))
+
+        XCTAssertThrowsError(try verifier.verify(url: databaseURL, key: key)) { error in
+            XCTAssertEqual(error as? ReadOnlySQLCipherVerifierError, .schemaReadFailed)
+        }
+    }
+
     func testReadOnlyVerifierRejectsSymlinkWithoutChangingFixture() throws {
         let databaseURL = try makeEncryptedFixture()
         let aliasURL = root.appendingPathComponent("workspace-alias.sqlite")
@@ -77,13 +168,12 @@ final class LegacyWorkspaceKeyMigrationTests: XCTestCase {
             service: WorkspaceKeychainConfiguration.service,
             account: "synthetic-account",
             bookmarkPreferenceKey: "synthetic-bookmark",
-            fixtureRoot: root,
-            syntheticBaseRoot: root.deletingLastPathComponent(),
-            defaultApplicationSupportRoot: root.appendingPathComponent("default", isDirectory: true)
+            fixtureRoot: syntheticFixtureRoot()
         )
         let migration = LegacyWorkspaceKeyMigration(
             source: source,
             destination: destination,
+            fixture: staticFixture(),
             verifyReadOnly: { _, _ in }
         )
 
@@ -98,37 +188,69 @@ final class LegacyWorkspaceKeyMigrationTests: XCTestCase {
                 service: "com.rekonlabs.RekonPursuit.synthetic.\(UUID().uuidString)",
                 account: KeychainWorkspaceKeyStore.primaryAccount,
                 bookmarkPreferenceKey: "synthetic-bookmark-\(UUID().uuidString)",
-                fixtureRoot: root,
-                syntheticBaseRoot: root.deletingLastPathComponent(),
-                defaultApplicationSupportRoot: root.appendingPathComponent("default", isDirectory: true)
+                fixtureRoot: syntheticFixtureRoot()
             ),
             SyntheticMigrationConfiguration(
                 service: "com.rekonlabs.RekonPursuit.synthetic.\(UUID().uuidString)",
                 account: "synthetic-account-\(UUID().uuidString)",
                 bookmarkPreferenceKey: WorkspaceLocationBookmarkConfiguration.preferenceKey,
-                fixtureRoot: root,
-                syntheticBaseRoot: root.deletingLastPathComponent(),
-                defaultApplicationSupportRoot: root.appendingPathComponent("default", isDirectory: true)
+                fixtureRoot: syntheticFixtureRoot()
             ),
             SyntheticMigrationConfiguration(
                 service: "com.rekonlabs.RekonPursuit.synthetic.\(UUID().uuidString)",
                 account: "synthetic-account-\(UUID().uuidString)",
                 bookmarkPreferenceKey: "synthetic-bookmark-\(UUID().uuidString)",
-                fixtureRoot: root,
-                syntheticBaseRoot: root.deletingLastPathComponent(),
-                defaultApplicationSupportRoot: root
+                fixtureRoot: SyntheticMigrationConfiguration.defaultWorkspaceRoot
             )
         ]
 
         for configuration in configurations {
             let source = CountingLegacySource()
             let destination = CountingDestination()
-            let migration = LegacyWorkspaceKeyMigration(source: source, destination: destination, verifyReadOnly: { _, _ in })
+            let migration = LegacyWorkspaceKeyMigration(source: source, destination: destination, fixture: staticFixture(), verifyReadOnly: { _, _ in })
 
             XCTAssertThrowsError(try migration.migrate(configuration: configuration))
             XCTAssertEqual(source.readCount, 0)
             XCTAssertEqual(destination.operationCount, 0)
         }
+    }
+
+    func testSyntheticConfigurationRejectsUnsafeLexicalPathsBeforeResolverAccess() throws {
+        var resolverCalls = 0
+        let configuration = SyntheticMigrationConfiguration(
+            service: "com.rekonlabs.RekonPursuit.synthetic.\(UUID().uuidString)",
+            account: "synthetic-account-\(UUID().uuidString)",
+            bookmarkPreferenceKey: "synthetic-bookmark-\(UUID().uuidString)",
+            fixtureRoot: SyntheticMigrationConfiguration.defaultWorkspaceRoot.appendingPathComponent("fixture"),
+            resolveSymlinks: {
+                resolverCalls += 1
+                return $0
+            }
+        )
+
+        XCTAssertThrowsError(try configuration.validate()) { error in
+            XCTAssertEqual(error as? SyntheticMigrationConfigurationError, .defaultWorkspaceRoot)
+        }
+        XCTAssertEqual(resolverCalls, 0)
+    }
+
+    func testSyntheticConfigurationRejectsFixtureOutsideBaseBeforeResolverAccess() throws {
+        var resolverCalls = 0
+        let configuration = SyntheticMigrationConfiguration(
+            service: "com.rekonlabs.RekonPursuit.synthetic.\(UUID().uuidString)",
+            account: "synthetic-account-\(UUID().uuidString)",
+            bookmarkPreferenceKey: "synthetic-bookmark-\(UUID().uuidString)",
+            fixtureRoot: URL(fileURLWithPath: "/synthetic-other/fixture"),
+            resolveSymlinks: {
+                resolverCalls += 1
+                return $0
+            }
+        )
+
+        XCTAssertThrowsError(try configuration.validate()) { error in
+            XCTAssertEqual(error as? SyntheticMigrationConfigurationError, .invalidSyntheticRoot)
+        }
+        XCTAssertEqual(resolverCalls, 0)
     }
 
     func testMigrationAddsDataProtectionKeyWithoutUpdatingOrDeletingSource() throws {
@@ -139,6 +261,7 @@ final class LegacyWorkspaceKeyMigrationTests: XCTestCase {
         let migration = LegacyWorkspaceKeyMigration(
             source: source,
             destination: destination,
+            fixture: staticFixture(),
             verifyReadOnly: { _, candidate in verificationKeys.append(candidate) }
         )
 
@@ -155,7 +278,7 @@ final class LegacyWorkspaceKeyMigrationTests: XCTestCase {
     func testMigrationDestinationConflictDoesNotVerifyOrMutate() throws {
         let source = CountingLegacySource(key: key)
         let destination = CountingDestination(existing: key)
-        let migration = LegacyWorkspaceKeyMigration(source: source, destination: destination, verifyReadOnly: { _, _ in XCTFail("must not verify") })
+        let migration = LegacyWorkspaceKeyMigration(source: source, destination: destination, fixture: staticFixture(), verifyReadOnly: { _, _ in XCTFail("must not verify") })
 
         XCTAssertThrowsError(try migration.migrate(configuration: syntheticConfiguration())) { error in
             XCTAssertEqual(error as? LegacyWorkspaceKeyMigrationError, .destinationAlreadyExists)
@@ -168,7 +291,7 @@ final class LegacyWorkspaceKeyMigrationTests: XCTestCase {
     func testMigrationMissingSourceDoesNotCallDestination() throws {
         let source = CountingLegacySource()
         let destination = CountingDestination()
-        let migration = LegacyWorkspaceKeyMigration(source: source, destination: destination, verifyReadOnly: { _, _ in XCTFail("must not verify") })
+        let migration = LegacyWorkspaceKeyMigration(source: source, destination: destination, fixture: staticFixture(), verifyReadOnly: { _, _ in XCTFail("must not verify") })
 
         XCTAssertThrowsError(try migration.migrate(configuration: syntheticConfiguration())) { error in
             XCTAssertEqual(error as? LegacyWorkspaceKeyMigrationError, .sourceMissing)
@@ -176,10 +299,33 @@ final class LegacyWorkspaceKeyMigrationTests: XCTestCase {
         XCTAssertEqual(destination.operationCount, 0)
     }
 
+    func testMigrationFixtureValidationFailureDoesNotReadLegacyKey() throws {
+        let source = CountingLegacySource(key: key)
+        let destination = CountingDestination()
+        let migration = LegacyWorkspaceKeyMigration(
+            source: source,
+            destination: destination,
+            fixture: FailingNonceFixture(),
+            verifyReadOnly: { _, _ in XCTFail("must not verify") }
+        )
+
+        XCTAssertThrowsError(try migration.migrate(configuration: syntheticConfiguration()))
+        XCTAssertEqual(source.readCount, 0)
+        XCTAssertEqual(destination.operationCount, 0)
+    }
+
+    func testDataProtectionAddMapsDuplicateToTerminalDestinationConflict() throws {
+        XCTAssertThrowsError(
+            try DataProtectionKeychainWorkspaceKeyDestination.validateAddStatus(errSecDuplicateItem)
+        ) { error in
+            XCTAssertEqual(error as? LegacyWorkspaceKeyMigrationError, .destinationAlreadyExists)
+        }
+    }
+
     func testMigrationSourceVerificationFailureDoesNotAddDestination() throws {
         let source = CountingLegacySource(key: key)
         let destination = CountingDestination()
-        let migration = LegacyWorkspaceKeyMigration(source: source, destination: destination, verifyReadOnly: { _, _ in throw SyntheticTestError.sourceMismatch })
+        let migration = LegacyWorkspaceKeyMigration(source: source, destination: destination, fixture: staticFixture(), verifyReadOnly: { _, _ in throw SyntheticTestError.sourceMismatch })
 
         XCTAssertThrowsError(try migration.migrate(configuration: syntheticConfiguration()))
         XCTAssertEqual(destination.addedKeys, [])
@@ -190,7 +336,7 @@ final class LegacyWorkspaceKeyMigrationTests: XCTestCase {
     func testMigrationDestinationAddFailureDoesNotUpdateOrDeleteEitherKey() throws {
         let source = CountingLegacySource(key: key)
         let destination = CountingDestination(addError: SyntheticTestError.destinationAddFailed)
-        let migration = LegacyWorkspaceKeyMigration(source: source, destination: destination, verifyReadOnly: { _, _ in })
+        let migration = LegacyWorkspaceKeyMigration(source: source, destination: destination, fixture: staticFixture(), verifyReadOnly: { _, _ in })
 
         XCTAssertThrowsError(try migration.migrate(configuration: syntheticConfiguration()))
         XCTAssertEqual(source.key, key)
@@ -206,6 +352,7 @@ final class LegacyWorkspaceKeyMigrationTests: XCTestCase {
         let migration = LegacyWorkspaceKeyMigration(
             source: source,
             destination: destination,
+            fixture: staticFixture(),
             verifyReadOnly: { _, _ in
                 verificationCalls += 1
                 if verificationCalls == 2 { throw SyntheticTestError.reverificationFailed }
@@ -232,10 +379,17 @@ final class LegacyWorkspaceKeyMigrationTests: XCTestCase {
             service: "com.rekonlabs.RekonPursuit.synthetic.\(UUID().uuidString)",
             account: "synthetic-account-\(UUID().uuidString)",
             bookmarkPreferenceKey: "synthetic-bookmark-\(UUID().uuidString)",
-            fixtureRoot: root,
-            syntheticBaseRoot: root.deletingLastPathComponent(),
-            defaultApplicationSupportRoot: root.appendingPathComponent("default", isDirectory: true)
+            fixtureRoot: syntheticFixtureRoot()
         )
+    }
+
+    private func syntheticFixtureRoot() -> URL {
+        SyntheticMigrationConfiguration.trustedSyntheticBaseRoot
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    }
+
+    private func staticFixture() -> StaticNonceFixture {
+        StaticNonceFixture()
     }
 }
 
@@ -259,7 +413,7 @@ private final class SQLiteCallCapture {
             open: { [weak self] uri, flags in
                 self?.openURI = uri
                 self?.openFlags = flags
-                return OpaquePointer(bitPattern: 1)!
+                return .init(status: SQLITE_OK, handle: OpaquePointer(bitPattern: 1)!)
             },
             key: { [weak self] _, data in
                 self?.keyByteCounts.append(data.count)
@@ -322,5 +476,17 @@ private final class CountingDestination: DataProtectionWorkspaceKeyAdding {
         if let addError { throw addError }
         addedKeys.append(key)
         current = key
+    }
+}
+
+private final class StaticNonceFixture: ValidatedSyntheticNonceFixture {
+    func validatedDatabaseURL(for configuration: SyntheticMigrationConfiguration) throws -> URL {
+        configuration.fixtureRoot.appendingPathComponent("workspace.sqlite", isDirectory: false)
+    }
+}
+
+private final class FailingNonceFixture: ValidatedSyntheticNonceFixture {
+    func validatedDatabaseURL(for configuration: SyntheticMigrationConfiguration) throws -> URL {
+        throw SyntheticTestError.sourceMismatch
     }
 }

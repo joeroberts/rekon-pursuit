@@ -6,7 +6,12 @@ import SQLCipher
 /// read the encrypted schema. Immutable URI mode does not claim a current
 /// WAL-consistent snapshot and must never be used for normal workspace access.
 nonisolated struct ReadOnlySQLiteDriver: @unchecked Sendable {
-    let open: (String, Int32) -> OpaquePointer?
+    nonisolated struct OpenResult: @unchecked Sendable {
+        let status: Int32
+        let handle: OpaquePointer?
+    }
+
+    let open: (String, Int32) -> OpenResult
     let key: (OpaquePointer, Data) -> Int32
     let prepare: (OpaquePointer, String) -> OpaquePointer?
     let step: (OpaquePointer) -> Int32
@@ -17,8 +22,8 @@ nonisolated struct ReadOnlySQLiteDriver: @unchecked Sendable {
     static let live = ReadOnlySQLiteDriver(
         open: { uri, flags in
             var handle: OpaquePointer?
-            guard sqlite3_open_v2(uri, &handle, flags, nil) == SQLITE_OK else { return nil }
-            return handle
+            let status = sqlite3_open_v2(uri, &handle, flags, nil)
+            return OpenResult(status: status, handle: handle)
         },
         key: { handle, key in
             key.withUnsafeBytes { sqlite3_key(handle, $0.baseAddress, Int32($0.count)) }
@@ -68,32 +73,38 @@ nonisolated struct ReadOnlySQLCipherVerifier {
     func verify(url: URL, key: Data) throws {
         guard key.count == 32 else { throw ReadOnlySQLCipherVerifierError.invalidKeyLength }
         let before = try WorkspaceArtifactManifest.capture(for: url)
-        let uri = Self.immutableURI(for: url)
-        let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI | SQLITE_OPEN_NOFOLLOW
-        guard let handle = driver.open(uri, flags) else { throw ReadOnlySQLCipherVerifierError.openFailed }
-
+        let openResult = driver.open(
+            Self.immutableURI(for: url),
+            SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI | SQLITE_OPEN_NOFOLLOW
+        )
         var statement: OpaquePointer?
-        var finishError: Error?
-        do {
-            guard driver.key(handle, key) == SQLITE_OK else { throw ReadOnlySQLCipherVerifierError.keyFailed }
-            guard let prepared = driver.prepare(handle, Self.schemaSQL) else { throw ReadOnlySQLCipherVerifierError.prepareFailed }
-            statement = prepared
-            guard driver.step(prepared) == SQLITE_ROW else { throw ReadOnlySQLCipherVerifierError.schemaReadFailed }
-        } catch {
-            finishError = error
+        var semanticError: Error?
+
+        if openResult.status != SQLITE_OK || openResult.handle == nil {
+            semanticError = ReadOnlySQLCipherVerifierError.openFailed
+        } else if let handle = openResult.handle {
+            if driver.key(handle, key) != SQLITE_OK {
+                semanticError = ReadOnlySQLCipherVerifierError.keyFailed
+            } else if let prepared = driver.prepare(handle, Self.schemaSQL) {
+                statement = prepared
+                if driver.step(prepared) != SQLITE_ROW {
+                    semanticError = ReadOnlySQLCipherVerifierError.schemaReadFailed
+                }
+            } else {
+                semanticError = ReadOnlySQLCipherVerifierError.prepareFailed
+            }
         }
 
-        if let statement, driver.finalize(statement) != SQLITE_OK, finishError == nil {
-            finishError = ReadOnlySQLCipherVerifierError.finalizeFailed
+        if let statement, driver.finalize(statement) != SQLITE_OK, semanticError == nil {
+            semanticError = ReadOnlySQLCipherVerifierError.finalizeFailed
         }
-        if driver.close(handle) != SQLITE_OK, finishError == nil {
-            finishError = ReadOnlySQLCipherVerifierError.closeFailed
+        if let handle = openResult.handle, driver.close(handle) != SQLITE_OK, semanticError == nil {
+            semanticError = ReadOnlySQLCipherVerifierError.closeFailed
         }
-        if let finishError { throw finishError }
-
         guard try WorkspaceArtifactManifest.capture(for: url) == before else {
             throw ReadOnlySQLCipherVerifierError.artifactChanged
         }
+        if let semanticError { throw semanticError }
     }
 
     static func immutableURI(for url: URL) -> String {
