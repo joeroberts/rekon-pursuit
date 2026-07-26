@@ -2,6 +2,31 @@ import XCTest
 @testable import RekonPursuit
 
 final class RekonPursuitTests: XCTestCase {
+    func testDailyNavigationStateStartsAtHome() {
+        XCTAssertEqual(DailyNavigationState().route, .home)
+    }
+
+    func testDailyNavigationStateRoutesHomeEmptyStateAddIntentWithoutStoreEffects() {
+        var state = DailyNavigationState()
+
+        state.handle(.homeEmptyStateAdd)
+        XCTAssertEqual(state.route, .addOpportunity)
+    }
+
+    func testDailyNavigationStateRoutesPipelineAddIntentWithoutStoreEffects() {
+        var state = DailyNavigationState()
+
+        state.handle(.pipelineAdd)
+        XCTAssertEqual(state.route, .addOpportunity)
+    }
+
+    func testDailyNavigationStateRoutesPipelineImportIntentWithoutStoreEffects() {
+        var state = DailyNavigationState()
+
+        state.handle(.pipelineImport)
+        XCTAssertEqual(state.route, .importCSV)
+    }
+
     func testBootstrapCopyDescribesLocalOnlyFoundation() {
         XCTAssertEqual(BootstrapCopy.status, "Local-only foundation")
     }

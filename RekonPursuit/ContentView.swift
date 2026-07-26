@@ -20,7 +20,7 @@ struct CSVExportDocument: FileDocument {
 
 struct ContentView: View {
     @StateObject private var model = WorkspaceViewModel()
-    @State private var page: AppDestination = .needsAttention
+    @State private var navigation = DailyNavigationState()
     @State private var opportunityRoute: OpportunityRoute?
     @State private var showsPipelineBoard = false
     @State private var pipelineAnchorID: String?
@@ -38,7 +38,10 @@ struct ContentView: View {
 
     var body: some View {
         AppShellView(
-            selection: $page,
+            selection: Binding(
+                get: { navigation.route },
+                set: { selectDestination($0) }
+            ),
             detailTitle: detailTitle,
             selectDestination: selectDestination
         ) {
@@ -127,13 +130,13 @@ struct ContentView: View {
     }
 
     @ViewBuilder private var dailyDestination: some View {
-        switch page {
-        case .needsAttention: NeedsAttentionView(model: model, open: openAttentionTask, addOpportunity: { page = .addOpportunity }, reschedule: { task in taskToReschedule = task; rescheduledDueAt = task.dueAt ?? .now })
-        case .pipeline: PipelineView(model: model, showsBoard: $showsPipelineBoard, anchorID: $pipelineAnchorID, open: openOpportunity, delete: { pendingDeletion = $0 })
+        switch navigation.route {
+        case .home: HomeView(model: model, open: openAttentionTask, addOpportunity: { navigation.handle(.homeEmptyStateAdd) }, reschedule: { task in taskToReschedule = task; rescheduledDueAt = task.dueAt ?? .now })
+        case .pipeline: PipelineView(model: model, showsBoard: $showsPipelineBoard, anchorID: $pipelineAnchorID, open: openOpportunity, delete: { pendingDeletion = $0 }, addOpportunity: { navigation.handle(.pipelineAdd) }, importCSV: { navigation.handle(.pipelineImport) })
         case .addOpportunity: AddOpportunityView(model: model)
         case .importCSV: CSVImportView(model: model, chooseFile: chooseCSVFile, open: openOpportunity)
         case .contacts: ContactsView(model: model, open: openOpportunity, delete: { pendingContactDeletion = $0 })
-        case .activityAndAI: GlobalActivityView(model: model)
+        case .activityAI: GlobalActivityView(model: model)
         case .settings: SettingsView(model: model, export: { showsUnencryptedExportWarning = true }, backup: createBackup, restore: { showsBackupImporter = true })
         }
     }
@@ -159,7 +162,7 @@ struct ContentView: View {
         guard model.open(task) else { return }
         pipelineAnchorID = task.opportunityID
         opportunityRoute = .overview(task.opportunityID)
-        page = .pipeline
+        navigation.select(.pipeline)
     }
 
     private func openRoute(_ route: OpportunityRoute) {
@@ -168,7 +171,7 @@ struct ContentView: View {
     }
 
     private var detailTitle: String {
-        guard let opportunityRoute else { return page.rawValue }
+        guard let opportunityRoute else { return AppDestination(navigation.route).rawValue }
         switch opportunityRoute {
         case .overview: return "Opportunity"
         case .history: return "Activity & history"
@@ -176,20 +179,20 @@ struct ContentView: View {
         }
     }
 
-    private func selectDestination(_ destination: AppDestination) {
+    private func selectDestination(_ destination: DailyRoute) {
         guard opportunityRoute != nil else {
-            page = destination
+            navigation.select(destination)
             return
         }
         guard model.canLeaveOpportunityRoute() else { return }
         opportunityRoute = nil
-        page = destination
+        navigation.select(destination)
     }
 
     private func returnToPipeline() {
         guard model.canLeaveOpportunityRoute() else { return }
         opportunityRoute = nil
-        page = .pipeline
+        navigation.select(.pipeline)
     }
 
     private func chooseCSVFile() {
@@ -248,12 +251,20 @@ private struct PipelineView: View {
     @Binding var anchorID: String?
     let open: (Opportunity) -> Void
     let delete: (Opportunity) -> Void
+    let addOpportunity: () -> Void
+    let importCSV: () -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("Pipeline").font(.largeTitle.bold())
                 Spacer()
-                Text("Select an opportunity to review it.").foregroundStyle(RekonTheme.secondaryText)
+                Button("Import CSV", action: importCSV)
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("pipeline-import-csv")
+                Button("Add opportunity", action: addOpportunity)
+                    .buttonStyle(.borderedProminent)
+                    .tint(RekonTheme.accent)
+                    .accessibilityIdentifier("pipeline-add-opportunity")
             }
             HStack {
                 TextField("Search opportunities", text: $model.opportunitySearch).accessibilityIdentifier("opportunity-search")
@@ -265,7 +276,15 @@ private struct PipelineView: View {
                 Picker("View", selection: $showsBoard) { Text("Table").tag(false); Text("Board").tag(true) }.pickerStyle(.segmented).frame(width: 145)
             }
             if model.filteredOpportunities.isEmpty {
-                ContentUnavailableView("No opportunities match", systemImage: "briefcase", description: Text("Try another search or add an opportunity."))
+                VStack(spacing: 14) {
+                    Spacer(minLength: 24)
+                    ContentUnavailableView("No opportunities match", systemImage: "briefcase", description: Text("Try another search or add an opportunity."))
+                    Button("Add opportunity", action: addOpportunity)
+                        .buttonStyle(.borderedProminent)
+                        .tint(RekonTheme.accent)
+                    Spacer(minLength: 24)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if showsBoard {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal) {
@@ -509,9 +528,50 @@ private struct ClosureConfirmationView: View {
 
 private struct MissingOpportunityView: View { let back: () -> Void; var body: some View { ContentUnavailableView("Opportunity unavailable", systemImage: "exclamationmark.triangle", description: Text("It may have been deleted while this screen was open.")); Button("Return to Pipeline", action: back) } }
 
-private struct NeedsAttentionView: View {
+private struct HomeView: View {
     @ObservedObject var model: WorkspaceViewModel; let open: (TaskReminder) -> Void; let addOpportunity: () -> Void; let reschedule: (TaskReminder) -> Void
-    var body: some View { ScrollView { VStack(alignment: .leading, spacing: 16) { Text("Needs Attention").font(.largeTitle.bold()).accessibilityIdentifier("needs-attention-home"); if model.needsAttention.isEmpty { ContentUnavailableView("No next actions", systemImage: "checkmark.circle", description: Text("Add an opportunity when you are ready.")); Button("Add an opportunity", action: addOpportunity).accessibilityIdentifier("show-add-opportunity") } else { ForEach(model.needsAttention, id: \.id) { task in HStack { VStack(alignment: .leading) { Text(task.title).font(.headline); Text(task.dueAt?.formatted(date: .abbreviated, time: .shortened) ?? "No due date").foregroundStyle(.secondary) }; Spacer(); Button("Open") { open(task) }; Button("Snooze 1 day") { model.snoozeOneDay(task) }; Button("Reschedule…") { reschedule(task) }; Button("Complete") { model.complete(task) } }.padding().background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: 10)) } } }.padding(28).frame(maxWidth: .infinity, alignment: .leading) } }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Home").font(.largeTitle.bold()).accessibilityIdentifier("home-content")
+            Text("Needs Attention").font(.title2.bold())
+            if model.needsAttention.isEmpty {
+                VStack(spacing: 14) {
+                    Spacer(minLength: 24)
+                    ContentUnavailableView("No next actions", systemImage: "checkmark.circle", description: Text("Add an opportunity when you are ready."))
+                    Button("Add an opportunity", action: addOpportunity)
+                        .buttonStyle(.borderedProminent)
+                        .tint(RekonTheme.accent)
+                        .accessibilityIdentifier("show-add-opportunity")
+                    Spacer(minLength: 24)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(model.needsAttention, id: \.id) { task in
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(task.title).font(.headline)
+                                    Text(task.dueAt?.formatted(date: .abbreviated, time: .shortened) ?? "No due date")
+                                        .foregroundStyle(RekonTheme.secondaryText)
+                                }
+                                Spacer()
+                                Button("Open") { open(task) }
+                                Button("Snooze 1 day") { model.snoozeOneDay(task) }
+                                Button("Reschedule…") { reschedule(task) }
+                                Button("Complete") { model.complete(task) }
+                            }
+                            .padding()
+                            .background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: 10))
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(RekonTheme.border, lineWidth: 1))
+                        }
+                    }
+                }
+            }
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
 }
 
 private struct AddOpportunityView: View {

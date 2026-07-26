@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum AppDestination: String, CaseIterable, Identifiable {
-    case needsAttention = "Needs Attention"
+    case home = "Home"
     case pipeline = "Pipeline"
     case addOpportunity = "Add opportunity"
     case importCSV = "Import CSV"
@@ -13,7 +13,7 @@ enum AppDestination: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .needsAttention: "checklist"
+        case .home: "house"
         case .pipeline: "rectangle.3.group"
         case .addOpportunity: "plus.circle"
         case .importCSV: "square.and.arrow.down"
@@ -25,6 +25,67 @@ enum AppDestination: String, CaseIterable, Identifiable {
 
     var accessibilityID: String {
         "sidebar-" + rawValue.lowercased().replacingOccurrences(of: " ", with: "-").replacingOccurrences(of: "&", with: "and")
+    }
+
+    static let sidebarDestinations: [AppDestination] = [.home, .pipeline, .contacts, .activityAndAI, .settings]
+
+    init(_ route: DailyRoute) {
+        switch route {
+        case .home: self = .home
+        case .pipeline: self = .pipeline
+        case .addOpportunity: self = .addOpportunity
+        case .importCSV: self = .importCSV
+        case .contacts: self = .contacts
+        case .activityAI: self = .activityAndAI
+        case .settings: self = .settings
+        }
+    }
+}
+
+nonisolated enum DailyRoute: Equatable {
+    case home
+    case pipeline
+    case addOpportunity
+    case importCSV
+    case contacts
+    case activityAI
+    case settings
+
+    init(_ destination: AppDestination) {
+        switch destination {
+        case .home: self = .home
+        case .pipeline: self = .pipeline
+        case .addOpportunity: self = .addOpportunity
+        case .importCSV: self = .importCSV
+        case .contacts: self = .contacts
+        case .activityAndAI: self = .activityAI
+        case .settings: self = .settings
+        }
+    }
+}
+
+nonisolated enum DailyNavigationIntent: Equatable {
+    case homeEmptyStateAdd
+    case pipelineAdd
+    case pipelineImport
+
+    var route: DailyRoute {
+        switch self {
+        case .homeEmptyStateAdd, .pipelineAdd: .addOpportunity
+        case .pipelineImport: .importCSV
+        }
+    }
+}
+
+nonisolated struct DailyNavigationState: Equatable {
+    private(set) var route: DailyRoute = .home
+
+    mutating func select(_ route: DailyRoute) {
+        self.route = route
+    }
+
+    mutating func handle(_ intent: DailyNavigationIntent) {
+        select(intent.route)
     }
 }
 
@@ -50,16 +111,26 @@ enum RekonTheme {
     static let violet = Color(red: 0.53, green: 0.30, blue: 0.96)
 }
 
+struct RekonTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(RekonTheme.border, lineWidth: 1))
+    }
+}
+
 struct AppShellView<Detail: View>: View {
-    @Binding private var selection: AppDestination
+    @Binding private var selection: DailyRoute
     private let detailTitle: String
-    private let selectDestination: (AppDestination) -> Void
+    private let selectDestination: (DailyRoute) -> Void
     private let detail: Detail
 
     init(
-        selection: Binding<AppDestination>,
+        selection: Binding<DailyRoute>,
         detailTitle: String,
-        selectDestination: @escaping (AppDestination) -> Void,
+        selectDestination: @escaping (DailyRoute) -> Void,
         @ViewBuilder detail: () -> Detail
     ) {
         _selection = selection
@@ -86,10 +157,11 @@ struct AppShellView<Detail: View>: View {
                     get: { selection },
                     set: { selectDestination($0) }
                 )) {
-                    ForEach(AppDestination.allCases) { destination in
+                    ForEach(AppDestination.sidebarDestinations) { destination in
                         Label(destination.rawValue, systemImage: destination.icon)
-                            .tag(destination)
+                            .tag(DailyRoute(destination))
                             .accessibilityIdentifier(destination.accessibilityID)
+                            .listRowBackground(selection == DailyRoute(destination) ? RekonTheme.elevatedSurface : Color.clear)
                     }
                 }
                 .listStyle(.sidebar)
@@ -101,6 +173,7 @@ struct AppShellView<Detail: View>: View {
                 .navigationTitle(detailTitle)
         }
         .tint(RekonTheme.accent)
+        .textFieldStyle(RekonTextFieldStyle())
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 860, minHeight: 600)
     }
