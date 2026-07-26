@@ -20,25 +20,14 @@
   <main>
     <header><div class="eyebrow">Rekon Pursuit</div><h1>Delivery dashboard</h1><p class="subhead">Local operational view. This page refreshes every 30 seconds.</p></header>
     <section class="summary" aria-label="Delivery summary">
-      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">RP-R5 — User-initiated public URL check</span></div>
-      <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">RP-R5 — User-initiated public URL check</span></div>
-      <div class="summary-item"><span class="summary-label">Accepted</span><span class="summary-value">6</span></div>
-      <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">6</span></div>
+      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">RP-R6 — Durable document references</span></div>
+      <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">RP-R6 — Durable document references</span></div>
+      <div class="summary-item"><span class="summary-label">Accepted</span><span class="summary-value">7</span></div>
+      <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">5</span></div>
       <div class="summary-item"><span class="summary-label">Blocked</span><span class="summary-value">0</span></div>
     </section>
     <section class="attention" aria-label="Attention queue"><h2>Attention queue</h2><p class="attention-empty">Nothing needs your attention.</p></section>
-    <section class="board" aria-label="Delivery status board"><section class="lane lane-backlog"><header><h2>Backlog</h2><span class="lane-count">6</span></header>
-      <article class="task-card status-backlog">
-        <div class="card-heading"><span class="task-id">RP-R6</span><span class="status-pill">Backlog</span></div>
-        <h3>Durable document references</h3>
-        <dl>
-          <div><dt>Release condition</dt><dd>Release in serial order after the active corrective work is accepted.</dd></div>
-          <div><dt>Latest transition</dt><dd>Planned remediation work.</dd></div>
-        </dl>
-        <p class="action">No action needed</p>
-        <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
-      </article>
-
+    <section class="board" aria-label="Delivery status board"><section class="lane lane-backlog"><header><h2>Backlog</h2><span class="lane-count">5</span></header>
       <article class="task-card status-backlog">
         <div class="card-heading"><span class="task-id">RP-R7a</span><span class="status-pill">Backlog</span></div>
         <h3>Portable recovery and encrypted export</h3>
@@ -92,17 +81,17 @@
         </dl>
         <p class="action">No action needed</p>
         <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
-      </article></section><section class="lane lane-next_up"><header><h2>Next up</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section><section class="lane lane-in_progress"><header><h2>In progress</h2><span class="lane-count">1</span></header>
-      <article class="task-card status-in_progress">
-        <div class="card-heading"><span class="task-id">RP-R5</span><span class="status-pill">In progress</span></div>
-        <h3>User-initiated public URL check</h3>
+      </article></section><section class="lane lane-next_up"><header><h2>Next up</h2><span class="lane-count">1</span></header>
+      <article class="task-card status-next_up">
+        <div class="card-heading"><span class="task-id">RP-R6</span><span class="status-pill">Next up</span></div>
+        <h3>Durable document references</h3>
         <dl>
-          <div><dt>Release condition</dt><dd>Implement only the approved explicit public-URL check; no successor or unrelated network capability is released.</dd></div>
-          <div><dt>Latest transition</dt><dd>Released after the approved R5 planning, architecture/security, TPM, QA, and delivery gate.</dd></div>
+          <div><dt>Release condition</dt><dd>Requires its own approved plan and dependency-safe release; no implementation is released yet.</dd></div>
+          <div><dt>Latest transition</dt><dd>Eligible after RP-R5 acceptance; awaiting its planning and release gate.</dd></div>
         </dl>
         <p class="action">No action needed</p>
         <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
-      </article></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">6</span></header>
+      </article></section><section class="lane lane-in_progress"><header><h2>In progress</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">7</span></header>
       <article class="task-card status-accepted">
         <div class="card-heading"><span class="task-id">RP-R0</span><span class="status-pill">Accepted</span></div>
         <h3>Evidence-only remediation baseline</h3>
@@ -164,6 +153,17 @@
         <dl>
           <div><dt>Release condition</dt><dd>Accepted local-only reconciliation workflow; no online checking was released.</dd></div>
           <div><dt>Latest transition</dt><dd>Accepted after focused corrective verification, independent architecture/QA/code review, and product-owner hands-on closure verification.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>
+      </article>
+
+      <article class="task-card status-accepted">
+        <div class="card-heading"><span class="task-id">RP-R5</span><span class="status-pill">Accepted</span></div>
+        <h3>User-initiated public URL check</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Accepted; RP-R6 is the only eligible successor for its own plan and release gate.</dd></div>
+          <div><dt>Latest transition</dt><dd>Accepted after corrected independent implementation reviews and product-owner hands-on verification.</dd></div>
         </dl>
         <p class="action">No action needed</p>
         <a class="evidence" href="../remediation-ledger.md">Remediation ledger</a>

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "RP-R5",
-  "nextEligibleTaskId": "RP-R5",
+  "activeTaskId": "RP-R6",
+  "nextEligibleTaskId": "RP-R6",
   "tasks": [
     {
       "id": "RP-R0",
@@ -78,9 +78,9 @@
     {
       "id": "RP-R5",
       "title": "User-initiated public URL check",
-      "status": "in_progress",
-      "releaseCondition": "Implement only the approved explicit public-URL check; no successor or unrelated network capability is released.",
-      "latestTransition": "Released after the approved R5 planning, architecture/security, TPM, QA, and delivery gate.",
+      "status": "accepted",
+      "releaseCondition": "Accepted; RP-R6 is the only eligible successor for its own plan and release gate.",
+      "latestTransition": "Accepted after corrected independent implementation reviews and product-owner hands-on verification.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
@@ -90,9 +90,9 @@
     {
       "id": "RP-R6",
       "title": "Durable document references",
-      "status": "backlog",
-      "releaseCondition": "Release in serial order after the active corrective work is accepted.",
-      "latestTransition": "Planned remediation work.",
+      "status": "next_up",
+      "releaseCondition": "Requires its own approved plan and dependency-safe release; no implementation is released yet.",
+      "latestTransition": "Eligible after RP-R5 acceptance; awaiting its planning and release gate.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
