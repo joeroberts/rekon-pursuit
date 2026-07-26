@@ -86,6 +86,46 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(bookmarkFixture.stoppedURLs, [folder])
     }
 
+    func testFailedExternalStoreCloseRetainsLeaseAndSurfacesRecovery() throws {
+        let store = try makeStore()
+        let bookmarkFixture = ViewModelBookmarkFixture()
+        let folder = bookmarkFixture.makeFolder(withDatabase: true)
+        let model = WorkspaceViewModel(
+            openWorkspace: { .createAvailable },
+            createWorkspace: { store },
+            workspaceLocationBookmarks: bookmarkFixture.makeStore(),
+            openExternalWorkspace: { _ in .ready(store) },
+            closeWorkspaceStore: { _ in throw WorkspaceStoreError.injectedFailure }
+        )
+
+        model.chooseExistingWorkspaceFolder(folder)
+        model.closeWorkspace()
+
+        XCTAssertTrue(model.workspaceRequiresRecovery)
+        XCTAssertFalse(model.workspaceReady)
+        XCTAssertEqual(bookmarkFixture.stoppedURLs, [])
+        XCTAssertTrue(model.statusMessage.contains("could not close safely"))
+    }
+
+    func testCancelledReselectionKeepsAnActiveExternalLeaseOpen() throws {
+        let store = try makeStore()
+        let bookmarkFixture = ViewModelBookmarkFixture()
+        let folder = bookmarkFixture.makeFolder(withDatabase: true)
+        let model = WorkspaceViewModel(
+            openWorkspace: { .createAvailable },
+            createWorkspace: { store },
+            workspaceLocationBookmarks: bookmarkFixture.makeStore(),
+            openExternalWorkspace: { _ in .ready(store) }
+        )
+        model.chooseExistingWorkspaceFolder(folder)
+
+        model.chooseExistingWorkspaceFolder(nil)
+
+        XCTAssertTrue(model.workspaceReady)
+        XCTAssertEqual(bookmarkFixture.stoppedURLs, [])
+        XCTAssertTrue(model.statusMessage.contains("remains open"))
+    }
+
     func testRouteSelectionRejectsAnAbsentOpportunityWithoutMutatingTheCurrentSelection() throws {
         let store = try makeStore()
         let first = try store.create(CreateOpportunity(title: "First", company: "Rekon Labs"))
@@ -763,13 +803,13 @@ private final class BlockingFixturePublicURLChecker: PublicURLChecking {
 private final class ViewModelBookmarkFixture {
     var bookmark: Data?
     var resolvedBookmarks: [Data: (URL, Bool)] = [:]
-    private var databaseURLs: Set<URL> = []
+    private var databaseFolderPaths: Set<String> = []
     private(set) var startedURLs: [URL] = []
     private(set) var stoppedURLs: [URL] = []
 
     func makeFolder(withDatabase: Bool) -> URL {
         let folder = URL(fileURLWithPath: "/fixture/\(UUID().uuidString)", isDirectory: true)
-        if withDatabase { databaseURLs.insert(folder.appendingPathComponent("workspace.sqlite")) }
+        if withDatabase { databaseFolderPaths.insert(folder.standardizedFileURL.path) }
         return folder
     }
 
@@ -784,7 +824,9 @@ private final class ViewModelBookmarkFixture {
             },
             startAccessing: { [weak self] url in self?.startedURLs.append(url); return true },
             stopAccessing: { [weak self] url in self?.stoppedURLs.append(url) },
-            containsWorkspaceDatabase: { [weak self] url in self?.databaseURLs.contains(url) ?? false }
+            validateWorkspace: { [weak self] url in
+                self?.databaseFolderPaths.contains(url.standardizedFileURL.path) == true ? nil : .missingWorkspaceDatabase
+            }
         ))
     }
 }

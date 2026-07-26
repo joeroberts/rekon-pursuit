@@ -100,6 +100,7 @@ final class WorkspaceViewModel: ObservableObject {
 
     private let openWorkspace: () throws -> WorkspaceOpenState
     private let openExternalWorkspace: (URL) throws -> WorkspaceOpenState
+    private let closeWorkspaceStore: (WorkspaceStore) throws -> Void
     private let createWorkspace: () throws -> WorkspaceStore
     private let restoreWorkspace: (URL) throws -> WorkspaceStore
     private let workspaceLocationBookmarks: WorkspaceLocationBookmarkStore
@@ -115,10 +116,12 @@ final class WorkspaceViewModel: ObservableObject {
         restoreWorkspace: @escaping (URL) throws -> WorkspaceStore = { _ in throw WorkspaceStoreError.injectedFailure },
         workspaceLocationBookmarks: WorkspaceLocationBookmarkStore = WorkspaceLocationBookmarkStore(),
         openExternalWorkspace: @escaping (URL) throws -> WorkspaceOpenState = { _ in .recoveryRequired },
+        closeWorkspaceStore: @escaping (WorkspaceStore) throws -> Void = { try $0.close() },
         publicURLChecker: PublicURLChecking = PublicURLChecker()
     ) {
         self.openWorkspace = openWorkspace
         self.openExternalWorkspace = openExternalWorkspace
+        self.closeWorkspaceStore = closeWorkspaceStore
         self.createWorkspace = createWorkspace
         self.restoreWorkspace = restoreWorkspace
         self.workspaceLocationBookmarks = workspaceLocationBookmarks
@@ -135,7 +138,14 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func start() {
-        closeExternalWorkspace()
+        if externalWorkspaceLease != nil {
+            do {
+                try closeExternalWorkspaceForTransition()
+            } catch {
+                presentWorkspaceCloseFailure()
+                return
+            }
+        }
         switch workspaceLocationBookmarks.resolve() {
         case let .available(lease):
             openExternalWorkspace(with: lease)
@@ -173,27 +183,46 @@ final class WorkspaceViewModel: ObservableObject {
 
     func chooseExistingWorkspaceFolder(_ url: URL?) {
         guard let url else {
-            apply(.recoveryRequired)
-            statusMessage = "Workspace selection was cancelled. Choose the existing workspace folder to continue recovery."
+            if hasActiveExternalWorkspace {
+                statusMessage = "Workspace selection was cancelled. The current external workspace remains open."
+            } else {
+                apply(.recoveryRequired)
+                statusMessage = "Workspace selection was cancelled. Choose the existing workspace folder to continue recovery."
+            }
             return
         }
         do {
-            let lease = try workspaceLocationBookmarks.validateAndSave(url: url)
-            closeExternalWorkspace()
+            let lease = try workspaceLocationBookmarks.validateAndSave(url: url) {
+                try self.closeExternalWorkspaceForTransition()
+            }
             openExternalWorkspace(with: lease)
         } catch {
-            apply(.recoveryRequired)
-            statusMessage = "Choose an existing workspace folder that directly contains workspace.sqlite. Nothing was created or replaced."
+            if hasActiveExternalWorkspace {
+                statusMessage = "The selected folder could not be used. The current external workspace remains open."
+            } else {
+                apply(.recoveryRequired)
+                statusMessage = "Choose an existing workspace folder that directly contains workspace.sqlite. Nothing was created or replaced."
+            }
         }
     }
 
     func closeWorkspace() {
-        closeExternalWorkspace()
+        do {
+            try closeCurrentWorkspace()
+        } catch {
+            presentWorkspaceCloseFailure()
+            return
+        }
         clearWorkspaceDerivedState()
         workspaceReady = false
         canCreateWorkspace = false
         workspaceRequiresRecovery = true
         statusMessage = "Workspace closed. Choose an existing workspace folder to recover it."
+    }
+
+    func teardown() {
+        guard (try? closeCurrentWorkspace()) != nil else { return }
+        clearWorkspaceDerivedState()
     }
 
     func createOpportunity() {
@@ -889,7 +918,6 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     private func clearWorkspaceDerivedState() {
-        try? store?.close()
         publicURLCheckTasks.values.forEach { $0.cancel() }
         publicURLCheckTasks = [:]
         checkingPublicURLOpportunityIDs = []
@@ -928,22 +956,47 @@ final class WorkspaceViewModel: ObservableObject {
             if case .ready = state {
                 apply(state)
             } else {
-                closeExternalWorkspace()
+                try closeExternalWorkspaceForTransition()
                 apply(state == .createAvailable ? .recoveryRequired : state)
             }
         } catch {
-            closeExternalWorkspace()
-            apply(.recoveryRequired)
+            do {
+                try closeExternalWorkspaceForTransition()
+                apply(.recoveryRequired)
+            } catch {
+                presentWorkspaceCloseFailure()
+            }
         }
     }
 
-    private func closeExternalWorkspace() {
-        if externalWorkspaceLease != nil {
-            try? store?.close()
-            store = nil
-            externalWorkspaceLease?.close()
-            externalWorkspaceLease = nil
+    private var hasActiveExternalWorkspace: Bool {
+        externalWorkspaceLease != nil
+    }
+
+    private func closeExternalWorkspaceForTransition() throws {
+        guard externalWorkspaceLease != nil else { return }
+        if let store {
+            try closeWorkspaceStore(store)
+            self.store = nil
         }
+        externalWorkspaceLease?.close()
+        externalWorkspaceLease = nil
+    }
+
+    private func closeCurrentWorkspace() throws {
+        if externalWorkspaceLease != nil {
+            try closeExternalWorkspaceForTransition()
+        } else if let store {
+            try closeWorkspaceStore(store)
+            self.store = nil
+        }
+    }
+
+    private func presentWorkspaceCloseFailure() {
+        workspaceReady = false
+        canCreateWorkspace = false
+        workspaceRequiresRecovery = true
+        statusMessage = "The external workspace could not close safely. It remains open; retry recovery before switching."
     }
 
     private func refreshCounts() {

@@ -54,6 +54,7 @@ struct ContentView: View {
             }
         }
         .onAppear { model.start() }
+        .onDisappear { model.teardown() }
         .sheet(isPresented: Binding(
             get: { closureConfirmationID != nil },
             set: { if !$0 { closureConfirmationID = nil } }

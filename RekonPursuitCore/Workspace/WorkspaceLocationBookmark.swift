@@ -1,8 +1,11 @@
 import Foundation
+import Darwin
 
 enum WorkspaceLocationBookmarkError: Error, Equatable {
     case securityScopeUnavailable
     case missingWorkspaceDatabase
+    case unsafeWorkspaceDatabase
+    case workspaceNotWritable
     case bookmarkPersistenceFailed
 }
 
@@ -21,7 +24,7 @@ enum WorkspaceLocationResolution: Equatable {
 
 /// Holds a security-scoped resource open until the workspace store closes.
 /// `close()` is idempotent; deinitialization only protects abnormal teardown.
-final class WorkspaceAccessLease {
+nonisolated final class WorkspaceAccessLease {
     let url: URL
     private let stopAccessing: (URL) -> Void
     private var isClosed = false
@@ -38,7 +41,7 @@ final class WorkspaceAccessLease {
     }
 
     deinit {
-        MainActor.assumeIsolated { close() }
+        close()
     }
 }
 
@@ -49,7 +52,7 @@ struct WorkspaceLocationBookmarkDependencies {
     let resolveBookmark: (Data) throws -> (URL, Bool)
     let startAccessing: (URL) -> Bool
     let stopAccessing: (URL) -> Void
-    let containsWorkspaceDatabase: (URL) -> Bool
+    let validateWorkspace: (URL) -> WorkspaceLocationBookmarkError?
 
     static func live(defaults: UserDefaults = .standard) -> Self {
         let bookmarkKey = "workspace-location-bookmark"
@@ -75,12 +78,37 @@ struct WorkspaceLocationBookmarkDependencies {
             },
             startAccessing: { $0.startAccessingSecurityScopedResource() },
             stopAccessing: { $0.stopAccessingSecurityScopedResource() },
-            containsWorkspaceDatabase: { folder in
-                var isDirectory: ObjCBool = false
-                let databaseURL = folder.appendingPathComponent("workspace.sqlite", isDirectory: false)
-                return FileManager.default.fileExists(atPath: databaseURL.path, isDirectory: &isDirectory) && !isDirectory.boolValue
-            }
+            validateWorkspace: validateWorkspace
         )
+    }
+
+    /// This is intentionally a permission/metadata check: it verifies the
+    /// directory and database can support SQLite sidecars without creating,
+    /// modifying, or deleting anything in the selected workspace.
+    private static func validateWorkspace(folder: URL) -> WorkspaceLocationBookmarkError? {
+        var folderStatus = stat()
+        guard lstat(folder.path, &folderStatus) == 0,
+              (folderStatus.st_mode & S_IFMT) == S_IFDIR else {
+            return .missingWorkspaceDatabase
+        }
+
+        let databaseURL = folder.appendingPathComponent("workspace.sqlite", isDirectory: false)
+        var databaseStatus = stat()
+        guard lstat(databaseURL.path, &databaseStatus) == 0 else {
+            return .missingWorkspaceDatabase
+        }
+        guard (databaseStatus.st_mode & S_IFMT) == S_IFREG else {
+            return .unsafeWorkspaceDatabase
+        }
+
+        let canReadDatabase = FileManager.default.isReadableFile(atPath: databaseURL.path)
+        let canWriteDatabase = FileManager.default.isWritableFile(atPath: databaseURL.path)
+        let canWriteDirectory = FileManager.default.isWritableFile(atPath: folder.path)
+        let canTraverseDirectory = access(folder.path, X_OK) == 0
+        guard canReadDatabase, canWriteDatabase, canWriteDirectory, canTraverseDirectory else {
+            return .workspaceNotWritable
+        }
+        return nil
     }
 }
 
@@ -96,17 +124,18 @@ final class WorkspaceLocationBookmarkStore {
     /// Validates a selected folder under a temporary security scope and swaps
     /// the stored bookmark only after validation and bookmark creation succeed.
     /// On success, ownership of that active scope transfers to the returned lease.
-    func validateAndSave(url: URL) throws -> WorkspaceAccessLease {
+    func validateAndSave(url: URL, beforePersist: () throws -> Void = {}) throws -> WorkspaceAccessLease {
         guard dependencies.startAccessing(url) else { throw WorkspaceLocationBookmarkError.securityScopeUnavailable }
         var succeeds = false
         defer {
             if !succeeds { dependencies.stopAccessing(url) }
         }
 
-        guard dependencies.containsWorkspaceDatabase(url) else {
-            throw WorkspaceLocationBookmarkError.missingWorkspaceDatabase
+        if let validationError = dependencies.validateWorkspace(url) {
+            throw validationError
         }
 
+        try beforePersist()
         let bookmark = try dependencies.createBookmark(url)
         do {
             try dependencies.saveBookmark(bookmark)
@@ -123,7 +152,7 @@ final class WorkspaceLocationBookmarkStore {
         do {
             let (url, isStale) = try dependencies.resolveBookmark(bookmark)
             guard !isStale, dependencies.startAccessing(url) else { return .stale }
-            guard dependencies.containsWorkspaceDatabase(url) else {
+            guard dependencies.validateWorkspace(url) == nil else {
                 dependencies.stopAccessing(url)
                 return .stale
             }
