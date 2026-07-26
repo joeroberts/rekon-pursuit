@@ -259,11 +259,10 @@ private struct PipelineView: View {
                 Text("Pipeline").font(.largeTitle.bold())
                 Spacer()
                 Button("Import CSV", action: importCSV)
-                    .buttonStyle(.bordered)
+                    .buttonStyle(RekonSecondaryButtonStyle())
                     .accessibilityIdentifier("pipeline-import-csv")
                 Button("Add opportunity", action: addOpportunity)
-                    .buttonStyle(.borderedProminent)
-                    .tint(RekonTheme.accent)
+                    .buttonStyle(RekonPrimaryButtonStyle())
                     .accessibilityIdentifier("pipeline-add-opportunity")
             }
             HStack {
@@ -276,15 +275,11 @@ private struct PipelineView: View {
                 Picker("View", selection: $showsBoard) { Text("Table").tag(false); Text("Board").tag(true) }.pickerStyle(.segmented).frame(width: 145)
             }
             if model.filteredOpportunities.isEmpty {
-                VStack(spacing: 14) {
-                    Spacer(minLength: 24)
+                FlexibleCenteredContent {
                     ContentUnavailableView("No opportunities match", systemImage: "briefcase", description: Text("Try another search or add an opportunity."))
                     Button("Add opportunity", action: addOpportunity)
-                        .buttonStyle(.borderedProminent)
-                        .tint(RekonTheme.accent)
-                    Spacer(minLength: 24)
+                        .buttonStyle(RekonPrimaryButtonStyle())
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if showsBoard {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal) {
@@ -535,16 +530,12 @@ private struct HomeView: View {
             Text("Home").font(.largeTitle.bold()).accessibilityIdentifier("home-content")
             Text("Needs Attention").font(.title2.bold())
             if model.needsAttention.isEmpty {
-                VStack(spacing: 14) {
-                    Spacer(minLength: 24)
+                FlexibleCenteredContent {
                     ContentUnavailableView("No next actions", systemImage: "checkmark.circle", description: Text("Add an opportunity when you are ready."))
                     Button("Add an opportunity", action: addOpportunity)
-                        .buttonStyle(.borderedProminent)
-                        .tint(RekonTheme.accent)
+                        .buttonStyle(RekonPrimaryButtonStyle())
                         .accessibilityIdentifier("show-add-opportunity")
-                    Spacer(minLength: 24)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
@@ -571,6 +562,22 @@ private struct HomeView: View {
         }
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+private struct FlexibleCenteredContent<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        GeometryReader { proxy in
+            VStack(spacing: 14) {
+                Spacer(minLength: 24)
+                content()
+                Spacer(minLength: 24)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

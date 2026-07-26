@@ -111,6 +111,30 @@ enum RekonTheme {
     static let violet = Color(red: 0.53, green: 0.30, blue: 0.96)
 }
 
+struct RekonPrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(RekonTheme.accent.opacity(configuration.isPressed ? 0.78 : 1), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(RekonTheme.accent.opacity(0.75), lineWidth: 1))
+    }
+}
+
+struct RekonSecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.medium))
+            .foregroundStyle(RekonTheme.secondaryText)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(RekonTheme.surface.opacity(configuration.isPressed ? 0.65 : 1), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(RekonTheme.border, lineWidth: 1))
+    }
+}
+
 struct RekonTextFieldStyle: TextFieldStyle {
     func _body(configuration: TextField<Self._Label>) -> some View {
         configuration
@@ -153,18 +177,18 @@ struct AppShellView<Detail: View>: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 14)
-                List(selection: Binding(
-                    get: { selection },
-                    set: { selectDestination($0) }
-                )) {
-                    ForEach(AppDestination.sidebarDestinations) { destination in
-                        Label(destination.rawValue, systemImage: destination.icon)
-                            .tag(DailyRoute(destination))
-                            .accessibilityIdentifier(destination.accessibilityID)
-                            .listRowBackground(selection == DailyRoute(destination) ? RekonTheme.elevatedSurface : Color.clear)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 4) {
+                        ForEach(AppDestination.sidebarDestinations) { destination in
+                            SidebarDestinationButton(
+                                destination: destination,
+                                isSelected: selection == DailyRoute(destination),
+                                select: { selectDestination(DailyRoute(destination)) }
+                            )
+                        }
                     }
+                    .padding(.horizontal, 8)
                 }
-                .listStyle(.sidebar)
             }
             .background(RekonTheme.background)
         } detail: {
@@ -176,5 +200,32 @@ struct AppShellView<Detail: View>: View {
         .textFieldStyle(RekonTextFieldStyle())
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 860, minHeight: 600)
+    }
+}
+
+private struct SidebarDestinationButton: View {
+    let destination: AppDestination
+    let isSelected: Bool
+    let select: () -> Void
+
+    var body: some View {
+        Button(action: select) {
+            HStack(spacing: 10) {
+                Image(systemName: destination.icon)
+                    .frame(width: 18)
+                Text(destination.rawValue)
+                Spacer(minLength: 0)
+            }
+            .font(.body.weight(isSelected ? .semibold : .regular))
+            .foregroundStyle(isSelected ? Color.white : RekonTheme.secondaryText)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isSelected ? RekonTheme.elevatedSurface : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(isSelected ? RekonTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(destination.accessibilityID)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
