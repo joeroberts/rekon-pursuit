@@ -53,8 +53,8 @@
 </article><article id="UX-R1" class="detail status-in_progress">
   <div class="heading"><span class="task-id">UX-R1</span><span>UX</span><span>In Progress</span></div>
   <h2>Shell and opportunity navigation</h2>
-  <dl><div><dt>Release condition</dt><dd>Task 1 is accepted. Task 2 true read-only verifier plus signed synthetic Keychain transfer and Task 3 live handoff require separate approval/release. UX-R2 and RP-R6 remain unreleased.</dd></div>
-  <div><dt>Latest transition</dt><dd>Task 1&#x27;s ADR-003 bookmark/recovery sub-slice was accepted at f1b0c58 and 45583f7 after focused tests and signed Debug entitlement inspection. UX-R1 remains In progress; Task 2 true read-only plus signed synthetic Keychain proof and Task 3 live handoff remain unreleased.</dd></div>
+  <dl><div><dt>Release condition</dt><dd>Task 2 synthetic preflight is released. Task 3 live handoff still requires fresh user-facing approval and separate Architect, Security/Privacy, TPM, QA, Code Review, and Delivery gates. UX-R2 and RP-R6 remain unreleased.</dd></div>
+  <div><dt>Latest transition</dt><dd>Task 2 was released for a synthetic-only read-only SQLCipher and signed Keychain-transfer proof after independent Planning, Architect/Security, QA, TPM, and Delivery review. It cannot select or access a user workspace, production Keychain item, or Task 3 live handoff.</dd></div>
   <div><dt>User action</dt><dd>No action needed</dd></div>
   <div><dt>Evidence record</dt><dd>Remediation ledger</dd></div></dl>
 </article><article id="UX-R2" class="detail status-backlog">
