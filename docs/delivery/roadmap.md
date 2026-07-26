@@ -128,6 +128,16 @@ For a small team, one person may hold multiple roles, but the accountability bou
 
 **Acceptance checkpoint:** Use deterministic fixtures for: explicit “position filled,” changed page, access denied, transient failure, still-open posting, and offline. Confirm only explicit closure confirmation changes the stage. Verify every other fixture remains active/manual review and retains its evidence/error; the offline fixture makes no request, preserves the prior result, and creates a retry/manual-review task.
 
+#### Planned extension — user-initiated job-detail extraction
+
+**Status:** Future product capability; not part of the MVP remediation queue or automatic URL handling.
+
+**Objective:** Let a user explicitly request an extraction preview from a public job URL for work arrangement, compensation, job description, and location.
+
+**Scope and safety boundary:** Reuse the accepted public-URL request policy: one user-initiated bounded request, HTTPS/public-destination validation, no credentials/cookies/sign-in, no redirect following, and no background refresh. The app presents extracted values and confidence/provenance for review; it never silently overwrites user-entered fields. Ambiguous, inaccessible, unsupported, or incomplete pages remain manual entry. This capability does not use AI or cloud routing.
+
+**Acceptance checkpoint:** Deterministic fixtures show an extractable posting, missing fields, contradictory values, a changed page, a blocked page, and a non-HTTPS historical URL. Confirm only explicit per-field or all-field user acceptance updates an opportunity and records activity evidence.
+
 ### Workstream F — MVP hardening, data lifecycle, and release readiness
 
 **Objective:** Make the MVP reliable as a local daily tracker and ready to expand without reworking its trust model.
