@@ -1,7 +1,7 @@
 # Rekon Pursuit — MVP remediation ledger
 
 **Status:** The current evidence-backed operational state is: `RP-R0`,
-`RP-R1a`, `RP-R1b`, `RP-R2`, `RP-R3`, and `RP-R4` Accepted; `RP-R5` Next up;
+`RP-R1a`, `RP-R1b`, `RP-R2`, `RP-R3`, and `RP-R4` Accepted; `RP-R5` In progress;
 `RP-R6`–`RP-R10` Backlog; and no task Blocked. R5 is not released for
 implementation and no network capability is released.
 
@@ -68,7 +68,7 @@ ordinary sequencing.
 | `RP-R3` | Core CSV workflow: map → validate → row decision → atomic import report; field-selected update-existing with no silent overwrite. | `RP-R2` | **Accepted** | Standard-header, nonstandard-header, invalid-row, duplicate, reimport, prior-report rollback, and final product-owner workflow verification. | Accepted after the product owner passed the end-to-end workflow. R4 is next up for its required plan/privacy gate; no successor implementation is released. |
 | `RP-R3a` | Resumable in-progress batch and bounded Undo Import. | `RP-R3` | Deferred by product owner | Separate recovery/history design and evidence. | Explicitly deferred to keep R3 focused; not released. |
 | `RP-R4` | Reconciliation contract and local workflow states only: safe URL validation, classifications, evidence/error, confidence, retry de-duplication, closure confirmation; no request yet. | `RP-R3` | **Accepted** | Focused migration/task-isolation/startup verification, independent Architect/QA/Code Review approval, and product-owner hands-on verification. | Accepted; no network capability was released. R5 is Next up for its own plan and privacy/network gate. |
-| `RP-R5` | User-initiated public-URL check: direct GET only, bounded/no-auth/no-script request, offline/manual-review handling, retry task, no auto-close. | `RP-R4` | Next up | Online/offline/blocked/changed/failure/explicit-closure workflow evidence. | The redirect policy is accepted: do not follow redirects automatically; record the target and route it to manual review. Planning/privacy review is in progress; no network implementation is released. |
+| `RP-R5` | User-initiated public-URL check: direct GET only, bounded/no-auth/no-script request, offline/manual-review handling, retry task, no auto-close. | `RP-R4` | **In progress** | Online/offline/blocked/changed/failure/explicit-closure workflow evidence. | Released after the approved redirect, peer-bound transport, deterministic classification, and privacy/redaction contract. No successor is released. |
 | `RP-R6` | Security-scoped document bookmark, open/verify/relink, hash revalidation, and relink-required after portable restore. No copy/edit/parse. | Serial after `RP-R2` | Backlog | PDF/DOCX attach, relaunch/open, moved-file relink, permission failure smoke. | Release only in serial order after its predecessor gate is accepted. |
 | `RP-R7a` | Recovery-key enrollment/verification, authenticated portable archive/export default, manifest, and restore-as-new-workspace. | Serial after `RP-R2` | Backlog | Recovery-key, portable restore, encrypted/default-export evidence. | Requires Architect + Security/Privacy approval before release. |
 | `RP-R7b` | 30-day expiry display, deleted-data disclosure, and verified retained-backup purge/rebuild. | `RP-R7a` | Backlog | Expiry and purge success/failure evidence. | Architect + Security/Privacy approval required. |
@@ -209,6 +209,16 @@ not release R5.
 | Product owner | **Accepted** | Hands-on verification completed the valid-URL, local `Closed suggested` review, and explicit closure flow. |
 | Delivery Manager | **Accepted — R4 complete** | Move R4 to Accepted and R5 to Next up only. R5 requires its own planning and privacy/network gate; no R5 implementation is released. |
 
+### RP-R5 plan and release record
+
+| Role | Decision | Evidence / boundary |
+| --- | --- | --- |
+| Product owner | **Approved** | Redirects are never followed automatically; their target is evidence/manual review only. |
+| Planning | **Approved** | The brief defines one explicit HTTPS check, deterministic classifier, exact v20 provenance, manual-review fallback, and no successor release. |
+| Architect + Security/Privacy | **Approved** | The brief requires peer-bound `NWConnection` transport, HTTPS-only/default trust, no URLSession fallback, no credentials/cookies/redirects, strict public-address proof, and redacted persistence. |
+| TPM + QA + Delivery | **Approved** | Scope is dependency-safe, fixture-only verification is proportionate, and dashboard semantics reserve In progress for released implementation. |
+| Delivery Manager | **Released — R5 implementation** | Move only R5 from Next up to In progress. Implement the brief; do not release R6 or any unrelated network capability. |
+
 ### RP-R3 corrective verification record
 
 | Role | Decision | Evidence / boundary |
@@ -239,6 +249,7 @@ not release R5.
 | 2026-07-25 | `RP-R4` | **Released for implementation** | Implement only the approved local reconciliation contract and workflow states. No URL fetch, network entitlement, provider adapter, scheduled check, or R5 work is released. |
 | 2026-07-26 | `RP-R4` | **Accepted — R5 Next up** | Product-owner hands-on closure verification and independent final approvals complete R4. R5 is eligible only for its planning/privacy-network gate; no R5 implementation is released. |
 | 2026-07-26 | `RP-R5` | **Planning/privacy gate opened** | Product owner approved no automatic redirect following. Planning, architecture/security, TPM, QA, and delivery review are in progress. R5 remains Next up until Delivery releases implementation; no network implementation is released. |
+| 2026-07-26 | `RP-R5` | **Released for implementation** | Independent plan/privacy gates approved the exact R5 brief. Implement only its explicit public URL check; R6 and all unrelated network capabilities remain unreleased. |
 
 ## Risks and decisions
 
