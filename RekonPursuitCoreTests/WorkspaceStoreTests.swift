@@ -86,7 +86,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 18)
+        XCTAssertEqual(try store.schemaVersion(), 19)
         XCTAssertEqual(try database.rows("SELECT id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at FROM interactions"), [[.text("interaction-1"), .null, .text("opportunity-1"), .text("Note"), .text("Legacy note"), .real(1_704_067_200), .null]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
@@ -158,8 +158,40 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try database.rows("SELECT id FROM import_reports"), [[.text("prior")]])
         XCTAssertTrue(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
         try WorkspaceMigrations.apply(to: database)
-        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(18)]])
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(19)]])
         XCTAssertEqual(try database.rows("SELECT updated_count, source_basename FROM import_reports"), [[.integer(0), .text("")]])
+    }
+
+    func testVersionEighteenPostingChecksMigrateLosslesslyToReadOnlyReconciliationHistory() throws {
+        let database = try makeVersionEighteenDatabase(at: databaseURL)
+        try database.execute("INSERT INTO posting_checks (id, opportunity_id, url, status, evidence, checked_at) VALUES ('legacy-open', 'legacy-opportunity', 'https://jobs.example.com/open', 'Still open', 'Open evidence', 1704067200)")
+        try database.execute("INSERT INTO posting_checks (id, opportunity_id, url, status, evidence, checked_at) VALUES ('legacy-possible', 'legacy-opportunity', 'https://jobs.example.com/possible', 'Possibly closed', 'Possible evidence', 1704067201)")
+        try database.execute("INSERT INTO posting_checks (id, opportunity_id, url, status, evidence, checked_at) VALUES ('legacy-closed', 'legacy-opportunity', 'https://jobs.example.com/closed', 'Closed', 'Closed evidence', 1704067202)")
+        try database.execute("INSERT INTO posting_checks (id, opportunity_id, url, status, evidence, checked_at) VALUES ('legacy-review', 'legacy-opportunity', 'https://jobs.example.com/review', 'Needs manual review', 'Review evidence', 1704067203)")
+
+        try WorkspaceMigrations.apply(to: database)
+
+        XCTAssertEqual(try database.rows("SELECT legacy_posting_check_id, legacy_status, outcome, classification, closure_confirmed_at FROM reconciliation_results ORDER BY legacy_posting_check_id"), [
+            [.text("legacy-closed"), .text("Closed"), .text("Closed suggested"), .text("Confirmed"), .null],
+            [.text("legacy-open"), .text("Still open"), .text("Still open"), .text("Confirmed"), .null],
+            [.text("legacy-possible"), .text("Possibly closed"), .text("Possibly closed"), .text("Ambiguous"), .null],
+            [.text("legacy-review"), .text("Needs manual review"), .text("Needs manual review"), .text("Ambiguous"), .null]
+        ])
+        XCTAssertEqual(try database.rows("SELECT count(*) FROM reconciliation_reviews"), [[.integer(1)]])
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(19)]])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
+    }
+
+    func testFailedVersionNineteenMigrationRetainsVersionEighteenPostingChecksAndSnapshot() throws {
+        let database = try makeVersionEighteenDatabase(at: databaseURL)
+        try database.execute("INSERT INTO posting_checks (id, opportunity_id, url, status, evidence, checked_at) VALUES ('legacy-closed', 'legacy-opportunity', 'https://jobs.example.com/closed', 'Closed', 'Closed evidence', 1704067202)")
+
+        XCTAssertThrowsError(try WorkspaceMigrations.apply(to: database, failVersionNineteen: true))
+
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(18)]])
+        XCTAssertEqual(try database.rows("SELECT id, status, evidence FROM posting_checks"), [[.text("legacy-closed"), .text("Closed"), .text("Closed evidence")]])
+        XCTAssertEqual(try database.rows("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'reconciliation_results'"), [])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
 
     func testMixedImportFailureLeavesPriorReportAndOpportunityAfterReopen() throws {
@@ -843,17 +875,6 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(history.map(\.summary), ["Prior note"])
     }
 
-    func testPostingCheckPersistsEvidenceWithoutChangingOpportunityStage() throws {
-        let store = try makeStore()
-        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", stage: .applied, jobURL: "https://jobs.example.com/123"))
-
-        let check = try store.recordPostingCheck(RecordPostingCheck(opportunityID: opportunity.id, url: opportunity.jobURL, status: .closed, evidence: "Posting returned a closed notice."))
-
-        XCTAssertEqual(try store.postingChecks(forOpportunityID: opportunity.id), [check])
-        XCTAssertEqual(try store.opportunities().first?.stage, .applied)
-        XCTAssertEqual(try store.activityEvents().last?.kind, "posting_checked")
-    }
-
     func testReconciliationRejectsInvalidURLAndTupleWithoutWriting() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", jobURL: "https://jobs.example.com/123"))
@@ -864,6 +885,18 @@ final class WorkspaceStoreTests: XCTestCase {
 
         XCTAssertEqual(try store.reconciliationResults(forOpportunityID: opportunity.id), [])
         XCTAssertEqual(try store.activityEvents().count, before)
+    }
+
+    func testReconciliationRejectsRestrictedBracketedIPv6HostsWithoutWriting() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", jobURL: "https://jobs.example.com/123"))
+        let restrictedURLs = ["http://[::1]/role", "http://[::ffff:127.0.0.1]/role", "http://[fe80::1]/role", "http://[fc00::1]/role", "http://[fd12::1]/role"]
+
+        for url in restrictedURLs {
+            XCTAssertThrowsError(try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: opportunity.id, url: url, outcome: .needsManualReview, classification: .offlineUnchecked, reason: .offlineUnchecked, evidence: "Not run")), url)
+        }
+
+        XCTAssertEqual(try store.reconciliationResults(forOpportunityID: opportunity.id), [])
     }
 
     func testManualReviewReusesOneDedicatedReviewTaskAndKeepsOrdinaryTask() throws {
@@ -880,6 +913,32 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.reconciliationReviewTask(forOpportunityID: opportunity.id)?.id, first.reviewTaskID)
     }
 
+    func testReconciliationReviewTaskCannotBeCompletedOrDeletedByOrdinaryTaskWorkflow() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", jobURL: "https://jobs.example.com/123"))
+        let result = try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: opportunity.id, url: opportunity.jobURL, outcome: .needsManualReview, classification: .offlineUnchecked, reason: .offlineUnchecked, evidence: "Offline; check not run"))
+        let reviewTaskID = try XCTUnwrap(result.reviewTaskID)
+
+        XCTAssertThrowsError(try store.completeTask(id: reviewTaskID))
+        try store.updateOpportunity(id: opportunity.id, title: opportunity.title, company: opportunity.company, stage: opportunity.stage, nextAction: "", dueAt: nil)
+
+        XCTAssertEqual(try store.reconciliationReviewTask(forOpportunityID: opportunity.id)?.id, reviewTaskID)
+        XCTAssertEqual(try store.taskReminder(id: reviewTaskID)?.isComplete, false)
+    }
+
+    func testFreshReconciliationReplacesACompletedLegacyReviewTask() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        let store = try WorkspaceStore(database: database, now: now, actorID: "local-user", correlationID: "fixture-correlation")
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", jobURL: "https://jobs.example.com/123"))
+        let first = try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: opportunity.id, url: opportunity.jobURL, outcome: .needsManualReview, classification: .offlineUnchecked, reason: .offlineUnchecked, evidence: "Offline; check not run"))
+        try database.execute("UPDATE task_reminders SET is_complete = 1 WHERE id = ?", values: [.text(try XCTUnwrap(first.reviewTaskID))])
+
+        let second = try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: opportunity.id, url: opportunity.jobURL, outcome: .needsManualReview, classification: .offlineUnchecked, reason: .offlineUnchecked, evidence: "Still offline"))
+
+        XCTAssertNotEqual(second.reviewTaskID, first.reviewTaskID)
+        XCTAssertEqual(try store.reconciliationReviewTask(forOpportunityID: opportunity.id)?.isComplete, false)
+    }
+
     func testClosureSuggestionNeedsExplicitConfirmationToCloseAndCompleteDedicatedTask() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", stage: .applied, nextAction: "Follow up", dueAt: now, jobURL: "https://jobs.example.com/123"))
@@ -893,6 +952,28 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.taskReminder(id: suggestion.reviewTaskID!)?.isComplete, true)
         XCTAssertEqual(try store.taskReminder(id: ordinaryTask.id)?.isComplete, false)
         XCTAssertNotNil(try store.reconciliationResults(forOpportunityID: opportunity.id).first?.closureConfirmedAt)
+    }
+
+    func testConfirmationUsesAnUnconfirmedClosedSuggestionInsteadOfTheNewestReview() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", stage: .applied, jobURL: "https://jobs.example.com/123"))
+        let suggestion = try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: opportunity.id, url: opportunity.jobURL, outcome: .closedSuggested, classification: .confirmed, confidence: .high, evidence: "Role filled"))
+        _ = try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: opportunity.id, url: opportunity.jobURL, outcome: .needsManualReview, classification: .offlineUnchecked, reason: .offlineUnchecked, evidence: "Offline; check not run"))
+
+        try store.confirmReconciliationClosure(forOpportunityID: opportunity.id)
+
+        let confirmed = try XCTUnwrap(try store.reconciliationResults(forOpportunityID: opportunity.id).first { $0.id == suggestion.id })
+        XCTAssertNotNil(confirmed.closureConfirmedAt)
+        XCTAssertEqual(try store.opportunities().first?.stage, .closed)
+    }
+
+    func testGenericStageChangeCannotCloseAnOpportunityWithAnActiveReconciliationReview() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", stage: .applied, jobURL: "https://jobs.example.com/123"))
+        _ = try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: opportunity.id, url: opportunity.jobURL, outcome: .closedSuggested, classification: .confirmed, confidence: .high, evidence: "Role filled"))
+
+        XCTAssertThrowsError(try store.changeStage(opportunityID: opportunity.id, to: .closed))
+        XCTAssertEqual(try store.opportunities().first?.stage, .applied)
     }
 
     func testOpportunityExportEscapesDataAndRecordsLocalActivity() throws {
@@ -975,5 +1056,15 @@ final class WorkspaceStoreTests: XCTestCase {
             correlationID: "fixture-correlation",
             failBeforeActivityInsert: failBeforeActivityInsert
         )
+    }
+
+    private func makeVersionEighteenDatabase(at url: URL) throws -> EncryptedDatabase {
+        let database = try EncryptedDatabase.open(url: url, key: key)
+        _ = try WorkspaceStore(database: database, now: now, actorID: "fixture", correlationID: "fixture")
+        try database.execute("DROP TABLE reconciliation_results")
+        try database.execute("DROP TABLE reconciliation_reviews")
+        try database.execute("DELETE FROM migration_history WHERE version = 19")
+        try database.execute("UPDATE schema_migrations SET version = 18")
+        return database
     }
 }

@@ -78,9 +78,6 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var selectedContactOpportunities: [Opportunity] = []
     @Published private(set) var selectedContactLastTouch: Date?
     @Published private(set) var selectedContactNextTouch: Date?
-    @Published var postingStatus: PostingStatus = .stillOpen
-    @Published var postingEvidence = ""
-    @Published private(set) var selectedPostingChecks: [PostingCheck] = []
     @Published var reconciliationOutcome: ReconciliationOutcome = .stillOpen
     @Published var reconciliationClassification: ReconciliationClassification = .confirmed
     @Published var reconciliationReason: ReconciliationReason = .manualReview
@@ -88,6 +85,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var reconciliationEvidence = ""
     @Published private(set) var selectedReconciliationResults: [ReconciliationResult] = []
     @Published private(set) var selectedReconciliationTask: TaskReminder?
+    @Published private(set) var selectedReconciliationTaskCompletion: [String: Bool] = [:]
     @Published var documentReferenceKind: DocumentReferenceKind = .resume
     @Published private(set) var selectedDocumentReferences: [DocumentReference] = []
     @Published private(set) var csvPreview: CSVImportPreview?
@@ -293,7 +291,7 @@ final class WorkspaceViewModel: ObservableObject {
         refreshResponseHistory()
         refreshSelectedTask()
         refreshRelationshipMemory()
-        refreshSelectedPostingChecks()
+        refreshSelectedReconciliation()
     }
 
     func saveSelectedOpportunity() {
@@ -415,20 +413,6 @@ final class WorkspaceViewModel: ObservableObject {
             statusMessage = "Contact unlinked locally."
         } catch {
             statusMessage = "The contact could not be unlinked."
-        }
-    }
-
-    func recordPostingCheck() {
-        guard let store = readyStore(), !selectedOpportunityID.isEmpty else { return }
-        do {
-            _ = try store.recordPostingCheck(RecordPostingCheck(opportunityID: selectedOpportunityID, url: selectedJobURL, status: postingStatus, evidence: postingEvidence))
-            postingEvidence = ""
-            refreshCounts()
-            statusMessage = "Reconciliation saved locally. The opportunity stage was not changed."
-        } catch let error as LocalizedError {
-            statusMessage = error.errorDescription ?? "The reconciliation could not be saved."
-        } catch {
-            statusMessage = "The reconciliation could not be saved."
         }
     }
 
@@ -722,9 +706,6 @@ final class WorkspaceViewModel: ObservableObject {
         selectedContactLastTouch = nil
         selectedContactNextTouch = nil
         clearContactDraft()
-        postingStatus = .stillOpen
-        postingEvidence = ""
-        selectedPostingChecks = []
         selectedDocumentReferences = []
         csvPreview = nil
         csvImportPlan = []
@@ -744,7 +725,6 @@ final class WorkspaceViewModel: ObservableObject {
             refreshResponseHistory()
             refreshSelectedTask()
             refreshRelationshipMemory()
-            refreshSelectedPostingChecks()
             refreshSelectedReconciliation()
             refreshSelectedDocumentReferences()
             contacts = try store?.contacts() ?? []
@@ -770,19 +750,23 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
-    private func refreshSelectedPostingChecks() {
-        do {
-            selectedPostingChecks = selectedOpportunityID.isEmpty ? [] : try store?.postingChecks(forOpportunityID: selectedOpportunityID) ?? []
-        } catch {
-            statusMessage = "The reconciliation history could not be read."
-        }
-    }
-
     private func refreshSelectedReconciliation() {
         do {
             selectedReconciliationResults = selectedOpportunityID.isEmpty ? [] : try store?.reconciliationResults(forOpportunityID: selectedOpportunityID) ?? []
             selectedReconciliationTask = selectedOpportunityID.isEmpty ? nil : try store?.reconciliationReviewTask(forOpportunityID: selectedOpportunityID)
+            selectedReconciliationTaskCompletion = Dictionary(uniqueKeysWithValues: try Set(selectedReconciliationResults.compactMap(\.reviewTaskID)).map { taskID in
+                (taskID, try store?.taskReminder(id: taskID)?.isComplete ?? false)
+            })
         } catch { statusMessage = "The reconciliation history could not be read." }
+    }
+
+    var selectedClosureSuggestion: ReconciliationResult? {
+        selectedReconciliationResults.first { $0.outcome == .closedSuggested && $0.closureConfirmedAt == nil }
+    }
+
+    func reconciliationReviewTaskState(for result: ReconciliationResult) -> String {
+        guard let taskID = result.reviewTaskID else { return "Not needed" }
+        return selectedReconciliationTaskCompletion[taskID] == true ? "Complete" : "Open"
     }
 
     private func refreshSelectedDocumentReferences() {

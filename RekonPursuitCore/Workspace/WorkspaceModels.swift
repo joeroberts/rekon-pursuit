@@ -60,29 +60,6 @@ struct ResponseHistoryEntry: Equatable {
     let occurredAt: Date
 }
 
-enum PostingStatus: String, CaseIterable, Equatable {
-    case stillOpen = "Still open"
-    case possiblyClosed = "Possibly closed"
-    case closed = "Closed"
-    case manualReview = "Needs manual review"
-}
-
-struct PostingCheck: Equatable {
-    let id: String
-    let opportunityID: String
-    let url: String
-    let status: PostingStatus
-    let evidence: String
-    let checkedAt: Date
-}
-
-struct RecordPostingCheck {
-    let opportunityID: String
-    let url: String
-    let status: PostingStatus
-    let evidence: String
-}
-
 enum ReconciliationOutcome: String, CaseIterable, Equatable {
     case stillOpen = "Still open"
     case possiblyClosed = "Possibly closed"
@@ -376,9 +353,9 @@ enum WorkspaceStoreError: Error, LocalizedError {
     case unresolvedImportDecision
     case invalidContact
     case invalidInteraction
-    case invalidPostingCheck
     case invalidReconciliationResult
     case closureNotConfirmed
+    case reconciliationTaskRequiresClosure
     case invalidDocumentReference
 
     var errorDescription: String? {
@@ -395,12 +372,12 @@ enum WorkspaceStoreError: Error, LocalizedError {
             return "Enter a contact name."
         case .invalidInteraction:
             return "Enter an interaction summary and choose a valid linked opportunity."
-        case .invalidPostingCheck:
-            return "Enter the posting URL and the evidence you reviewed."
         case .invalidReconciliationResult:
             return "Enter a valid public posting URL and the required local review detail."
         case .closureNotConfirmed:
             return "Record a Closed suggested result before confirming closure."
+        case .reconciliationTaskRequiresClosure:
+            return "A reconciliation review action is completed only when you explicitly confirm a recorded closure."
         case .invalidDocumentReference:
             return "Choose a PDF or DOCX file to attach as a local reference."
         }

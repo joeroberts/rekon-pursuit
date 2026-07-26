@@ -391,36 +391,18 @@ struct ContentView: View {
                                 if let task = model.selectedReconciliationTask { Button("Open review action") { model.open(task) } }
                                 Button("Confirm closure…") { showsClosureConfirmation = true }
                             }
-                            Picker("Outcome", selection: $model.postingStatus) {
-                                ForEach(PostingStatus.allCases, id: \.self) { status in
-                                    Text(status.rawValue).tag(status)
-                                }
-                            }
-                            TextField("Evidence or error reviewed", text: $model.postingEvidence, axis: .vertical)
-                            Button("Save reconciliation locally") { model.recordPostingCheck() }
-                                .disabled(!model.workspaceReady || model.selectedJobURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.postingEvidence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        }
-                        if model.selectedPostingChecks.isEmpty {
-                            Text("No reconciliation recorded yet.")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text("History").font(.headline)
-                            ForEach(model.selectedPostingChecks, id: \.id) { check in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("\(check.status.rawValue) · \(check.checkedAt.formatted(date: .abbreviated, time: .shortened))")
-                                        .font(.caption.bold())
-                                    Text(check.evidence)
-                                        .font(.caption)
-                                }
-                                .padding(.vertical, 2)
-                            }
                         }
                         if !model.selectedReconciliationResults.isEmpty {
                             Text("Local review history").font(.headline)
                             ForEach(model.selectedReconciliationResults, id: \.id) { result in
-                                Text("\(result.outcome.rawValue) · \(result.classification.rawValue) · \(result.reason.rawValue) · \(result.recordedAt.formatted(date: .abbreviated, time: .shortened))")
-                                    .font(.caption)
-                                Text(result.evidence.isEmpty ? result.error : result.evidence).font(.caption)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(result.outcome.rawValue) · \(result.classification.rawValue) · \(result.reason.rawValue) · \(result.recordedAt.formatted(date: .abbreviated, time: .shortened))")
+                                        .font(.caption)
+                                    Text(result.evidence.isEmpty ? result.error : result.evidence).font(.caption)
+                                    Text("Confidence: \(result.confidence?.rawValue ?? "Not recorded") · Review action: \(model.reconciliationReviewTaskState(for: result)) · Closure: \(result.closureConfirmedAt == nil ? (result.outcome == .closedSuggested ? "Awaiting confirmation" : "Not closed") : "Confirmed")")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }
@@ -733,9 +715,13 @@ struct ContentView: View {
         .sheet(isPresented: $showsClosureConfirmation) {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Confirm closure").font(.title2.bold())
-                if let result = model.selectedReconciliationResults.first { Text("\(result.url)\n\(result.evidence)\n\(result.recordedAt.formatted(date: .abbreviated, time: .shortened))") }
+                if let result = model.selectedClosureSuggestion {
+                    Text("\(result.url)\n\(result.evidence)\n\(result.recordedAt.formatted(date: .abbreviated, time: .shortened))")
+                } else {
+                    Text("Record an unconfirmed Closed suggested result before confirming closure.")
+                }
                 Text("This changes the stage to Closed and completes only the dedicated reconciliation review action.")
-                HStack { Button("Keep active") { showsClosureConfirmation = false }; Button("Confirm closure") { model.confirmReconciliationClosure(); showsClosureConfirmation = false }.keyboardShortcut(.defaultAction) }
+                HStack { Button("Keep active") { showsClosureConfirmation = false }; Button("Confirm closure") { model.confirmReconciliationClosure(); showsClosureConfirmation = false }.keyboardShortcut(.defaultAction).disabled(model.selectedClosureSuggestion == nil) }
             }.padding().frame(minWidth: 420)
         }
         .padding(28)
