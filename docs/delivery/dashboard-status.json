@@ -98,14 +98,15 @@
       "id": "UX-R1",
       "title": "Shell and opportunity navigation",
       "workType": "UX",
-      "status": "in_progress",
-      "releaseCondition": "Initial shell/navigation implementation is delivered; the approved Home/Pipeline amendment must clear its gate before implementation. UX-R2 and RP-R6 remain unreleased.",
-      "latestTransition": "Home/Pipeline amendment released after independent Architect, TPM, QA, and Delivery approval.",
+      "status": "blocked",
+      "releaseCondition": "A stable development signing identity and app-scoped Keychain access must be configured before the sandboxed handoff can reopen the preserved workspace. UX-R2 and RP-R6 remain unreleased.",
+      "latestTransition": "Blocked: the ad-hoc-signed sandboxed handoff cannot access the existing Keychain key; filesystem and Keychain evidence confirm the workspace was preserved.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
       },
-      "needsUserAction": false
+      "needsUserAction": true,
+      "userActionDetail": "Add or select your Apple ID Personal Team in Xcode so this Mac has a stable development-signing identity; then report back for a sandboxed workspace-open handoff."
     },
     {
       "id": "UX-R2",
