@@ -89,7 +89,7 @@ nonisolated struct DailyNavigationState: Equatable {
     }
 }
 
-enum OpportunityRoute: Equatable {
+nonisolated enum OpportunityRoute: Equatable {
     case overview(String)
     case history(String)
     case reconcile(String)
@@ -98,6 +98,14 @@ enum OpportunityRoute: Equatable {
         switch self {
         case let .overview(id), let .history(id), let .reconcile(id): id
         }
+    }
+
+    /// Returns to the overview only while the routed record still exists.
+    /// Callers use `nil` to return safely to Pipeline instead of leaving an
+    /// unavailable-record sub-route on screen.
+    func parentRoute(recordIsAvailable: Bool) -> OpportunityRoute? {
+        guard recordIsAvailable else { return nil }
+        return .overview(opportunityID)
     }
 }
 

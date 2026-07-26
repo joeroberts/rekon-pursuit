@@ -147,9 +147,9 @@ struct ContentView: View {
         case let .overview(id):
             OpportunityOverviewView(model: model, opportunityID: id, back: returnToPipeline, showHistory: { openRoute(.history(id)) }, showReconcile: { openRoute(.reconcile(id)) }, chooseDocument: { showsDocumentReferenceImporter = true })
         case let .history(id):
-            OpportunityHistoryView(model: model, opportunityID: id, back: { openRoute(.overview(id)) })
+            OpportunityHistoryView(model: model, opportunityID: id, back: { returnFromOpportunitySubroute(.history(id)) })
         case let .reconcile(id):
-            ReconcilePostingView(model: model, opportunityID: id, back: { openRoute(.overview(id)) }, confirmClosure: { closureConfirmationID = id })
+            ReconcilePostingView(model: model, opportunityID: id, back: { returnFromOpportunitySubroute(.reconcile(id)) }, confirmClosure: { closureConfirmationID = id })
         }
     }
 
@@ -194,6 +194,14 @@ struct ContentView: View {
         guard model.canLeaveOpportunityRoute() else { return }
         opportunityRoute = nil
         navigation.select(.pipeline)
+    }
+
+    private func returnFromOpportunitySubroute(_ route: OpportunityRoute) {
+        guard let parent = route.parentRoute(recordIsAvailable: model.opportunity(id: route.opportunityID) != nil) else {
+            returnToPipeline()
+            return
+        }
+        openRoute(parent)
     }
 
     private func chooseCSVFile() {
@@ -311,13 +319,23 @@ private struct PipelineView: View {
                     ScrollView(.horizontal) {
                         HStack(alignment: .top, spacing: 14) {
                             ForEach(PipelineStage.allCases, id: \.self) { stage in
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(stage.rawValue).font(.headline)
-                                    ScrollView {
-                                        ForEach(model.filteredOpportunities.filter { $0.stage == stage }, id: \.id) { opportunity in
-                                            OpportunityCard(opportunity: opportunity) { anchorID = opportunity.id; open(opportunity) }
-                                                .id(opportunity.id)
+                                ScrollViewReader { laneProxy in
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text(stage.rawValue).font(.headline)
+                                        ScrollView {
+                                            ForEach(model.filteredOpportunities.filter { $0.stage == stage }, id: \.id) { opportunity in
+                                                OpportunityCard(opportunity: opportunity) { anchorID = opportunity.id; open(opportunity) }
+                                                    .id(opportunity.id)
+                                            }
                                         }
+                                    }
+                                    .onAppear {
+                                        guard let anchorID, let opportunity = model.opportunity(id: anchorID), opportunity.stage == stage else { return }
+                                        laneProxy.scrollTo(anchorID, anchor: .center)
+                                    }
+                                    .onChange(of: anchorID) { _, id in
+                                        guard let id, let opportunity = model.opportunity(id: id), opportunity.stage == stage else { return }
+                                        laneProxy.scrollTo(id, anchor: .center)
                                     }
                                 }
                                 .id(stage)
@@ -328,7 +346,6 @@ private struct PipelineView: View {
                     .onAppear {
                         guard let anchorID, let opportunity = model.opportunity(id: anchorID) else { return }
                         proxy.scrollTo(opportunity.stage, anchor: .center)
-                        proxy.scrollTo(anchorID, anchor: .center)
                     }
                 }
             } else {

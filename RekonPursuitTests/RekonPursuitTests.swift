@@ -27,6 +27,11 @@ final class RekonPursuitTests: XCTestCase {
         XCTAssertEqual(state.route, .importCSV)
     }
 
+    func testOpportunitySubrouteFallsBackToPipelineWhenItsRecordIsUnavailable() {
+        XCTAssertNil(OpportunityRoute.history("missing").parentRoute(recordIsAvailable: false))
+        XCTAssertNil(OpportunityRoute.reconcile("missing").parentRoute(recordIsAvailable: false))
+    }
+
     func testBootstrapCopyDescribesLocalOnlyFoundation() {
         XCTAssertEqual(BootstrapCopy.status, "Local-only foundation")
     }
