@@ -22,6 +22,7 @@ LANES = (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE = REPO_ROOT / "docs/delivery/dashboard-status.json"
 OUTPUT = REPO_ROOT / "docs/delivery/dashboard/index.html"
+DETAIL_OUTPUT = OUTPUT.parent / "remediation.html"
 
 
 class DashboardContractError(ValueError):
@@ -110,6 +111,7 @@ def load_and_validate(source: Path) -> dict:
             raise DashboardContractError(f"Duplicate task ID: {task_id}")
         ids.add(task_id)
         require_string(task.get("title"), f"tasks[{index}].title")
+        require_string(task.get("workType"), f"tasks[{index}].workType")
         status = task.get("status")
         if status not in ALLOWED_STATUSES:
             raise DashboardContractError(
@@ -153,15 +155,11 @@ def escape(value: object) -> str:
     return html.escape(str(value), quote=True)
 
 
-def render_card(task: dict, lane_label: str) -> str:
-    evidence = task.get("evidence")
-    evidence_markup = ""
-    if evidence:
-        evidence_markup = (
-            '<a class="evidence" href="{href}">{label}</a>'.format(
-                href=escape(evidence["href"]), label=escape(evidence["label"])
-            )
-        )
+def detail_href(task: dict) -> str:
+    return f"remediation.html#{escape(task['id'])}"
+
+
+def render_card(task: dict) -> str:
     action = (
         f'<p class="action required">Action needed: {escape(task["userActionDetail"])}</p>'
         if task["needsUserAction"]
@@ -169,14 +167,14 @@ def render_card(task: dict, lane_label: str) -> str:
     )
     return f"""
       <article class="task-card status-{escape(task['status'])}">
-        <div class="card-heading"><span class="task-id">{escape(task['id'])}</span><span class="status-pill">{escape(lane_label)}</span></div>
+        <div class="card-heading"><span class="task-id">{escape(task['id'])}</span><span class="work-type">{escape(task['workType'])}</span></div>
         <h3>{escape(task['title'])}</h3>
         <dl>
           <div><dt>Release condition</dt><dd>{escape(task['releaseCondition'])}</dd></div>
           <div><dt>Latest transition</dt><dd>{escape(task['latestTransition'])}</dd></div>
         </dl>
         {action}
-        {evidence_markup}
+        <a class="details-link" href="{detail_href(task)}">View task details</a>
       </article>"""
 
 
@@ -187,7 +185,7 @@ def render_dashboard(status: dict) -> str:
     attention = [task for task in tasks if task["needsUserAction"]]
     lane_markup = []
     for state, label in LANES:
-        cards = [render_card(task, label) for task in tasks if task["status"] == state]
+        cards = [render_card(task) for task in tasks if task["status"] == state]
         contents = "\n".join(cards) if cards else '<p class="empty">No tasks in this lane.</p>'
         lane_markup.append(
             f'<section class="lane lane-{state}"><header><h2>{label}</h2>'
@@ -220,7 +218,7 @@ def render_dashboard(status: dict) -> str:
     .summary {{ display:grid; grid-template-columns:1.35fr 1.35fr repeat(3,.55fr); gap:12px; margin:24px 0 18px; }} .summary-item,.attention {{ background:rgba(21,31,50,.93); border:1px solid var(--line); border-radius:12px; padding:14px; }} .summary-label,dt {{ color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; }} .summary-value {{ display:block; margin-top:3px; font-weight:700; }}
     .attention {{ margin-bottom:18px; border-left:3px solid var(--violet); }} .attention h2 {{ margin:0 0 8px; font-size:16px; }} .attention ul {{ margin:0; padding-left:20px; }} .attention-empty {{ margin:0; color:var(--muted); }}
     .board {{ display:grid; grid-template-columns:repeat(5,minmax(260px,1fr)); gap:14px; align-items:start; overflow-x:auto; padding-bottom:14px; }} .lane {{ min-height:280px; background:rgba(13,20,35,.82); border:1px solid var(--line); border-top:4px solid var(--lane); border-radius:12px; padding:13px; }} .lane-backlog {{ --lane:var(--amber); }} .lane-next_up {{ --lane:var(--violet); }} .lane-in_progress {{ --lane:var(--cyan); }} .lane-accepted {{ --lane:var(--emerald); }} .lane-blocked {{ --lane:var(--coral); }} .lane header {{ display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }} .lane h2 {{ font-size:17px; margin:0; }} .lane-count {{ color:var(--lane); font-weight:700; }}
-    .task-card {{ background:var(--panel); border:1px solid #34425a; border-radius:9px; padding:13px; margin-top:10px; }} .card-heading {{ display:flex; align-items:center; justify-content:space-between; gap:8px; }} .task-id {{ color:var(--cyan); font-size:12px; font-weight:800; letter-spacing:.08em; }} .status-pill {{ color:var(--lane); border:1px solid currentColor; border-radius:999px; font-size:11px; padding:2px 7px; white-space:nowrap; }} .task-card h3 {{ margin:9px 0 12px; font-size:16px; line-height:1.3; }} dl {{ margin:0; }} dl div {{ margin:9px 0; }} dd {{ margin:2px 0 0; color:#d3dbea; }} .action {{ color:var(--muted); margin:14px 0 0; }} .action.required {{ color:#f0cdfc; }} .evidence {{ display:inline-block; color:var(--cyan); font-weight:600; margin-top:10px; text-decoration:none; }} .evidence:hover {{ text-decoration:underline; }} .empty {{ color:var(--muted); font-style:italic; }}
+    .task-card {{ background:var(--panel); border:1px solid #34425a; border-radius:9px; padding:13px; margin-top:10px; }} .card-heading {{ display:flex; align-items:center; justify-content:space-between; gap:8px; }} .task-id {{ color:var(--cyan); font-size:12px; font-weight:800; letter-spacing:.08em; }} .work-type {{ color:#c9d5ed; background:#25324a; border-radius:999px; font-size:11px; font-weight:700; padding:2px 7px; white-space:nowrap; }} .task-card h3 {{ margin:9px 0 12px; font-size:16px; line-height:1.3; }} dl {{ margin:0; }} dl div {{ margin:9px 0; }} dd {{ margin:2px 0 0; color:#d3dbea; }} .action {{ color:var(--muted); margin:14px 0 0; }} .action.required {{ color:#f0cdfc; }} .details-link {{ display:inline-block; color:var(--cyan); font-weight:600; margin-top:10px; text-decoration:none; }} .details-link:hover {{ text-decoration:underline; }} .empty {{ color:var(--muted); font-style:italic; }}
     footer {{ color:var(--muted); font-size:12px; margin-top:20px; }} @media (max-width:1000px) {{ body {{ min-width:0; }} main {{ padding:20px; }} .summary {{ grid-template-columns:repeat(2,1fr); }} }}
   </style>
 </head>
@@ -243,6 +241,28 @@ def render_dashboard(status: dict) -> str:
 """
 
 
+def render_detail_page(status: dict) -> str:
+    sections = []
+    for task in status["tasks"]:
+        evidence = task.get("evidence", {})
+        evidence_label = evidence.get("label", "No separate evidence source recorded")
+        action = task.get("userActionDetail", "No action needed")
+        sections.append(
+            f'''<article id="{escape(task['id'])}" class="detail status-{escape(task['status'])}">
+  <div class="heading"><span class="task-id">{escape(task['id'])}</span><span>{escape(task['workType'])}</span><span>{escape(task['status'].replace('_', ' ').title())}</span></div>
+  <h2>{escape(task['title'])}</h2>
+  <dl><div><dt>Release condition</dt><dd>{escape(task['releaseCondition'])}</dd></div>
+  <div><dt>Latest transition</dt><dd>{escape(task['latestTransition'])}</dd></div>
+  <div><dt>User action</dt><dd>{escape(action)}</dd></div>
+  <div><dt>Evidence record</dt><dd>{escape(evidence_label)}</dd></div></dl>
+</article>'''
+        )
+    return f'''<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="30"><title>Rekon Pursuit — Remediation details</title>
+<style>:root{{color-scheme:dark;--ink:#f3f6fb;--muted:#a6b2c7;--surface:#0d1423;--panel:#151f32;--line:#2b3850;--cyan:#20c9ef}}*{{box-sizing:border-box}}body{{margin:0;background:#0a0f1a;color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}}main{{max-width:960px;margin:0 auto;padding:32px}}a{{color:var(--cyan)}}h1{{margin:10px 0 6px}}.subhead,dd{{color:var(--muted)}}.detail{{scroll-margin-top:24px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin:16px 0}}.heading{{display:flex;gap:8px;align-items:center;color:#c9d5ed;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}}.task-id{{color:var(--cyan)}}h2{{margin:9px 0 14px;font-size:20px}}dl{{margin:0}}dl div{{margin:12px 0}}dt{{color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}}dd{{margin:3px 0 0}}</style></head>
+<body><main><a href="index.html">← Back to dashboard</a><h1>Remediation task details</h1><p class="subhead">A local dashboard detail view. Refreshes every 30 seconds.</p>{''.join(sections)}</main></body></html>'''
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -252,9 +272,16 @@ def main() -> int:
     )
     args = parser.parse_args()
     try:
-        rendered = render_dashboard(load_and_validate(SOURCE))
+        status = load_and_validate(SOURCE)
+        rendered = render_dashboard(status)
+        detail_rendered = render_detail_page(status)
         if args.check:
-            if not OUTPUT.exists() or OUTPUT.read_text(encoding="utf-8") != rendered:
+            if (
+                not OUTPUT.exists()
+                or OUTPUT.read_text(encoding="utf-8") != rendered
+                or not DETAIL_OUTPUT.exists()
+                or DETAIL_OUTPUT.read_text(encoding="utf-8") != detail_rendered
+            ):
                 raise DashboardContractError(
                     "Generated dashboard is stale. Run: python3 scripts/delivery/render_dashboard.py"
                 )
@@ -262,6 +289,7 @@ def main() -> int:
         else:
             OUTPUT.parent.mkdir(parents=True, exist_ok=True)
             OUTPUT.write_text(rendered, encoding="utf-8")
+            DETAIL_OUTPUT.write_text(detail_rendered, encoding="utf-8")
             print(f"Rendered dashboard: {OUTPUT.relative_to(REPO_ROOT)}")
     except DashboardContractError as error:
         print(f"Dashboard error: {error}", file=sys.stderr)

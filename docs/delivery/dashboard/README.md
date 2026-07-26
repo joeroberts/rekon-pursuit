@@ -1,8 +1,10 @@
 # Rekon Pursuit delivery dashboard
 
-`index.html` is a committed, static projection of the canonical operational
-state in [`../dashboard-status.json`](../dashboard-status.json). Open it
-directly in a browser; it needs no server and reloads every 30 seconds.
+`index.html` and `remediation.html` are committed, static projections of the
+canonical operational state in [`../dashboard-status.json`](../dashboard-status.json).
+Open `index.html` directly in a browser; it needs no server and reloads every
+30 seconds. Task-detail links stay inside this directory so they work in a
+sandboxed local browser.
 
 ## Update workflow
 
@@ -12,7 +14,8 @@ appearing or resolving. Routine progress, individual checks, commits, and
 documentation changes do not change this dashboard.
 
 1. Update the relevant task in `docs/delivery/dashboard-status.json`, including
-   its status, release condition, latest meaningful transition, evidence link,
+   its status, work type, release condition, latest meaningful transition,
+   evidence link,
    and material user action when required.
 2. Make the matching audit/evidence entry in
    `docs/delivery/remediation-ledger.md`. These two records change together.
