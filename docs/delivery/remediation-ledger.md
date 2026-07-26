@@ -108,6 +108,15 @@ ordinary sequencing.
 | QA | **Approved** | Focused migration/verifier tests passed; rejected roots do not resolve or access adapters, Keychain reads require a validated fixture, and failure paths compare artifacts. |
 | Delivery Manager | **Accepted — Task 2a core only** | The signed three-artifact harness is explicitly deferred as Task 2b. It is not a live-handoff authorization and cannot block the remaining UX-R1 work. |
 
+### UX-R1-W1 separate local workspace review and release
+
+| Role | Decision | Evidence / boundary |
+| --- | --- | --- |
+| Product owner | **Approved** | Offer a clearly labeled separate local workspace so app use can continue while the preserved workspace remains untouched. |
+| Architect / Security | **Approved with isolation conditions** | Use a persisted UUID selector, compiled local-root derivation, and a distinct local Keychain service/accounts. Preserve the recovery bookmark and forbid legacy/production Keychain access. |
+| QA | **Approved** | Focused proof covers isolated create, relaunch, preserved-material no-call/no-change, failure retention, and return-to-recovery. |
+| TPM / Delivery | **Released — UX-R1-W1 only** | This is a recovery-onboarding usability bridge, not Task 3. UX-R1 stays In progress; Task 2b/Task 3, UX-R2, and R6 remain unreleased. |
+
 ## Review record
 
 | Role | Decision | Findings that changed the plan |
