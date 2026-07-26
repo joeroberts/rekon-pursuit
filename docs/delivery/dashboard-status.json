@@ -66,9 +66,9 @@
     {
       "id": "RP-R4",
       "title": "Reconciliation contract and local states",
-      "status": "next_up",
-      "releaseCondition": "Requires its approved plan and privacy/network contract gate before implementation begins.",
-      "latestTransition": "Became the next eligible remediation task when R3 was accepted; implementation is not yet released.",
+      "status": "in_progress",
+      "releaseCondition": "R4 is the sole active task; keep R5 and every network capability unreleased.",
+      "latestTransition": "Released after independent planning, architecture, privacy, TPM, QA, and delivery gates approved the local-only contract.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
