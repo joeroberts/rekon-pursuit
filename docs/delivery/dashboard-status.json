@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "UX-R1",
-  "nextEligibleTaskId": null,
+  "activeTaskId": null,
+  "nextEligibleTaskId": "UX-R2",
   "tasks": [
     {
       "id": "RP-R0",
@@ -98,9 +98,9 @@
       "id": "UX-R1",
       "title": "Shell and opportunity navigation",
       "workType": "UX",
-      "status": "in_progress",
-      "releaseCondition": "UX-R1-W1 separate local workspace escape hatch is released. It must isolate its UUID-derived local path and Keychain namespace from the preserved recovery workspace. Task 2b/Task 3 recovery handoff, UX-R2, and RP-R6 remain unreleased.",
-      "latestTransition": "UX-R1-W1 accepted by the product owner: the separate local workspace created successfully after the signed Keychain correction, and the preserved-workspace boundary held.",
+      "status": "accepted",
+      "releaseCondition": "Accepted after product-owner verification of the UX-R1 shell, opportunity navigation, and the separate-workspace recovery correction.",
+      "latestTransition": "Accepted by the product owner after a fresh build verified Board Back restoration and safe History/Reconcile fallback navigation.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
@@ -111,9 +111,9 @@
       "id": "UX-R2",
       "title": "Core workflow forms",
       "workType": "UX",
-      "status": "backlog",
-      "releaseCondition": "Release after UX-R1 acceptance; no implementation is released yet.",
-      "latestTransition": "Product owner approved the scope and placed it after shell/navigation remediation.",
+      "status": "next_up",
+      "releaseCondition": "Eligible for its focused planning and release gate after UX-R1 acceptance; no implementation is released yet.",
+      "latestTransition": "UX-R1 was accepted by the product owner; UX-R2 is the next eligible remediation slice.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
