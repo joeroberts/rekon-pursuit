@@ -140,9 +140,11 @@ def load_and_validate(source: Path) -> dict:
             href = require_string(evidence.get("href"), f"tasks[{index}].evidence.href")
             validate_local_href(href)
 
-    active = require_string(data.get("activeTaskId"), "activeTaskId")
+    active = data.get("activeTaskId")
+    if active is not None:
+        active = require_string(active, "activeTaskId")
     next_eligible = require_string(data.get("nextEligibleTaskId"), "nextEligibleTaskId")
-    if active not in ids:
+    if active is not None and active not in ids:
         raise DashboardContractError(f"activeTaskId {active!r} does not match a task.")
     if next_eligible not in ids:
         raise DashboardContractError(
@@ -202,7 +204,8 @@ def render_dashboard(status: dict) -> str:
         if attention
         else '<p class="attention-empty">Nothing needs your attention.</p>'
     )
-    active = task_by_id[status["activeTaskId"]]
+    active_id = status.get("activeTaskId")
+    active = task_by_id.get(active_id) if active_id else None
     next_eligible = task_by_id[status["nextEligibleTaskId"]]
     return f"""<!doctype html>
 <html lang="en">
@@ -226,7 +229,7 @@ def render_dashboard(status: dict) -> str:
   <main>
     <header><div class="eyebrow">Rekon Pursuit</div><h1>Delivery dashboard</h1><p class="subhead">Local operational view. This page refreshes every 30 seconds.</p></header>
     <section class="summary" aria-label="Delivery summary">
-      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">{escape(active['id'])} — {escape(active['title'])}</span></div>
+      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">{escape(active['id']) + ' — ' + escape(active['title']) if active else 'No task in progress'}</span></div>
       <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">{escape(next_eligible['id'])} — {escape(next_eligible['title'])}</span></div>
       <div class="summary-item"><span class="summary-label">Accepted</span><span class="summary-value">{counts['accepted']}</span></div>
       <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">{counts['backlog']}</span></div>

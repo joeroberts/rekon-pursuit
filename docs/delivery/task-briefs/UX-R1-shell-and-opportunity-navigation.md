@@ -87,7 +87,13 @@ overview section, without claiming durable file access before `RP-R6`.
    sidebar selection. Add an explicit opportunity route state such as
    `pipeline`, `overview(opportunityID)`, `history(opportunityID)`, and
    `reconcile(opportunityID)`. Route state must be ephemeral UI state, not
-   stored in SQLite or activity records.
+   stored in SQLite or activity records. The route opportunity ID is the sole
+   identity for overview/history/reconciliation content. Reconciliation
+   actions must either use an ID-explicit adapter or synchronously prove the
+   route ID still matches the selected record before dispatch. While a public
+   URL check is running, cross-record navigation is disabled or returns only
+   after safely cancelling the check. Cancel and closure confirmation must
+   target the route ID, never a subsequently selected record.
 4. Split the oversized `ContentView` presentation into focused SwiftUI views
    (for example shell/onboarding, pipeline, opportunity overview, history,
    reconciliation, and compact document section) while keeping
@@ -163,7 +169,8 @@ overview section, without claiming durable file access before `RP-R6`.
 5. Reconcile posting exposes the current R4/R5 workflow for that exact
    selected opportunity. It neither fetches automatically on navigation nor
    changes the opportunity stage without the existing explicit closure
-   confirmation.
+   confirmation. A navigation attempt during a running check, cancellation, or
+   closure confirmation cannot retarget the action to another opportunity.
 6. The overview Documents section is compact, shows existing metadata and
    existing permitted actions on demand, and introduces no open/relink/bookmark
    behavior or new persistence.
@@ -176,12 +183,13 @@ overview section, without claiming durable file access before `RP-R6`.
 Use existing deterministic local stores/fixtures; do not add live network
 tests, a new general UI harness, coverage gates, or hosted test work.
 
-1. Extend the existing UI tests with a ready-workspace fixture only if the
-   current project already has a safe isolated UI-test launch mechanism. If it
-   does not, keep UI tests non-mutating and use the existing isolated smoke
-   harness for workspace-ready navigation. Cover: first-run onboarding visible;
-   ready shell has no workspace/status clutter; Pipeline selection → overview
-   → history/reconcile → overview → Back; and sidebar destination reachability.
+1. Retire/rebaseline the existing `workspace-gate-status` UI assertion: it
+   reflects the old always-visible gate and must not require workspace/status
+   content on a ready launch. Keep UI tests non-mutating and limited to
+   sidebar/onboarding reachability because no ready-workspace fixture or launch
+   isolation exists in the current UI-test target. The existing isolated
+   temporary-app smoke is the authoritative evidence for fresh onboarding,
+   ready-state no-clutter, and Pipeline → overview → sub-route → Back context.
 2. Add or update the lowest practical `WorkspaceViewModelTests` for state that
    can be proven without UI: selecting/opening an opportunity retains the
    correct ID, an absent/deleted selected ID clears safely, and navigation-only
@@ -189,8 +197,9 @@ tests, a new general UI harness, coverage gates, or hosted test work.
    layout through the store.
 3. Re-run existing focused R1a workspace-state tests, R3 CSV tests, R4/R5
    reconciliation tests, document-reference metadata tests, and the targeted
-   navigation UI tests. Run a Debug macOS build. No live URL is an acceptance
-   test.
+   navigation UI tests. Include a focused navigation attempt during a running
+   check plus cancel/closure verification proving no different opportunity is
+   affected. Run a Debug macOS build. No live URL is an acceptance test.
 4. In the existing isolated temporary-app smoke at a compact desktop size,
    verify: fresh onboarding → create workspace → create/import synthetic
    records → scroll/filter Pipeline → open an overview → visit Activity &

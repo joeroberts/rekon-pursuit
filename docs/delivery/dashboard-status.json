@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "UX-R1",
+  "activeTaskId": null,
   "nextEligibleTaskId": "UX-R1",
   "tasks": [
     {
@@ -86,7 +86,7 @@
       "title": "User-initiated public URL check",
       "workType": "Security",
       "status": "accepted",
-      "releaseCondition": "Accepted; RP-R6 is the only eligible successor for its own plan and release gate.",
+      "releaseCondition": "Accepted; the approved UX-R1 → UX-R2 → RP-R6 sequence governs successor release.",
       "latestTransition": "Accepted after corrected independent implementation reviews and product-owner hands-on verification.",
       "evidence": {
         "label": "Remediation ledger",
@@ -138,7 +138,7 @@
       "title": "Portable recovery and encrypted export",
       "workType": "Data lifecycle",
       "status": "backlog",
-      "releaseCondition": "Requires recovery design and Architect plus Security/Privacy approval.",
+      "releaseCondition": "Release after RP-R6, with recovery design and Architect plus Security/Privacy approval.",
       "latestTransition": "Planned remediation work.",
       "evidence": {
         "label": "Remediation ledger",
@@ -164,7 +164,7 @@
       "title": "Searchable local AI ledger",
       "workType": "Observability",
       "status": "backlog",
-      "releaseCondition": "Release in serial order after the active corrective work is accepted.",
+      "releaseCondition": "Release after RP-R6 in the approved serial sequence.",
       "latestTransition": "Planned remediation work.",
       "evidence": {
         "label": "Remediation ledger",
