@@ -1,10 +1,16 @@
 # UX-R1 — Shell and opportunity navigation
 
-**State:** Released for implementation
+**State:** Initial implementation delivered; amended work is gate-pending
 **Depends on:** `RP-R5` accepted  
 **Blocks:** `UX-R2`; `RP-R6` remains unreleased until `UX-R2` is accepted  
 **Implementation release requires:** Planning, Architect, TPM, QA, and Delivery
 approval of this brief.
+
+> **Amendment authority:** The initial shell/navigation implementation was
+> delivered at `5a88a00`. The remaining Home/Pipeline navigation and visual
+> consistency work is controlled by
+> [UX-R1-home-pipeline-amendment.md](UX-R1-home-pipeline-amendment.md). Do not
+> treat this original brief alone as authority to begin or accept that work.
 
 ## Outcome
 

@@ -60,6 +60,30 @@ empty states within available content space rather than at fixed coordinates.
 - Home task commands continue to target the same task/opportunity identity and
   preserve the R4/R5 route-safety checks.
 
+## Testable route seam
+
+Introduce a small pure UI-state type in the existing navigation layer, with no
+store or view-model dependency:
+
+```swift
+enum DailyRoute: Equatable {
+    case home, pipeline, addOpportunity, importCSV, contacts, activityAI, settings
+}
+
+struct DailyNavigationState: Equatable {
+    private(set) var route: DailyRoute = .home
+
+    mutating func select(_ route: DailyRoute) {
+        self.route = route
+    }
+}
+```
+
+`ContentView` adapts this route state to its existing page/internal-route
+presentation. The seam is UI state only: it cannot create activity, mutate a
+record, or write the store. Opportunity-route departure remains guarded by the
+existing R5-safe command before this daily route is selected.
+
 ## Acceptance criteria
 
 1. A ready launch opens Home. The sidebar contains Home, Pipeline, Contacts,
@@ -91,9 +115,13 @@ CI, coverage gates, network tests, migrations, or a general UI harness.
    `sidebar-needs-attention` to `sidebar-home`; assert the three removed
    sidebar accessibility identifiers are absent and existing persistent
    destinations remain reachable.
-2. Add the lowest-practical route test proving the Home empty-state intent
-   selects the internal Add Opportunity route and both Pipeline actions select
-   their intended existing internal routes, without a store write.
+2. Add focused tests for `DailyNavigationState` proving Home empty-state intent
+   selects `.addOpportunity`, Pipeline Add selects `.addOpportunity`, and
+   Pipeline Import selects `.importCSV`. Assert the state transitions only;
+   the type has no store/view-model dependency and therefore cannot produce an
+   activity event or mutation. Retain a ready-state `home-content`
+   accessibility identifier so the UI smoke proves the ready launch renders
+   Home content, not merely a highlighted sidebar row.
 3. Run existing workspace-state, task-action, selected-opportunity, CSV, and
    R4/R5 focused tests. Run a Debug macOS build.
 4. In the isolated app at compact and wide desktop sizes, verify: launch to

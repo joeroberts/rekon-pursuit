@@ -99,8 +99,8 @@
       "title": "Shell and opportunity navigation",
       "workType": "UX",
       "status": "in_progress",
-      "releaseCondition": "Implement only the approved shell/navigation brief; UX-R2 and RP-R6 remain unreleased.",
-      "latestTransition": "Released after independent Planning, Architect, QA, TPM, and Delivery approval.",
+      "releaseCondition": "Initial shell/navigation implementation is delivered; the approved Home/Pipeline amendment must clear its gate before implementation. UX-R2 and RP-R6 remain unreleased.",
+      "latestTransition": "Initial implementation delivered; Home/Pipeline amendment is gate-pending.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
