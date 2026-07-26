@@ -87,7 +87,7 @@ ordinary sequencing.
 | Planning | **Approved Task 1** | The bookmark/recovery slice is dependency-safe and does not release Keychain work, UX-R2, or R6. |
 | Architect / Security | **Approved Task 1** | Temporary direct `workspace.sqlite` validation precedes atomic bookmark replacement; invalid/cancelled selection retains the prior bookmark and remains recovery-only; lease ownership is explicit. |
 | QA / Security | **Approved Task 1** | Wrong/empty/stale/cancelled selection and every lease-close path have focused acceptance evidence. Signed Debug entitlement evidence must show sandbox plus user-selected read/write only. |
-| TPM / Delivery | **Released — Task 1 only** | `UX-R1` is In progress for the folder bookmark/recovery slice. Task 2 true read-only plus signed synthetic Keychain proof and Task 3 live handoff remain separately gated. |
+| TPM / Delivery | **Accepted — Task 1 completed sub-slice** | Commits `f1b0c58` and `45583f7` satisfy ADR-003's user-selected read/write folder bookmark and recovery-only boundary. Focused `xcodebuild test` passed; signed Debug entitlement inspection verified App Sandbox with user-selected read/write access only. `UX-R1` remains **In progress**. Task 2's true read-only verifier and signed synthetic Keychain-transfer proof, and Task 3's live handoff, remain unreleased and separately gated. |
 
 ## Review record
 
@@ -274,6 +274,7 @@ not release R5.
 | 2026-07-26 | `UX-R1` | **Home/Pipeline amendment — QA approved** | The pure route-state seam and ready-state Home identifier provide focused evidence without UI-harness or coverage expansion. |
 | 2026-07-26 | `UX-R1` | **Home/Pipeline amendment released** | Delivery released only the approved Home/Pipeline navigation, token-consistency, and responsive-empty-state amendment. UX-R2 and RP-R6 remain unreleased. |
 | 2026-07-26 | `UX-R1` / Task 1 | **Released — external workspace bookmark only** | Implement only ADR-003's read/write folder bookmark and recovery chooser. No Keychain query/write/migration, database/WAL/SHM/journal mutation/copy/move/delete, or live user-workspace selection/verification is released. UX-R2 and RP-R6 remain Backlog. |
+| 2026-07-26 | `UX-R1` / Task 1 | **Accepted — external-workspace bookmark sub-slice complete** | Commits `f1b0c58` and `45583f7` completed the ADR-003 bookmark/recovery slice with focused tests and signed Debug entitlement verification. This acceptance does not authorize Keychain query/write/migration, database/WAL/SHM/journal mutation, or any live user-workspace handoff. Keep `UX-R1` In progress; Task 2 and Task 3 remain unreleased. |
 
 ## Risks and decisions
 

@@ -67,11 +67,11 @@
 - [ ] **Step 5: Run focused tests and signed Debug smoke.**
 
   Build signed Debug and inspect final entitlements: sandbox true plus only
-  user-selected read/write access, with no broad file access. In an isolated
-  temporary folder fixture, select the folder through recovery, relaunch, and
-  confirm the bookmark resolves without a second chooser but remains recovery
-  until Task 2. Exercise cancel, stale, wrong-folder, and reselection paths and
-  prove no selected-folder writes/key changes. Do not use the user workspace.
+  user-selected read/write access, with no broad file access. Exercise cancel,
+  stale, wrong-folder, re-selection, and no-write behavior through the injected
+  focused model tests. The native chooser/relaunch verification is deferred to
+  Task 3 because that is the first authorized live folder-selection/handoff
+  step; Task 1 must not select the user's workspace or simulate a live handoff.
 
 ## Task 2: True read-only verification and signed synthetic handoff
 

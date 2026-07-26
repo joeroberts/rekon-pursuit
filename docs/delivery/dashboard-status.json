@@ -99,8 +99,8 @@
       "title": "Shell and opportunity navigation",
       "workType": "UX",
       "status": "in_progress",
-      "releaseCondition": "Task 1 only: ADR-003 user-selected read/write external-workspace bookmark and recovery slice. Task 2 true read-only verifier plus signed synthetic Keychain transfer and Task 3 live handoff require separate approval/release. UX-R2 and RP-R6 remain unreleased.",
-      "latestTransition": "Product owner accepted ADR-003; independent Architect, QA, Planning, TPM, and Delivery review approved and released Task 1 only. No Keychain migration or user-workspace handoff has run.",
+      "releaseCondition": "Task 1 is accepted. Task 2 true read-only verifier plus signed synthetic Keychain transfer and Task 3 live handoff require separate approval/release. UX-R2 and RP-R6 remain unreleased.",
+      "latestTransition": "Task 1's ADR-003 bookmark/recovery sub-slice was accepted at f1b0c58 and 45583f7 after focused tests and signed Debug entitlement inspection. UX-R1 remains In progress; Task 2 true read-only plus signed synthetic Keychain proof and Task 3 live handoff remain unreleased.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
