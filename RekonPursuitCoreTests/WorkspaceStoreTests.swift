@@ -81,6 +81,7 @@ final class WorkspaceStoreTests: XCTestCase {
         try database.execute("CREATE TABLE contacts (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, employer TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', profile_url TEXT NOT NULL DEFAULT '', relationship_context TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', deleted_at REAL)")
         try database.execute("CREATE TABLE opportunities (id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, company TEXT NOT NULL, created_at REAL NOT NULL, stage TEXT NOT NULL DEFAULT 'Saved', next_action TEXT NOT NULL DEFAULT '', due_at REAL, deleted_at REAL)")
         try database.execute("CREATE TABLE interactions (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), summary TEXT NOT NULL, occurred_at REAL NOT NULL)")
+        try database.execute("CREATE TABLE import_reports (id TEXT PRIMARY KEY NOT NULL, imported_count INTEGER NOT NULL, skipped_count INTEGER NOT NULL, duplicate_kept_count INTEGER NOT NULL, invalid_count INTEGER NOT NULL, created_at REAL NOT NULL)")
         try database.execute("INSERT INTO opportunities (id, title, company, created_at) VALUES ('opportunity-1', 'Product Manager', 'Rekon Labs', 1704067200)")
         try database.execute("INSERT INTO interactions (id, opportunity_id, summary, occurred_at) VALUES ('interaction-1', 'opportunity-1', 'Legacy note', 1704067200)")
 
@@ -722,6 +723,36 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.latestTask(forOpportunityID: existing.id)?.dueAt, now)
     }
 
+    func testCSVUpdateCannotCloseAnOpportunityWithAnUnconfirmedReconciliationReview() throws {
+        let store = try makeStore()
+        let existing = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", stage: .applied, jobURL: "https://jobs.example.com/role"))
+        _ = try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: existing.id, url: existing.jobURL, outcome: .closedSuggested, classification: .confirmed, confidence: .high, evidence: "Role filled"))
+        let preview = try CSVOpportunityImporter.preview(data: Data("title,company,stage,stage date\nProduct Manager,Rekon Labs,Closed,2026-08-01\n".utf8))
+        var plan = try store.csvImportPlan(for: preview)
+        plan[0].decision = .updateSelectedFields
+        plan[0].selectedFields = [.stage, .stageDate]
+
+        XCTAssertThrowsError(try store.importCSV(plan, invalidCount: 0))
+        XCTAssertEqual(try store.opportunities().first(where: { $0.id == existing.id })?.stage, .applied)
+    }
+
+    func testCSVUpdateDoesNotRenameTheDedicatedReconciliationReviewTask() throws {
+        let store = try makeStore()
+        let existing = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", jobURL: "https://jobs.example.com/role"))
+        let result = try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: existing.id, url: existing.jobURL, outcome: .needsManualReview, classification: .offlineUnchecked, reason: .offlineUnchecked, evidence: "Offline; check not run"))
+        let reviewTaskID = try XCTUnwrap(result.reviewTaskID)
+        let preview = try CSVOpportunityImporter.preview(data: Data("title,company,next action\nProduct Manager,Rekon Labs,Send follow-up\n".utf8))
+        var plan = try store.csvImportPlan(for: preview)
+        plan[0].decision = .updateSelectedFields
+        plan[0].selectedFields = [.nextAction]
+
+        _ = try store.importCSV(plan, invalidCount: 0)
+
+        XCTAssertEqual(try store.reconciliationReviewTask(forOpportunityID: existing.id)?.id, reviewTaskID)
+        XCTAssertEqual(try store.reconciliationReviewTask(forOpportunityID: existing.id)?.title, "Review reconciliation evidence")
+        XCTAssertEqual(try store.latestTask(forOpportunityID: existing.id)?.title, "Send follow-up")
+    }
+
     func testCSVURLCandidateUsesTrimmedLowercaseURLBeforeTitleCompanyAndIDTie() throws {
         let store = try makeStore()
         _ = try store.create(CreateOpportunity(title: "Title Match", company: "Rekon", jobURL: "https://other.example"))
@@ -1042,6 +1073,19 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertFalse(try store.tombstones().contains { $0.displayValue.contains(opportunity.title) || $0.displayValue.contains(opportunity.company) })
     }
 
+    func testDeletingOpportunityWithReconciliationHistoryPreservesLinkedReviewEvidence() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", jobURL: "https://jobs.example.com/role"))
+        let result = try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: opportunity.id, url: opportunity.jobURL, outcome: .needsManualReview, classification: .offlineUnchecked, reason: .offlineUnchecked, evidence: "Offline; check not run"))
+        let reviewTaskID = try XCTUnwrap(result.reviewTaskID)
+
+        try store.deleteOpportunity(id: opportunity.id)
+
+        XCTAssertEqual(try store.opportunities(), [])
+        XCTAssertEqual(try store.needsAttention(), [])
+        XCTAssertEqual(try store.taskReminder(id: reviewTaskID)?.isComplete, false)
+    }
+
     private func makeStore(failBeforeActivityInsert: Bool = false) throws -> WorkspaceStore {
         let database = try EncryptedDatabase.open(url: databaseURL, key: key)
         var identifier = 0
@@ -1061,6 +1105,7 @@ final class WorkspaceStoreTests: XCTestCase {
     private func makeVersionEighteenDatabase(at url: URL) throws -> EncryptedDatabase {
         let database = try EncryptedDatabase.open(url: url, key: key)
         _ = try WorkspaceStore(database: database, now: now, actorID: "fixture", correlationID: "fixture")
+        try database.execute("INSERT INTO opportunities (id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes, compensation, location, work_arrangement, application_date, response_state, stage_changed_at, deleted_at) VALUES ('legacy-opportunity', 'Legacy role', 'Rekon Labs', ?, 'Saved', '', NULL, '', '', '', NULL, NULL, 'Not specified', NULL, 'No response recorded', ?, NULL)", values: [.real(now.timeIntervalSince1970), .real(now.timeIntervalSince1970)])
         try database.execute("DROP TABLE reconciliation_results")
         try database.execute("DROP TABLE reconciliation_reviews")
         try database.execute("DELETE FROM migration_history WHERE version = 19")

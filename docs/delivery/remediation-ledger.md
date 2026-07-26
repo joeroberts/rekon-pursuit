@@ -188,6 +188,17 @@ ordinary sequencing.
 | TPM | Approved | The controlling sequence is `R3 → R4 → R5`; R4 is local-only and R5 remains unreleased. |
 | Delivery Manager | **Approved — R4 released** | All plan P1s are resolved and recorded. Move only R4 from Next up to In progress; do not release R5 or any network capability. |
 
+### RP-R4 in-progress corrective evidence
+
+Startup verification exposed a deterministic local-store deadlock when the
+selected opportunity had reconciliation history: `reconciliationReviewTask`
+held the store's non-recursive lock and re-entered it through `taskReminder`.
+The correction performs the reminder read inside the existing lock; it does
+not change the locking model or add a concurrency refactor. Focused store,
+migration, and view-model startup checks pass, including a seeded local review
+task at startup. R4 remains **In progress**; this is evidence only and does
+not release R5.
+
 ### RP-R3 corrective verification record
 
 | Role | Decision | Evidence / boundary |

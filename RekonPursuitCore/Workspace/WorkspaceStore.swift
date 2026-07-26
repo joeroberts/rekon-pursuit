@@ -202,7 +202,7 @@ final class WorkspaceStore {
             let event = ActivityEvent(id: nextIdentifier(), kind: "opportunity_deleted", opportunityID: id, actorID: actorID, correlationID: correlationID, occurredAt: commandNow)
             try database.transaction {
                 try database.execute("UPDATE opportunities SET deleted_at = ? WHERE id = ?", values: [.real(commandNow.timeIntervalSince1970), .text(id)])
-                try database.execute("DELETE FROM task_reminders WHERE opportunity_id = ?", values: [.text(id)])
+                try database.execute("DELETE FROM task_reminders WHERE opportunity_id = ? AND NOT EXISTS (SELECT 1 FROM reconciliation_reviews WHERE reconciliation_reviews.task_reminder_id = task_reminders.id)", values: [.text(id)])
                 try database.execute(
                     "INSERT INTO deletion_tombstones (subject_id, subject_type, deleted_at, display_value) VALUES (?, 'opportunity', ?, ?)",
                     values: [.text(id), .real(commandNow.timeIntervalSince1970), .text("Deleted opportunity #\(reference)")]
@@ -538,7 +538,7 @@ final class WorkspaceStore {
     func reconciliationReviewTask(forOpportunityID opportunityID: String) throws -> TaskReminder? {
         try synchronized {
             guard let taskID = try reconciliationReviewTaskID(forOpportunityID: opportunityID) else { return nil }
-            return try taskReminder(id: taskID)
+            return try database.rows("SELECT id, opportunity_id, title, due_at, is_complete FROM task_reminders WHERE id = ?", values: [.text(taskID)]).first.map(task(from:))
         }
     }
 
@@ -743,6 +743,9 @@ final class WorkspaceStore {
         let dueAt = fields.contains(.dueDate) ? imported.dueAt : existing.dueAt
         if fields.contains(.dueDate) && !nextAction.isEmpty == false && dueAt != nil { throw WorkspaceStoreError.invalidOpportunity }
         let stage = fields.contains(.stage) ? imported.stage : existing.stage
+        if stage == .closed, try hasUnconfirmedReconciliationReview(forOpportunityID: id) {
+            throw WorkspaceStoreError.closureNotConfirmed
+        }
         let response = fields.contains(.responseState) ? imported.responseState : existing.responseState
         let stageDate = fields.contains(.stage) ? (imported.stageChangedAt ?? commandNow) : existing.stageChangedAt
         let responseDate = fields.contains(.responseState) ? imported.responseEffectiveDate : nil
@@ -750,8 +753,8 @@ final class WorkspaceStore {
         let updated = Opportunity(id: existing.id, title: existing.title, company: existing.company, createdAt: existing.createdAt, stage: stage, nextAction: nextAction, dueAt: dueAt, jobURL: fields.contains(.jobURL) ? imported.jobURL : existing.jobURL, jobDescription: fields.contains(.jobDescription) ? imported.jobDescription : existing.jobDescription, notes: fields.contains(.notes) ? imported.notes : existing.notes, compensation: fields.contains(.compensation) ? imported.compensation : existing.compensation, location: fields.contains(.location) ? imported.location : existing.location, workArrangement: fields.contains(.workArrangement) ? imported.workArrangement : existing.workArrangement, applicationDate: fields.contains(.applicationDate) ? imported.applicationDate : existing.applicationDate, responseState: response, stageChangedAt: stageDate)
         try database.execute("UPDATE opportunities SET stage = ?, next_action = ?, due_at = ?, job_url = ?, job_description = ?, notes = ?, compensation = ?, location = ?, work_arrangement = ?, application_date = ?, response_state = ?, stage_changed_at = ? WHERE id = ?", values: [.text(updated.stage.rawValue), .text(updated.nextAction), updated.dueAt.map { .real($0.timeIntervalSince1970) } ?? .null, .text(updated.jobURL), .text(updated.jobDescription), .text(updated.notes), updated.compensation.map(DatabaseValue.text) ?? .null, updated.location.map(DatabaseValue.text) ?? .null, .text(updated.workArrangement.rawValue), updated.applicationDate.map { .real($0.timeIntervalSince1970) } ?? .null, .text(updated.responseState.rawValue), updated.stageChangedAt.map { .real($0.timeIntervalSince1970) } ?? .null, .text(id)])
         if fields.contains(.nextAction) || fields.contains(.dueDate) {
-            let task = try database.rows("SELECT id FROM task_reminders WHERE opportunity_id = ? AND is_complete = 0 ORDER BY id LIMIT 1", values: [.text(id)]).first?.first
-            if nextAction.isEmpty { try database.execute("DELETE FROM task_reminders WHERE opportunity_id = ? AND is_complete = 0", values: [.text(id)])
+            let task = try database.rows("SELECT id FROM task_reminders WHERE opportunity_id = ? AND is_complete = 0 AND NOT EXISTS (SELECT 1 FROM reconciliation_reviews WHERE reconciliation_reviews.task_reminder_id = task_reminders.id) ORDER BY id LIMIT 1", values: [.text(id)]).first?.first
+            if nextAction.isEmpty { try database.execute("DELETE FROM task_reminders WHERE opportunity_id = ? AND is_complete = 0 AND NOT EXISTS (SELECT 1 FROM reconciliation_reviews WHERE reconciliation_reviews.task_reminder_id = task_reminders.id)", values: [.text(id)])
             } else if case let .text(taskID)? = task { try database.execute("UPDATE task_reminders SET title = ?, due_at = ? WHERE id = ?", values: [.text(nextAction), dueAt.map { .real($0.timeIntervalSince1970) } ?? .null, .text(taskID)])
             } else { try database.execute("INSERT INTO task_reminders (id, opportunity_id, title, due_at) VALUES (?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(id), .text(nextAction), dueAt.map { .real($0.timeIntervalSince1970) } ?? .null]) }
         }

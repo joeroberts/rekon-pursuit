@@ -29,6 +29,19 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.statusMessage, "Saved locally.")
     }
 
+    func testStartupLoadsAnOpportunityWithAReconciliationReviewTask() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", jobURL: "https://jobs.example.com/role"))
+        let result = try store.recordReconciliationResult(RecordReconciliationResult(opportunityID: opportunity.id, url: opportunity.jobURL, outcome: .needsManualReview, classification: .offlineUnchecked, reason: .offlineUnchecked, evidence: "Offline; check not run"))
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
+
+        model.start()
+
+        XCTAssertEqual(model.selectedOpportunity?.id, opportunity.id)
+        XCTAssertEqual(model.selectedReconciliationTask?.id, result.reviewTaskID)
+        XCTAssertEqual(model.selectedReconciliationResults.map(\.id), [result.id])
+    }
+
     func testSuccessfulCreateResetsDateDraftsBeforeTheNextOpportunity() throws {
         let store = try makeStore()
         let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store })
