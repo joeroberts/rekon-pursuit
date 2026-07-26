@@ -1175,6 +1175,32 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.needsAttention(), [])
     }
 
+    func testMalformedPublicURLCompletionTerminalizesAsRedactedFailure() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", jobURL: "https://jobs.example.com/role"))
+        let operation = try store.beginPublicURLCheck(opportunityID: opportunity.id, urlSnapshot: opportunity.jobURL).operation
+
+        let result = try XCTUnwrap(store.finishPublicURLCheck(
+            operationID: operation.id,
+            completion: PublicURLCheckCompletion(
+                terminalState: .completed,
+                outcome: .stillOpen,
+                classification: .confirmed,
+                confidence: .high,
+                evidence: "Invalid fixture",
+                httpStatus: 999,
+                mimeType: "text/html\nunsafe",
+                declaredBytes: -1
+            )
+        ))
+
+        XCTAssertEqual(result.outcome, .needsManualReview)
+        XCTAssertEqual(result.classification, .failed)
+        XCTAssertEqual(result.redactedErrorCode, "malformed_completion")
+        XCTAssertEqual(try store.publicURLCheckOperation(id: operation.id)?.state, .failed)
+        XCTAssertNotNil(result.reviewTaskID)
+    }
+
     func testOpportunityExportEscapesDataAndRecordsLocalActivity() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(title: "Product, Manager", company: "Rekon \"Labs\"", stage: .applied, nextAction: "Send notes", dueAt: now, jobURL: "https://jobs.example.com/123"))

@@ -74,7 +74,7 @@ final class PublicURLCheckTests: XCTestCase {
         XCTAssertEqual(completion.responseDate, "Sat, 25 Jul 2026 20:00:00 GMT")
         XCTAssertNil(completion.etag)
         XCTAssertEqual(transport.requestCount, 1)
-        XCTAssertEqual(transport.lastRequest?.headerNames, ["Accept", "Connection", "Host", "Range", "User-Agent"])
+        XCTAssertEqual(transport.lastRequest?.headerNames, ["Accept", "Connection", "Host", "User-Agent"])
     }
 
     func testClosureMarkerSuggestsClosureWithoutClosingAnything() async {
@@ -208,6 +208,44 @@ final class PublicURLCheckTests: XCTestCase {
 
         XCTAssertEqual(completion.outcome, .stillOpen)
         XCTAssertEqual(completion.classification, .confirmed)
+    }
+
+    func testComplete206ResponseIsNotTreatedAsTruncated() async throws {
+        let body = "<h1>Platform Engineer</h1><p>Apply now</p>"
+        let fixture = Data((
+            "HTTP/1.1 206 Partial Content\r\n" +
+            "Content-Type: text/html; charset=utf-8\r\n" +
+            "Content-Length: \(body.utf8.count)\r\n" +
+            "Content-Range: bytes 0-\(body.utf8.count - 1)/\(body.utf8.count)\r\n\r\n" + body
+        ).utf8)
+        let response = try PublicURLTransportResponse.parseHTTPFixture(fixture)
+        XCTAssertFalse(response.truncated)
+
+        let checker = PublicURLChecker(
+            resolver: FixturePublicURLResolver(result: .success([PublicIPAddress("93.184.216.34")!])),
+            transport: FixturePublicURLTransport(result: .success(response))
+        )
+        let request = try XCTUnwrap(checker.prepareEligible("https://jobs.example.com/role"))
+        let completion = await checker.check(request, opportunityTitle: "Platform Engineer")
+        XCTAssertEqual(completion.outcome, .stillOpen)
+    }
+
+    func testTitleAndMarkerInSeparateJobContextsStayAmbiguous() async throws {
+        let filler = String(repeating: " unrelated listing detail", count: 40)
+        let body = "<h1>Platform Engineer</h1>\(filler)<h1>Sales Manager</h1><p>Apply now</p>"
+        let checker = PublicURLChecker(
+            resolver: FixturePublicURLResolver(result: .success([PublicIPAddress("93.184.216.34")!])),
+            transport: FixturePublicURLTransport(result: .success(.html(status: 200, body: body)))
+        )
+        let request = try XCTUnwrap(checker.prepareEligible("https://jobs.example.com/role"))
+        let completion = await checker.check(request, opportunityTitle: "Platform Engineer")
+        XCTAssertEqual(completion.outcome, .needsManualReview)
+        XCTAssertEqual(completion.classification, .ambiguous)
+    }
+
+    func testIPv4CompatibleIPv6LoopbackIsNotPublic() {
+        XCTAssertFalse(PublicIPAddress("::127.0.0.1")!.isPublic)
+        XCTAssertFalse(PublicIPAddress("::ffff:127.0.0.1")!.isPublic)
     }
 }
 

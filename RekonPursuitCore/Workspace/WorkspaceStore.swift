@@ -611,13 +611,11 @@ final class WorkspaceStore {
             } else {
                 effectiveCompletion = completion
             }
-            guard isValidPublicURLCheckCompletion(effectiveCompletion) else {
-                throw WorkspaceStoreError.invalidPublicURLCheck
-            }
+            let sanitizedCompletion = sanitizedPublicURLCheckCompletion(effectiveCompletion)
 
-            let evidence = effectiveCompletion.evidence.trimmingCharacters(in: .whitespacesAndNewlines)
-            let error = effectiveCompletion.error.trimmingCharacters(in: .whitespacesAndNewlines)
-            let requiresReview = effectiveCompletion.outcome != .stillOpen
+            let evidence = sanitizedCompletion.evidence.trimmingCharacters(in: .whitespacesAndNewlines)
+            let error = sanitizedCompletion.error.trimmingCharacters(in: .whitespacesAndNewlines)
+            let requiresReview = sanitizedCompletion.outcome != .stillOpen
             let existingReview = try activeReconciliationReviewTaskID(forOpportunityID: operation.opportunityID)
             let taskID = requiresReview ? (existingReview ?? nextIdentifier()) : nil
             let result = ReconciliationResult(
@@ -625,10 +623,10 @@ final class WorkspaceStore {
                 opportunityID: operation.opportunityID,
                 url: operation.urlSnapshot,
                 recordedAt: terminalAt,
-                outcome: effectiveCompletion.outcome,
-                classification: effectiveCompletion.classification,
-                reason: effectiveCompletion.reason,
-                confidence: effectiveCompletion.confidence,
+                outcome: sanitizedCompletion.outcome,
+                classification: sanitizedCompletion.classification,
+                reason: sanitizedCompletion.reason,
+                confidence: sanitizedCompletion.confidence,
                 evidence: evidence,
                 error: error,
                 reviewTaskID: taskID,
@@ -636,20 +634,20 @@ final class WorkspaceStore {
                 legacyPostingCheckID: nil,
                 legacyStatus: nil,
                 checkOperationID: operation.id,
-                method: effectiveCompletion.method,
-                checkerVersion: effectiveCompletion.checkerVersion,
-                httpStatus: effectiveCompletion.httpStatus,
-                mimeType: effectiveCompletion.mimeType,
-                declaredBytes: effectiveCompletion.declaredBytes,
-                receivedBytes: effectiveCompletion.receivedBytes,
-                contentSHA256: effectiveCompletion.contentSHA256,
-                responseDate: effectiveCompletion.responseDate,
-                lastModified: effectiveCompletion.lastModified,
-                etag: effectiveCompletion.etag,
-                retryAfter: effectiveCompletion.retryAfter,
-                redirectTargetRedacted: effectiveCompletion.redirectTargetRedacted,
-                evidenceExcerpt: effectiveCompletion.evidenceExcerpt,
-                redactedErrorCode: effectiveCompletion.redactedErrorCode
+                method: sanitizedCompletion.method,
+                checkerVersion: sanitizedCompletion.checkerVersion,
+                httpStatus: sanitizedCompletion.httpStatus,
+                mimeType: sanitizedCompletion.mimeType,
+                declaredBytes: sanitizedCompletion.declaredBytes,
+                receivedBytes: sanitizedCompletion.receivedBytes,
+                contentSHA256: sanitizedCompletion.contentSHA256,
+                responseDate: sanitizedCompletion.responseDate,
+                lastModified: sanitizedCompletion.lastModified,
+                etag: sanitizedCompletion.etag,
+                retryAfter: sanitizedCompletion.retryAfter,
+                redirectTargetRedacted: sanitizedCompletion.redirectTargetRedacted,
+                evidenceExcerpt: sanitizedCompletion.evidenceExcerpt,
+                redactedErrorCode: sanitizedCompletion.redactedErrorCode
             )
 
             try database.transaction {
@@ -674,10 +672,10 @@ final class WorkspaceStore {
                 )
                 try database.execute(
                     "UPDATE reconciliation_check_operations SET state = ?, terminal_at = ? WHERE id = ? AND state = 'started'",
-                    values: [.text(effectiveCompletion.terminalState.rawValue), .real(terminalAt.timeIntervalSince1970), .text(operationID)]
+                    values: [.text(sanitizedCompletion.terminalState.rawValue), .real(terminalAt.timeIntervalSince1970), .text(operationID)]
                 )
                 if failBeforeActivityInsert { throw WorkspaceStoreError.injectedFailure }
-                try appendActivity(kind: "public_url_check_\(effectiveCompletion.terminalState.rawValue)", opportunityID: operation.opportunityID, occurredAt: terminalAt)
+                try appendActivity(kind: "public_url_check_\(sanitizedCompletion.terminalState.rawValue)", opportunityID: operation.opportunityID, occurredAt: terminalAt)
             }
             return result
         }
@@ -1189,6 +1187,27 @@ final class WorkspaceStore {
             evidence: completion.evidence.trimmingCharacters(in: .whitespacesAndNewlines),
             error: completion.error.trimmingCharacters(in: .whitespacesAndNewlines)
         )
+    }
+
+    private func sanitizedPublicURLCheckCompletion(_ completion: PublicURLCheckCompletion) -> PublicURLCheckCompletion {
+        let mimeIsValid = completion.mimeType == nil || completion.mimeType!.range(
+            of: "^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$",
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+        guard isValidPublicURLCheckCompletion(completion),
+              completion.httpStatus == nil || (200...599).contains(completion.httpStatus!),
+              completion.declaredBytes == nil || (0...524_288).contains(completion.declaredBytes!),
+              mimeIsValid else {
+            return PublicURLCheckCompletion(
+                terminalState: .failed,
+                outcome: .needsManualReview,
+                classification: .failed,
+                reason: .sourceFailed,
+                evidence: "The public URL check returned malformed technical evidence.",
+                redactedErrorCode: "malformed_completion"
+            )
+        }
+        return completion
     }
 
     private func isRedactedRedirectTarget(_ value: String) -> Bool {

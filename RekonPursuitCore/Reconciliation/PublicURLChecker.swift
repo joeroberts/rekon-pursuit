@@ -71,7 +71,8 @@ nonisolated struct PublicIPAddress: Equatable, Hashable, Sendable {
             if bytes.prefix(8).elementsEqual([0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]) { return false }
             if bytes.prefix(4).elementsEqual([0x20, 0x01, 0x0d, 0xb8]) { return false }
             if bytes.prefix(6).elementsEqual([0x20, 0x01, 0x00, 0x02, 0x00, 0x00]) { return false }
-            if bytes.prefix(10).allSatisfy({ $0 == 0 }) && bytes[10] == 0xff && bytes[11] == 0xff {
+            if bytes.prefix(12).allSatisfy({ $0 == 0 }) ||
+                (bytes.prefix(10).allSatisfy({ $0 == 0 }) && bytes[10] == 0xff && bytes[11] == 0xff) {
                 let mapped = bytes.suffix(4).map(String.init).joined(separator: ".")
                 return PublicIPAddress(mapped)?.isPublic == true
             }
@@ -86,7 +87,7 @@ nonisolated struct PublicURLRequest: Equatable, Sendable {
     let requestTarget: String
 
     var headerNames: [String] {
-        ["Accept", "Connection", "Host", "Range", "User-Agent"]
+        ["Accept", "Connection", "Host", "User-Agent"]
     }
 
     var httpBytes: Data {
@@ -95,7 +96,6 @@ nonisolated struct PublicURLRequest: Equatable, Sendable {
             "Host: \(hostname)",
             "User-Agent: Rekon-Pursuit/0.1",
             "Accept: text/html, application/xhtml+xml, text/plain",
-            "Range: bytes=0-524287",
             "Connection: close",
             "",
             ""
@@ -334,7 +334,12 @@ final class PublicURLChecker: PublicURLChecking {
         let closureMarkers = ["this job is no longer available", "position has been filled", "job has expired", "applications are no longer being accepted"]
         let matchingActive = activeMarkers.filter(visibleLower.contains)
         let matchingClosure = closureMarkers.filter(visibleLower.contains)
-        let titleMatches = !normalizedTitle.isEmpty && visibleLower.contains(normalizedTitle)
+        let matchingMarker = matchingActive.first ?? matchingClosure.first
+        let titleMatches = titleAndMarkerShareNeighborhood(
+            visible,
+            normalizedTitle: normalizedTitle,
+            marker: matchingMarker
+        )
         let ambiguous = response.truncated ||
             !titleMatches ||
             (matchingActive.isEmpty == matchingClosure.isEmpty)
@@ -494,6 +499,25 @@ final class PublicURLChecker: PublicURLChecking {
         let start = visible.index(visible.startIndex, offsetBy: startOffset)
         let end = visible.index(visible.startIndex, offsetBy: endOffset)
         return String(visible[start..<end].prefix(512))
+    }
+
+    private func titleAndMarkerShareNeighborhood(
+        _ visible: String,
+        normalizedTitle: String,
+        marker: String?
+    ) -> Bool {
+        guard !normalizedTitle.isEmpty, let marker else { return false }
+        let searchable = visible.lowercased()
+        var searchStart = searchable.startIndex
+        while let titleRange = searchable.range(of: normalizedTitle, range: searchStart..<searchable.endIndex) {
+            let lower = searchable.index(titleRange.lowerBound, offsetBy: -256, limitedBy: searchable.startIndex) ?? searchable.startIndex
+            let upper = searchable.index(titleRange.upperBound, offsetBy: 256, limitedBy: searchable.endIndex) ?? searchable.endIndex
+            if searchable.range(of: marker, options: .caseInsensitive, range: lower..<upper) != nil {
+                return true
+            }
+            searchStart = titleRange.upperBound
+        }
+        return false
     }
 
     private func metaRefreshEvidence(in html: String, relativeTo base: String) -> (found: Bool, target: String?) {
@@ -771,7 +795,7 @@ nonisolated private final class BoundHTTPConnection: @unchecked Sendable {
         continuation.resume(with: result)
     }
 
-    private static func parse(_ data: Data) throws -> PublicURLTransportResponse {
+    fileprivate static func parse(_ data: Data) throws -> PublicURLTransportResponse {
         let delimiter = Data("\r\n\r\n".utf8)
         guard let headerRange = data.range(of: delimiter),
               headerRange.lowerBound <= maximumHeaderBytes,
@@ -804,7 +828,7 @@ nonisolated private final class BoundHTTPConnection: @unchecked Sendable {
         }
         let contentRange = headers.first { $0.key.caseInsensitiveCompare("Content-Range") == .orderedSame }?.value
         let declaredBytes = headers.first { $0.key.caseInsensitiveCompare("Content-Length") == .orderedSame }.flatMap { Int($0.value) }
-        let truncated = contentRange != nil || (declaredBytes ?? 0) > decoded.count
+        let truncated = contentRange.map(contentRangeIndicatesPartial) ?? false || (declaredBytes ?? 0) > decoded.count
         return PublicURLTransportResponse(
             status: status,
             headers: headers,
@@ -839,6 +863,26 @@ nonisolated private final class BoundHTTPConnection: @unchecked Sendable {
             }
         }
         throw PublicURLCheckFailure.malformedResponse
+    }
+
+    private static func contentRangeIndicatesPartial(_ value: String) -> Bool {
+        let parts = value.lowercased().split(separator: " ", maxSplits: 1)
+        guard parts.count == 2,
+              let dash = parts[1].firstIndex(of: "-"),
+              let slash = parts[1].firstIndex(of: "/"),
+              let start = Int(parts[1][..<dash]),
+              let end = Int(parts[1][parts[1].index(after: dash)..<slash]),
+              let total = Int(parts[1][parts[1].index(after: slash)...]),
+              start >= 0, end >= start, total > 0 else {
+            return true
+        }
+        return end - start + 1 < total
+    }
+}
+
+extension PublicURLTransportResponse {
+    static func parseHTTPFixture(_ data: Data) throws -> PublicURLTransportResponse {
+        try BoundHTTPConnection.parse(data)
     }
 }
 
