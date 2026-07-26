@@ -393,7 +393,7 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.selectedOpportunityID, first.id)
     }
 
-    func testRunningPublicURLCheckBlocksCrossRecordRouteUntilCancellationCompletes() async throws {
+    func testReconcileOverviewBackDepartureStaysBlockedUntilPublicURLCheckCancellationCompletes() async throws {
         let store = try makeStore()
         let first = try store.create(CreateOpportunity(title: "First", company: "Rekon Labs", jobURL: "https://jobs.example.com/first"))
         let second = try store.create(CreateOpportunity(title: "Second", company: "Rekon Labs", jobURL: "https://jobs.example.com/second"))
@@ -405,6 +405,9 @@ final class WorkspaceViewModelTests: XCTestCase {
         model.checkSelectedPublicURL()
         await checker.waitForStart()
         XCTAssertTrue(model.isCheckingSelectedPublicURL)
+        // Reconcile → Overview keeps the same record, while Back must still
+        // respect the shared route-departure gate.
+        XCTAssertTrue(model.navigateToRouteOpportunity(id: first.id))
         XCTAssertFalse(model.canLeaveOpportunityRoute())
         XCTAssertFalse(model.navigateToRouteOpportunity(id: second.id))
         XCTAssertEqual(model.selectedOpportunityID, first.id)

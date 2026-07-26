@@ -186,7 +186,11 @@ struct ContentView: View {
         page = destination
     }
 
-    private func returnToPipeline() { opportunityRoute = nil; page = .pipeline }
+    private func returnToPipeline() {
+        guard model.canLeaveOpportunityRoute() else { return }
+        opportunityRoute = nil
+        page = .pipeline
+    }
 
     private func chooseCSVFile() {
         let panel = NSOpenPanel()
