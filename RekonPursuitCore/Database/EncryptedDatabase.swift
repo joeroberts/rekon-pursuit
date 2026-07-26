@@ -68,6 +68,12 @@ nonisolated final class EncryptedDatabase {
         }
     }
 
+    /// Verifies only encrypted schema access through immutable read-only mode.
+    /// It is intentionally not a replacement for normal workspace opening.
+    static func verifyReadOnly(url: URL, key: Data) throws {
+        try ReadOnlySQLCipherVerifier().verify(url: url, key: key)
+    }
+
     func execute(_ sql: String, values: [DatabaseValue] = []) throws {
         guard let handle else {
             throw EncryptedDatabaseError.sqlite(code: SQLITE_MISUSE, message: "Database is closed.")

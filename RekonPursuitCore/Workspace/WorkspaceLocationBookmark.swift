@@ -55,7 +55,7 @@ struct WorkspaceLocationBookmarkDependencies {
     let validateWorkspace: (URL) -> WorkspaceLocationBookmarkError?
 
     static func live(defaults: UserDefaults = .standard) -> Self {
-        let bookmarkKey = "workspace-location-bookmark"
+        let bookmarkKey = WorkspaceLocationBookmarkConfiguration.preferenceKey
         return Self(
             loadBookmark: { defaults.data(forKey: bookmarkKey) },
             saveBookmark: { bookmark in defaults.set(bookmark, forKey: bookmarkKey) },
@@ -110,6 +110,10 @@ struct WorkspaceLocationBookmarkDependencies {
         }
         return nil
     }
+}
+
+nonisolated enum WorkspaceLocationBookmarkConfiguration {
+    static let preferenceKey = "workspace-location-bookmark"
 }
 
 /// Persists only opaque bookmark data. It never creates or modifies files in a

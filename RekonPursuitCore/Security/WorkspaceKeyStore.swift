@@ -14,7 +14,7 @@ protocol WorkspaceKeyStore: AnyObject {
 /// This namespace is compiled with the application. It is deliberately not read
 /// from preferences, arguments, or environment variables, which prevents a
 /// launch configuration from redirecting production key material.
-enum WorkspaceKeychainConfiguration {
+nonisolated enum WorkspaceKeychainConfiguration {
     static let service: String = {
         let productionBundleID = "com.rekonlabs.RekonPursuit"
         let compiledBundleID = Bundle.main.bundleIdentifier ?? productionBundleID
@@ -28,9 +28,10 @@ enum WorkspaceKeyStoreError: Error {
     case unavailable(OSStatus)
 }
 
-final class KeychainWorkspaceKeyStore: WorkspaceKeyStore {
+nonisolated final class KeychainWorkspaceKeyStore: WorkspaceKeyStore {
     private let service = WorkspaceKeychainConfiguration.service
-    private let account = "primary-workspace-key"
+    static let primaryAccount = "primary-workspace-key"
+    private let account = KeychainWorkspaceKeyStore.primaryAccount
     private let pendingAccount = "pending-workspace-key"
 
     func readWorkspaceKey() throws -> Data? {
@@ -68,6 +69,7 @@ final class KeychainWorkspaceKeyStore: WorkspaceKeyStore {
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
             kSecAttrAccount: account,
+            kSecUseDataProtectionKeychain: true,
             kSecReturnData: true,
             kSecMatchLimit: kSecMatchLimitOne
         ]
@@ -86,7 +88,8 @@ final class KeychainWorkspaceKeyStore: WorkspaceKeyStore {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
-            kSecAttrAccount: account
+            kSecAttrAccount: account,
+            kSecUseDataProtectionKeychain: true
         ]
         let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if updateStatus == errSecItemNotFound {
@@ -103,7 +106,8 @@ final class KeychainWorkspaceKeyStore: WorkspaceKeyStore {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
-            kSecAttrAccount: account
+            kSecAttrAccount: account,
+            kSecUseDataProtectionKeychain: true
         ]
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw map(status) }
