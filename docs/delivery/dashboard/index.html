@@ -26,7 +26,7 @@
       <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">7</span></div>
       <div class="summary-item"><span class="summary-label">Blocked</span><span class="summary-value">1</span></div>
     </section>
-    <section class="attention" aria-label="Attention queue"><h2>Attention queue</h2><ul><li><strong>UX-R1:</strong> Approve the design and release of a one-time local migration that copies the legacy workspace key into the stable app-scoped Keychain only after verification; it must retain the original database and legacy key for rollback.</li></ul></section>
+    <section class="attention" aria-label="Attention queue"><h2>Attention queue</h2><ul><li><strong>UX-R1:</strong> Choose the storage model for the preserved workspace: recommended—select its existing folder once and grant Rekon Pursuit persistent read/write access via a security-scoped bookmark, with no data copy; alternative—approve a verified copy into the sandbox while retaining the source unchanged.</li></ul></section>
     <section class="board" aria-label="Delivery status board"><section class="lane lane-backlog"><header><h2>Backlog</h2><span class="lane-count">7</span></header>
       <article class="task-card status-backlog">
         <div class="card-heading"><span class="task-id">UX-R2</span><span class="work-type">UX</span></div>
@@ -184,10 +184,10 @@
         <div class="card-heading"><span class="task-id">UX-R1</span><span class="work-type">UX</span></div>
         <h3>Shell and opportunity navigation</h3>
         <dl>
-          <div><dt>Release condition</dt><dd>An Architect- and Security/Privacy-approved, one-time legacy-Keychain migration design must be released before the stable sandboxed app can open the preserved workspace. UX-R2 and RP-R6 remain unreleased.</dd></div>
-          <div><dt>Latest transition</dt><dd>Stable Personal-Team signing is now verified, but the signed sandbox cannot access the legacy key created by the former ad-hoc identity. The database is preserved; no migration has run.</dd></div>
+          <div><dt>Release condition</dt><dd>A storage-access architecture for the preserved external workspace, then a revised Keychain handoff design, must be independently approved. UX-R2 and RP-R6 remain unreleased.</dd></div>
+          <div><dt>Latest transition</dt><dd>Independent review found two material preflight failures: the sandbox has no writable access to the legacy external workspace, and the planned database check was not truly read-only. No migration has run; the database and legacy key are preserved.</dd></div>
         </dl>
-        <p class="action required">Action needed: Approve the design and release of a one-time local migration that copies the legacy workspace key into the stable app-scoped Keychain only after verification; it must retain the original database and legacy key for rollback.</p>
+        <p class="action required">Action needed: Choose the storage model for the preserved workspace: recommended—select its existing folder once and grant Rekon Pursuit persistent read/write access via a security-scoped bookmark, with no data copy; alternative—approve a verified copy into the sandbox while retaining the source unchanged.</p>
         <a class="details-link" href="remediation.html#UX-R1">View task details</a>
       </article></section></section>
     <footer>Source: <code>docs/delivery/dashboard-status.json</code> · Generated locally · No server required</footer>

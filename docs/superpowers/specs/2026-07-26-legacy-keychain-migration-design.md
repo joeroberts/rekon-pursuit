@@ -1,6 +1,8 @@
 # Legacy Keychain Migration Design
 
-**Status:** Product owner approved; Architect and Security/Privacy reviewed.
+**Status:** Superseded pending a storage-access decision. Product owner
+approved the original Keychain-only direction; independent review found it
+cannot open the preserved workspace from the sandbox.
 
 ## Goal
 
@@ -9,18 +11,40 @@ encrypted workspace whose database key was created by an earlier identity-free,
 non-sandboxed development build. This is a one-time corrective migration under
 `UX-R1`, not a general recovery, export, backup, or workspace-reset feature.
 
+**Preflight correction:** A Keychain-only handoff is insufficient. The existing
+workspace folder is outside the app sandbox, and the app currently has no
+persistent writable security-scoped access to it. In addition, the current
+database helper opens read/write and enables WAL even with
+`createIfMissing: false`, so it cannot verify the workspace read-only. No
+implementation or live migration may proceed from this document.
+
 ## Chosen approach
 
-Use a temporary, non-shipped migration build of the **same** Rekon Pursuit app
+The previous candidate was a temporary, non-shipped migration build of the **same** Rekon Pursuit app
 bundle ID (`com.rekonlabs.RekonPursuit`) and Personal Team (`2UA854NLX4`). It
 has a compile-time-only migration entry point and no sandbox entitlement. The
 ordinary product build stays sandboxed.
 
-The migration build performs this bounded sequence in memory:
+That candidate is rejected until a revised architecture has been approved. The
+revised design must choose one of these storage models:
+
+1. **Recommended — persistent user-selected folder bookmark:** the user selects
+   the existing Rekon Pursuit workspace folder once. The production sandbox is
+   granted read/write security-scoped access only to that folder and stores the
+   opaque bookmark locally. The original database remains authoritative; no
+   copy is made.
+2. **Alternative — verified copy into the sandbox:** create a distinct copy
+   only after read-only source verification, retain the original untouched, and
+   make the destination authoritative only after explicit user confirmation.
+   This creates duplicate-state risk and needs separate product approval.
+
+Whichever model is selected, the migration build may perform this bounded
+Keychain sequence in memory:
 
 1. Read only the fixed legacy generic-password item using the existing service
    and primary account, without `kSecUseDataProtectionKeychain`.
-2. Open the existing `workspace.sqlite` read-only with that key. A failed open
+2. Open the existing `workspace.sqlite` through a dedicated
+   `SQLITE_OPEN_READONLY` API with that key. A failed open
    stops the migration before any destination key is created.
 3. Add a distinct data-protection Keychain item with the same service/account
    and `kSecUseDataProtectionKeychain = true`. It never updates an existing
@@ -30,10 +54,11 @@ The migration build performs this bounded sequence in memory:
 5. Exit with a redacted result. The user then launches the normal sandboxed
    app, which uses data-protection Keychain queries going forward.
 
-The migration build and normal app must first prove the same app-identity
-Keychain group in their signed entitlements. If that proof is absent, the
-migration does not run. The fallback is an explicit separate architecture
-decision about a shared Keychain group; it is not a reason to disable the
+The migration build and normal app must first prove a real signed,
+cross-build synthetic transfer: legacy source only → Data Protection destination
+→ normal sandbox opens the synthetic database. Entitlement inspection is useful
+supporting evidence but cannot substitute for the actual Keychain behavior. If
+the proof fails, the migration does not run. It is not a reason to disable the
 product sandbox.
 
 ## Invariants

@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Superseded before implementation. Independent Architect and QA review found that the current Keychain-only design cannot give the sandboxed app writable access to the legacy external workspace, and the planned database verification was not truly read-only. A revised plan requires an approved storage-access architecture first.
+
 **Goal:** Let the signed, sandboxed app reopen the existing encrypted workspace by performing one proven, one-time legacy-Keychain-to-Data-Protection-Keychain handoff without modifying user data.
 
-**Architecture:** A temporary same-bundle, same-Team, non-sandbox migration build reads the legacy key only in memory, proves it opens a database read-only, then adds a separate Data Protection Keychain item and proves that item opens the same database. The normal app remains sandboxed and uses Data Protection Keychain queries. The migration is unavailable in normal builds.
+**Architecture:** A future revised plan must first establish persistent writable access to the existing workspace folder through a user-selected security-scoped bookmark (recommended) or a separately approved verified-copy design. It must use a dedicated `SQLITE_OPEN_READONLY` verification API and an actual signed cross-build synthetic Keychain transfer. The migration is unavailable in normal builds.
 
 **Tech Stack:** Swift 6, Security.framework, SQLCipher, SwiftUI/Xcode, XCTest.
 
@@ -14,7 +16,7 @@
 - Production Debug/Release remains sandboxed. The migration build is temporary, compile-time-only, and never shipped.
 - No key value may enter a file, log, argument, UI, activity record, backup, export, or network request.
 - Do not update or delete a source key, destination key, workspace database, WAL/SHM sidecar, or journal.
-- Do not use the real user workspace in automated checks. The user workspace is touched only after synthetic preflight succeeds and only through the approved migration operation.
+- Do not use the real user workspace in automated checks. The user workspace is touched only after synthetic preflight succeeds and only through the separately approved revised migration operation.
 - If entitlement identity/group equivalence cannot be proved, stop before migration and record the blocker; do not weaken the production sandbox.
 
 ---

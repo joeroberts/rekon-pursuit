@@ -99,14 +99,14 @@
       "title": "Shell and opportunity navigation",
       "workType": "UX",
       "status": "blocked",
-      "releaseCondition": "An Architect- and Security/Privacy-approved, one-time legacy-Keychain migration design must be released before the stable sandboxed app can open the preserved workspace. UX-R2 and RP-R6 remain unreleased.",
-      "latestTransition": "Stable Personal-Team signing is now verified, but the signed sandbox cannot access the legacy key created by the former ad-hoc identity. The database is preserved; no migration has run.",
+      "releaseCondition": "A storage-access architecture for the preserved external workspace, then a revised Keychain handoff design, must be independently approved. UX-R2 and RP-R6 remain unreleased.",
+      "latestTransition": "Independent review found two material preflight failures: the sandbox has no writable access to the legacy external workspace, and the planned database check was not truly read-only. No migration has run; the database and legacy key are preserved.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
       },
       "needsUserAction": true,
-      "userActionDetail": "Approve the design and release of a one-time local migration that copies the legacy workspace key into the stable app-scoped Keychain only after verification; it must retain the original database and legacy key for rollback."
+      "userActionDetail": "Choose the storage model for the preserved workspace: recommended—select its existing folder once and grant Rekon Pursuit persistent read/write access via a security-scoped bookmark, with no data copy; alternative—approve a verified copy into the sandbox while retaining the source unchanged."
     },
     {
       "id": "UX-R2",
