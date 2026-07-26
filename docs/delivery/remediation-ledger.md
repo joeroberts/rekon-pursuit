@@ -99,6 +99,15 @@ ordinary sequencing.
 | TPM | **Approved — release-safe** | Task 2 alone may proceed. UX-R1 remains In progress; Task 3, UX-R2, and RP-R6 remain unreleased. |
 | Delivery Manager | **Released — Task 2 synthetic preflight only** | Run only the disposable read-only SQLCipher and signed Keychain-transfer proof in its canonical app-container synthetic root. A failure stops work; success does not authorize live migration, user-folder selection, or production Keychain access. |
 
+### UX-R1 Task 2a core safety-boundary acceptance
+
+| Role | Decision | Evidence / boundary |
+| --- | --- | --- |
+| Implementer | **Completed** | Commits `5781f1a` and `eaee28d` provide immutable/no-follow SQLCipher verification, trusted synthetic-root validation, mandatory fixture capability before any Keychain read, and add-only Data-Protection migration behavior. |
+| Code Review | **Approved** | The scoped corrective review found no P0/P1 after the trusted-root, sentinel, duplicate-conflict, failure-manifest, and partial-handle fixes. |
+| QA | **Approved** | Focused migration/verifier tests passed; rejected roots do not resolve or access adapters, Keychain reads require a validated fixture, and failure paths compare artifacts. |
+| Delivery Manager | **Accepted — Task 2a core only** | The signed three-artifact harness is explicitly deferred as Task 2b. It is not a live-handoff authorization and cannot block the remaining UX-R1 work. |
+
 ## Review record
 
 | Role | Decision | Findings that changed the plan |

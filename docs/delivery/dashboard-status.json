@@ -99,8 +99,8 @@
       "title": "Shell and opportunity navigation",
       "workType": "UX",
       "status": "in_progress",
-      "releaseCondition": "Task 2 synthetic preflight is released. Task 3 live handoff still requires fresh user-facing approval and separate Architect, Security/Privacy, TPM, QA, Code Review, and Delivery gates. UX-R2 and RP-R6 remain unreleased.",
-      "latestTransition": "Task 2 was released for a synthetic-only read-only SQLCipher and signed Keychain-transfer proof after independent Planning, Architect/Security, QA, TPM, and Delivery review. It cannot select or access a user workspace, production Keychain item, or Task 3 live handoff.",
+      "releaseCondition": "Task 2a core synthetic safety boundary is accepted. The signed synthetic harness is deferred as a separate recovery task and cannot hold up the remaining UX-R1 work. Task 3 live handoff remains separately gated. UX-R2 and RP-R6 remain unreleased.",
+      "latestTransition": "Task 2a immutable verifier and add-only migration boundary were accepted after focused tests, independent code review, and QA re-verification. No user workspace or production Keychain item was accessed; Task 2b signed harness remains deferred.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
