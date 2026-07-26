@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": null,
-  "nextEligibleTaskId": "UX-R2",
+  "activeTaskId": "UX-R2",
+  "nextEligibleTaskId": null,
   "tasks": [
     {
       "id": "RP-R0",
@@ -111,9 +111,9 @@
       "id": "UX-R2",
       "title": "Core workflow forms",
       "workType": "UX",
-      "status": "next_up",
-      "releaseCondition": "Eligible for its focused planning and release gate after UX-R1 acceptance; no implementation is released yet.",
-      "latestTransition": "UX-R1 was accepted by the product owner; UX-R2 is the next eligible remediation slice.",
+      "status": "in_progress",
+      "releaseCondition": "UX-R2-A only: opportunity Add/Overview compatibility data, validation, and focused persistence tests. Contacts, CSV redesign, and RP-R6 are unreleased.",
+      "latestTransition": "Planning, Architect, QA, TPM, and Delivery approved the brief; UX-R2-A was released as the sole implementation slice.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
