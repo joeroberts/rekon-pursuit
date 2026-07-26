@@ -78,9 +78,9 @@
     {
       "id": "RP-R5",
       "title": "User-initiated public URL check",
-      "status": "next_up",
-      "releaseCondition": "Plan and approve the bounded network/privacy contract before implementation; no network capability is released yet.",
-      "latestTransition": "Eligible after RP-R4 acceptance; not yet released for implementation.",
+      "status": "in_progress",
+      "releaseCondition": "Complete the bounded planning/privacy gate before implementation; no network capability is released yet.",
+      "latestTransition": "Planning/privacy gate opened after RP-R4 acceptance; no network implementation released.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
