@@ -1,9 +1,9 @@
 # Rekon Pursuit — MVP remediation ledger
 
 **Status:** The current evidence-backed operational state is: `RP-R0`,
-`RP-R1a`, `RP-R1b`, `RP-R2`, and `RP-R3` Accepted; `RP-R4` In progress;
-`RP-R5`–`RP-R10` Backlog; and no task Blocked. R4 is the sole active local
-reconciliation implementation task; no network capability is released.
+`RP-R1a`, `RP-R1b`, `RP-R2`, `RP-R3`, and `RP-R4` Accepted; `RP-R5` Next up;
+`RP-R6`–`RP-R10` Backlog; and no task Blocked. R5 is not released for
+implementation and no network capability is released.
 
 **Authority:** [dashboard-status.json](dashboard-status.json) is the canonical
 machine-readable operational view for the current remediation queue. This
@@ -67,8 +67,8 @@ ordinary sequencing.
 | `RP-R2` | Migration plus editable compensation, location, response state/history, and application/status dates. | `RP-R1b` | **Accepted** | Existing-workspace migration and create/edit/relaunch activity evidence, plus the corrective clock/date, real-v15-fixture, atomic-rollback, and deterministic-history evidence. | Corrective pass accepted at `c205e76` after independent review and a passed product-owner isolated smoke. Release `RP-R3` only. |
 | `RP-R3` | Core CSV workflow: map → validate → row decision → atomic import report; field-selected update-existing with no silent overwrite. | `RP-R2` | **Accepted** | Standard-header, nonstandard-header, invalid-row, duplicate, reimport, prior-report rollback, and final product-owner workflow verification. | Accepted after the product owner passed the end-to-end workflow. R4 is next up for its required plan/privacy gate; no successor implementation is released. |
 | `RP-R3a` | Resumable in-progress batch and bounded Undo Import. | `RP-R3` | Deferred by product owner | Separate recovery/history design and evidence. | Explicitly deferred to keep R3 focused; not released. |
-| `RP-R4` | Reconciliation contract and local workflow states only: safe URL validation, classifications, evidence/error, confidence, retry de-duplication, closure confirmation; no request yet. | `RP-R3` | **In progress** | Deterministic fixtures and approved local-only/privacy contract. | Planning, Architect, Security/Privacy, TPM, QA, and Delivery approved. R4 alone is released; R5 remains backlog. |
-| `RP-R5` | User-initiated public-URL check: direct GET only, bounded/no-auth/no-script request, offline/manual-review handling, retry task, no auto-close. | `RP-R4` | Backlog | Online/offline/blocked/changed/failure/explicit-closure workflow evidence. | Architect + Security/Privacy approval of `RP-R4`. |
+| `RP-R4` | Reconciliation contract and local workflow states only: safe URL validation, classifications, evidence/error, confidence, retry de-duplication, closure confirmation; no request yet. | `RP-R3` | **Accepted** | Focused migration/task-isolation/startup verification, independent Architect/QA/Code Review approval, and product-owner hands-on verification. | Accepted; no network capability was released. R5 is Next up for its own plan and privacy/network gate. |
+| `RP-R5` | User-initiated public-URL check: direct GET only, bounded/no-auth/no-script request, offline/manual-review handling, retry task, no auto-close. | `RP-R4` | Next up | Online/offline/blocked/changed/failure/explicit-closure workflow evidence. | Requires its own Architect + Security/Privacy approval before implementation; not released. |
 | `RP-R6` | Security-scoped document bookmark, open/verify/relink, hash revalidation, and relink-required after portable restore. No copy/edit/parse. | Serial after `RP-R2` | Backlog | PDF/DOCX attach, relaunch/open, moved-file relink, permission failure smoke. | Release only in serial order after its predecessor gate is accepted. |
 | `RP-R7a` | Recovery-key enrollment/verification, authenticated portable archive/export default, manifest, and restore-as-new-workspace. | Serial after `RP-R2` | Backlog | Recovery-key, portable restore, encrypted/default-export evidence. | Requires Architect + Security/Privacy approval before release. |
 | `RP-R7b` | 30-day expiry display, deleted-data disclosure, and verified retained-backup purge/rebuild. | `RP-R7a` | Backlog | Expiry and purge success/failure evidence. | Architect + Security/Privacy approval required. |
@@ -199,6 +199,16 @@ migration, and view-model startup checks pass, including a seeded local review
 task at startup. R4 remains **In progress**; this is evidence only and does
 not release R5.
 
+### RP-R4 acceptance record
+
+| Role | Decision | Evidence / boundary |
+| --- | --- | --- |
+| Architect | **Approved** | Final R4 review found the local task/migration invariants intact and no network API or network-client entitlement. |
+| QA | **Approved** | Focused startup, import/task-isolation, deletion lifecycle, and v18→v19 migration checks passed. |
+| Code Review | **Approved** | The closure, legacy-write removal, URL-validation, and task-isolation fixes are present; no material regression found. |
+| Product owner | **Accepted** | Hands-on verification completed the valid-URL, local `Closed suggested` review, and explicit closure flow. |
+| Delivery Manager | **Accepted — R4 complete** | Move R4 to Accepted and R5 to Next up only. R5 requires its own planning and privacy/network gate; no R5 implementation is released. |
+
 ### RP-R3 corrective verification record
 
 | Role | Decision | Evidence / boundary |
@@ -227,6 +237,7 @@ not release R5.
 | 2026-07-25 | `RP-R3` | **Released for implementation** | Implement only map → validate → decide → atomic import → durable report. Do not retain raw CSV/resumable drafts; do not add Undo Import, contacts, reconciliation, lifecycle, or any successor. |
 | 2026-07-25 | `RP-R3` | **Accepted — R4 Next up** | Product owner accepted the end-to-end isolated CSV workflow. Move R4 to Next up for its planning and privacy/network contract gate; do not start R4 implementation. |
 | 2026-07-25 | `RP-R4` | **Released for implementation** | Implement only the approved local reconciliation contract and workflow states. No URL fetch, network entitlement, provider adapter, scheduled check, or R5 work is released. |
+| 2026-07-26 | `RP-R4` | **Accepted — R5 Next up** | Product-owner hands-on closure verification and independent final approvals complete R4. R5 is eligible only for its planning/privacy-network gate; no R5 implementation is released. |
 
 ## Risks and decisions
 

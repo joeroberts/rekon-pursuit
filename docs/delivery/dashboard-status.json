@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "RP-R4",
-  "nextEligibleTaskId": "RP-R4",
+  "activeTaskId": "RP-R5",
+  "nextEligibleTaskId": "RP-R5",
   "tasks": [
     {
       "id": "RP-R0",
@@ -66,9 +66,9 @@
     {
       "id": "RP-R4",
       "title": "Reconciliation contract and local states",
-      "status": "in_progress",
-      "releaseCondition": "R4 is the sole active task; keep R5 and every network capability unreleased.",
-      "latestTransition": "Released after independent planning, architecture, privacy, TPM, QA, and delivery gates approved the local-only contract.",
+      "status": "accepted",
+      "releaseCondition": "Accepted local-only reconciliation workflow; no online checking was released.",
+      "latestTransition": "Accepted after focused corrective verification, independent architecture/QA/code review, and product-owner hands-on closure verification.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
@@ -78,9 +78,9 @@
     {
       "id": "RP-R5",
       "title": "User-initiated public URL check",
-      "status": "backlog",
-      "releaseCondition": "Release after RP-R4 and privacy/network approval.",
-      "latestTransition": "Planned remediation work.",
+      "status": "next_up",
+      "releaseCondition": "Plan and approve the bounded network/privacy contract before implementation; no network capability is released yet.",
+      "latestTransition": "Eligible after RP-R4 acceptance; not yet released for implementation.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
