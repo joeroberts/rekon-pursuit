@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "RP-R7b",
-  "nextEligibleTaskId": null,
+  "activeTaskId": null,
+  "nextEligibleTaskId": "RP-R8",
   "tasks": [
     {
       "id": "RP-R0",
@@ -254,9 +254,9 @@
       "id": "RP-R7b",
       "title": "Automatic portable archive expiry (R7b-1)",
       "workType": "Data lifecycle",
-      "status": "in_progress",
-      "releaseCondition": "R7b-1 only is released after Planning, Architect/Security, QA, TPM, and Delivery approval; R7b-2 purge/rebuild remains unreleased.",
-      "latestTransition": "R7b-1 automatic expiry was released after the independent plan gate; R7b-2 remains out of scope.",
+      "status": "accepted",
+      "releaseCondition": "Accepted R7b-1 automatic expiry only; R7b-2 purge/rebuild remains unreleased.",
+      "latestTransition": "Accepted after focused lifecycle safety verification, independent code/QA/security re-review, and product-owner protected-export verification.",
       "evidence": {
         "label": "R7b-1 task brief",
         "href": "../task-briefs/RP-R7b-1-automatic-archive-expiry.md"
@@ -267,9 +267,9 @@
       "id": "RP-R8",
       "title": "Searchable local AI ledger",
       "workType": "Observability",
-      "status": "backlog",
-      "releaseCondition": "Release only after the R7a/R7b lifecycle sequence is accepted; its former R6-only dependency was superseded by the approved serial delivery order.",
-      "latestTransition": "Backlog: R8 is not eligible while portable restore/export and lifecycle removal remain unreleased.",
+      "status": "next_up",
+      "releaseCondition": "Eligible after the accepted R7a/R7b lifecycle sequence; requires its own approved plan and release gate before implementation.",
+      "latestTransition": "Moved to Next up after R7b-1 acceptance; no R8 implementation is released.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"

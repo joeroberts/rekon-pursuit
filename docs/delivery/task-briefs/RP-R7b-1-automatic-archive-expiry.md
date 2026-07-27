@@ -19,6 +19,7 @@ This is R7b-1 only. It does not purge deleted records from retained archives, re
 - Focused `PortableArchiveTests` cover managed-archive creation, the exact expiry boundary while a future archive remains untouched, durable retry, external-archive no-delete/manual-removal behavior, missing/unsafe/mismatch paths, redaction, and no active-workspace mutation.
 - Relevant signed Debug build succeeds.
 - Independent Architect/Security, QA, code review, TPM, and Delivery Manager approve completion.
+- Product owner accepted the final Debug-app protected-export verification on 2026-07-27. The later export-success confirmation window is deferred as `UX-D10` and does not reopen the accepted reliability work.
 
 ## Material risk and handling
 

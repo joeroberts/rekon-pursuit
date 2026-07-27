@@ -5,9 +5,10 @@
 `UX-R2` (including sub-slices A, B, and C) and `RP-R6` are Accepted.
 `RP-R7a-1`, `RP-R7a-2`, `RP-R7a-3`, `RP-R7a-3a`, and `RP-R7a-3b` are
 Accepted. The wider `RP-R7a` recovery milestone, including its
-`RP-R7a-4` encrypted-default export task, is Accepted. `RP-R7b` is **Next
-up for planning and high-risk gates only**; no R7b implementation is
-released. `RP-R8`–`RP-R10` remain Backlog.
+`RP-R7a-4` encrypted-default export task, and `RP-R7b-1` automatic portable
+archive expiry are Accepted. `RP-R7b-2` retained-data purge/rebuild remains
+unreleased. `RP-R8` is **Next up** for its separate plan and release gate;
+`RP-R9`–`RP-R10` remain Backlog.
 
 **Authority:** [dashboard-status.json](dashboard-status.json) is the canonical
 machine-readable operational view for the current remediation queue. This
@@ -81,7 +82,7 @@ ordinary sequencing.
 | `RP-R7a-3a` | Non-UI restore worker foundation: authenticated package verification, inactive candidate lifecycle, exact import, key/root cleanup, and durable registry. | `RP-R7a-2`, in-progress `RP-R7a-3` parent | **Accepted** | Worker/boundary, candidate bootstrap/import/checkpoint/reopen, clean-Mac confirmation contract, durable registry, redaction, source-invariant, and failure-cleanup evidence. | Accepted after independent Architecture/Security, QA, and Code Review approved the focused correction. It excludes UI, activation, switch/open, export, purge, and expiry. |
 | `RP-R7a-3b` | Restore UI adapter, recovery-key entry, confirmation/progress surfaces, and owner smoke. | `RP-R7a-3a` accepted plus its own plan and gates | **Accepted** | Its approved plan, focused UI/core boundary evidence, independent implementation review, and hands-on smoke. | Product owner verified both a restored inactive-ready candidate and cancellation at identity confirmation. No candidate open/activation/switch, archive-creation changes, export, purge, expiry, deletion, network, or legacy route was released. |
 | `RP-R7a-4` | One encrypted-default `.rekonexport` logical export of the fixed Tracker workspace data category, protected with operation-time recovery-key re-entry and final review. | `RP-R7a-3` accepted | **Accepted** | Versioned container, domain-separated encryption, final-review binding, destination safety, redaction, and product-owner smoke evidence. | Hardened destination binding (`openat`/no-follow parent identity), focused 5-test suite, signed build, independent Architecture/Security, QA, and Code Review approvals, and product-owner smoke completed. No unencrypted/CSV, archive/restore, purge/expiry, deletion, network, AI, or dependency expansion was released. |
-| `RP-R7b` | **R7b-1 only:** automatic portable archive expiry/removal at workspace-open or inactive→active service opportunities. R7b-2 retained-data purge/rebuild remains unreleased. | Full `RP-R7a` restore/export sequence plus approved R7b-1 plan and gates | **In progress — R7b-1 only** | Exact-boundary/future-archive, relaunch retry, safe-target, mismatch/missing, redaction, and no-active-workspace-mutation evidence. | Planning, Architect/Security, QA, TPM, and Delivery approved the R7b-1 plan. Release is limited to automatic expiry; no purge/rebuild, key re-entry, archive rewrite, daemon, or active-data lifecycle change. |
+| `RP-R7b` | **R7b-1 only:** automatic portable archive expiry/removal at workspace-open or inactive→active service opportunities. R7b-2 retained-data purge/rebuild remains unreleased. | Full `RP-R7a` restore/export sequence plus approved R7b-1 plan and gates | **Accepted — R7b-1 only** | Exact-boundary/future-archive, relaunch retry, safe-target, mismatch/missing, redaction, no-active-workspace-mutation, and protected-export regression evidence. | Product owner accepted the opened Debug-app protected-export check. Independent code, QA, and security re-review cleared the corrective path/migration work. R7b-2 remains unreleased; `RP-R8` is the sole Next-up task. |
 
 ### RP-R7b-1 plan and release gate
 
@@ -92,7 +93,9 @@ ordinary sequencing.
 | QA | **Approved after P1 remediation** | Focused evidence now covers a future archive remaining untouched, retry through a recreated store, no active-workspace mutation, missing/unsafe/mismatch paths, and redaction. |
 | TPM | **Approved after P1 remediation** | The ledger status is reconciled and the only in-run trigger is inactive→active while a workspace is open; no timer or daemon is introduced. |
 | Delivery Manager | **Released — R7b-1 only** | Dashboard and ledger move to In progress for automatic expiry only. R7b-2 purge/rebuild remains unreleased and no successor is eligible. |
-| `RP-R8` | Empty read-only local AI ledger with time, feature, opportunity, route, model, completion, and cost filters. No AI/network/metrics execution. | Full `RP-R7a` and `RP-R7b` lifecycle sequence | Backlog | Every filter works at zero entries; no entry/network is produced. | The former R6-only dependency is superseded by the approved serial order: R8 is not eligible while restore/export and lifecycle removal are unreleased. |
+| Product owner | **Accepted — R7b-1 only** | Verified the protected-export workflow in the opened Debug app after the final export-verification fix. The export-success confirmation window is recorded separately as deferred `UX-D10`. |
+| Delivery Manager | **Accepted — R7b-1 only** | Dashboard and ledger move R7b-1 to Accepted and `RP-R8` to Next up. R7b-2 purge/rebuild remains unreleased; no R8 implementation is released. |
+| `RP-R8` | Empty read-only local AI ledger with time, feature, opportunity, route, model, completion, and cost filters. No AI/network/metrics execution. | Full `RP-R7a` and `RP-R7b` lifecycle sequence | Next up | Every filter works at zero entries; no entry/network is produced. | Eligible after R7b-1 acceptance, but implementation requires its own plan and release gate. |
 | `RP-R9` | Settings exposes real recovery, expiry, deletion, export, document-reference, and ledger state; no fake integration controls. | `RP-R6`, `RP-R7b`, `RP-R8` | Backlog | Settings state matches stored state across relaunch. | Pending dependencies. |
 | `RP-R10` | Clean-state, hands-on acceptance of all remediation tasks and candidate-package status reconciliation. | `RP-R1a`–`RP-R9`, `UX-R1`, `UX-R2` | Backlog | Full user workflow evidence and independent milestone reviews. | Pending every preceding task. |
 
