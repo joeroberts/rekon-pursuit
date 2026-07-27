@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "RP-R7a-4",
-  "nextEligibleTaskId": null,
+  "activeTaskId": null,
+  "nextEligibleTaskId": "RP-R7b",
   "tasks": [
     {
       "id": "RP-R0",
@@ -241,9 +241,9 @@
       "id": "RP-R7a-4",
       "title": "Encrypted-default logical export",
       "workType": "Data lifecycle",
-      "status": "in_progress",
-      "releaseCondition": "Released for one protected logical export only. Acceptance requires independent code/QA/Architecture-Security review and product-owner smoke; no successor is released.",
-      "latestTransition": "Planning, Architecture/Security, TPM, QA, and Delivery approved the frozen encrypted-only contract; implementation is released.",
+      "status": "accepted",
+      "releaseCondition": "Accepted encrypted-default logical export; the R7a recovery/archive/restore/export sequence is complete.",
+      "latestTransition": "Accepted after hardened destination-binding corrections, independent Architecture/Security, QA, and code-review approval, focused verification, signed build, and product-owner smoke.",
       "evidence": {
         "label": "R7a-4 task brief",
         "href": "../task-briefs/RP-R7a-4-encrypted-default-logical-export.md"
@@ -254,9 +254,9 @@
       "id": "RP-R7b",
       "title": "Backup expiry and retained-data purge",
       "workType": "Data lifecycle",
-      "status": "backlog",
-      "releaseCondition": "Release only after the full R7a restore/export sequence is accepted and its own high-risk lifecycle approval.",
-      "latestTransition": "Planned remediation work.",
+      "status": "next_up",
+      "releaseCondition": "Eligible for planning and its own high-risk lifecycle gates; no implementation is released.",
+      "latestTransition": "Became the sole eligible successor after the full R7a recovery/archive/restore/export sequence was accepted.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
