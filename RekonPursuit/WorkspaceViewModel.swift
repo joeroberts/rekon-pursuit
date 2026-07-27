@@ -1223,9 +1223,9 @@ final class WorkspaceViewModel: ObservableObject {
                 guard let self, self.store === store else { return }
                 self.protectedExportReview = review
                 self.statusMessage = "Review the protected export before confirming."
-            } catch let error as LocalizedError {
-                self?.statusMessage = error.errorDescription ?? "The protected export could not be prepared."
-            } catch { self?.statusMessage = "The protected export could not be prepared." }
+            } catch {
+                self?.statusMessage = Self.protectedExportMessage(for: error, fallback: "The protected export could not be prepared.")
+            }
         }
     }
 
@@ -1239,13 +1239,19 @@ final class WorkspaceViewModel: ObservableObject {
                 guard let self, self.store === store else { return }
                 self.protectedExportReview = nil
                 self.statusMessage = "Protected export verified and saved."
-            } catch let error as LocalizedError {
-                self?.statusMessage = error.errorDescription ?? "The protected export could not be created."
-            } catch { self?.statusMessage = "The protected export could not be created." }
+            } catch {
+                self?.statusMessage = Self.protectedExportMessage(for: error, fallback: "The protected export could not be created.")
+            }
         }
     }
 
     func cancelProtectedExport() { protectedExportReview = nil }
+
+    private static func protectedExportMessage(for error: Error, fallback: String) -> String {
+        if let controlled = error as? ProtectedExportWorkerError { return controlled.errorDescription ?? fallback }
+        if let controlled = error as? ProtectedExportError { return controlled.errorDescription ?? fallback }
+        return fallback
+    }
 
     func choosePortableArchiveForRestore() {
         guard !isCreatingPortableArchive, !isRestoringPortableArchive else { return }

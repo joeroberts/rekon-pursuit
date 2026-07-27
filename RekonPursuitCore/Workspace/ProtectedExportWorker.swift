@@ -5,9 +5,15 @@ import Foundation
 nonisolated struct ProtectedExportReview: Equatable, Sendable {
     let destinationURL: URL
     let sourceRevision: Int64
+    let parentIdentity: ProtectedExportParentIdentity
     let confirmationFingerprint: String
 
     var displayFilename: String { destinationURL.lastPathComponent }
+}
+
+nonisolated struct ProtectedExportParentIdentity: Equatable, Sendable {
+    let device: UInt64
+    let inode: UInt64
 }
 
 nonisolated struct ProtectedExportRequest: Sendable {
@@ -20,8 +26,8 @@ nonisolated struct ProtectedExportRequest: Sendable {
     let correlationID: String
 }
 
-nonisolated enum ProtectedExportWorkerError: LocalizedError, Sendable {
-    case invalidDestination, destinationExists, destinationChanged, sourceChanged, enrollmentRequired, invalidRecoveryKey, verificationFailed
+nonisolated enum ProtectedExportWorkerError: LocalizedError, Sendable, Equatable {
+    case invalidDestination, destinationExists, destinationChanged, sourceChanged, enrollmentRequired, invalidRecoveryKey, verificationFailed, outputMayRemainAfterFailure
 
     var errorDescription: String? {
         switch self {
@@ -32,6 +38,7 @@ nonisolated enum ProtectedExportWorkerError: LocalizedError, Sendable {
         case .enrollmentRequired: "Set up portable recovery before creating a protected export."
         case .invalidRecoveryKey: "The recovery key does not match this workspace."
         case .verificationFailed: "The protected export could not be verified. No success activity was recorded."
+        case .outputMayRemainAfterFailure: "Final export writing or verification failed. The selected file may remain; treat it as unusable and remove it yourself."
         }
     }
 }
@@ -44,7 +51,9 @@ actor ProtectedExportWorker {
     }
 
     func review(destinationURL: URL, recoveryKey: RecoveryKey) throws -> ProtectedExportReview {
-        try validateDestination(destinationURL)
+        let parent = try Self.openParent(for: destinationURL)
+        defer { close(parent.descriptor) }
+        guard !Self.destinationExists(parent.descriptor, filename: parent.filename) else { throw ProtectedExportWorkerError.destinationExists }
         let database = try EncryptedDatabase.open(url: configuration.url, key: configuration.key, createIfMissing: false)
         defer { try? database.close() }
         let revision = try database.deferredReadTransaction {
@@ -54,15 +63,19 @@ actor ProtectedExportWorker {
         return ProtectedExportReview(
             destinationURL: destinationURL,
             sourceRevision: revision,
-            confirmationFingerprint: confirmationFingerprint(destinationURL: destinationURL, revision: revision)
+            parentIdentity: parent.identity,
+            confirmationFingerprint: Self.confirmationFingerprint(filename: parent.filename, parentIdentity: parent.identity, revision: revision)
         )
     }
 
     func create(_ request: ProtectedExportRequest) throws -> ProtectedExportReceipt {
-        try validateDestination(request.review.destinationURL)
-        guard request.review.confirmationFingerprint == confirmationFingerprint(destinationURL: request.review.destinationURL, revision: request.review.sourceRevision) else {
+        let parent = try Self.openParent(for: request.review.destinationURL)
+        defer { close(parent.descriptor) }
+        guard parent.identity == request.review.parentIdentity,
+              request.review.confirmationFingerprint == Self.confirmationFingerprint(filename: parent.filename, parentIdentity: parent.identity, revision: request.review.sourceRevision) else {
             throw ProtectedExportWorkerError.destinationChanged
         }
+        guard !Self.destinationExists(parent.descriptor, filename: parent.filename) else { throw ProtectedExportWorkerError.destinationExists }
         let accessed = request.review.destinationURL.startAccessingSecurityScopedResource()
         defer { if accessed { request.review.destinationURL.stopAccessingSecurityScopedResource() } }
 
@@ -79,12 +92,18 @@ actor ProtectedExportWorker {
             snapshot: snapshot, sourceRevision: request.review.sourceRevision, recoveryKey: request.recoveryKey,
             exportID: request.exportID, createdAt: request.createdAt, to: temporaryURL
         )
-        try copyExclusively(from: temporaryURL, to: request.review.destinationURL)
+        let saved: Data
         do {
-            let saved = try ProtectedExportService.verify(data: Data(contentsOf: request.review.destinationURL), recoveryKey: request.recoveryKey)
-            guard saved == receipt else { throw ProtectedExportWorkerError.verificationFailed }
+            saved = try Self.copyExclusivelyAndReadBack(from: temporaryURL, parent: parent)
         } catch {
-            throw ProtectedExportWorkerError.verificationFailed
+            if let protectedError = error as? ProtectedExportWorkerError { throw protectedError }
+            throw ProtectedExportWorkerError.outputMayRemainAfterFailure
+        }
+        do {
+            let verified = try ProtectedExportService.verify(data: saved, recoveryKey: request.recoveryKey)
+            guard verified == receipt else { throw ProtectedExportWorkerError.verificationFailed }
+        } catch {
+            throw ProtectedExportWorkerError.outputMayRemainAfterFailure
         }
         try database.transaction {
             try database.execute(
@@ -110,28 +129,65 @@ actor ProtectedExportWorker {
         return revision
     }
 
-    private func validateDestination(_ url: URL) throws {
-        guard url.pathExtension.lowercased() == "rekonexport", !url.lastPathComponent.isEmpty else { throw ProtectedExportWorkerError.invalidDestination }
-        guard !FileManager.default.fileExists(atPath: url.path) else { throw ProtectedExportWorkerError.destinationExists }
-    }
-
-    private func confirmationFingerprint(destinationURL: URL, revision: Int64) -> String {
-        let parent = destinationURL.deletingLastPathComponent()
+    private static func openParent(for destination: URL) throws -> (descriptor: Int32, filename: String, identity: ProtectedExportParentIdentity) {
+        let filename = destination.lastPathComponent.precomposedStringWithCanonicalMapping
+        guard destination.pathExtension.lowercased() == "rekonexport", !filename.isEmpty, filename != ".", filename != "..", !filename.contains("/") else { throw ProtectedExportWorkerError.invalidDestination }
+        let descriptor = open(destination.deletingLastPathComponent().path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+        guard descriptor >= 0 else { throw ProtectedExportWorkerError.invalidDestination }
         var metadata = stat()
-        let identity: String
-        if lstat(parent.path, &metadata) == 0 { identity = "\(metadata.st_dev):\(metadata.st_ino)" } else { identity = "unavailable" }
-        let message = "RekonPursuit/export/review/v1\\0\(identity)\\0\(destinationURL.lastPathComponent.precomposedStringWithCanonicalMapping)\\0\(revision)"
-        return SHA256.hash(data: Data(message.utf8)).map { String(format: "%02x", $0) }.joined()
+        guard fstat(descriptor, &metadata) == 0 else { close(descriptor); throw ProtectedExportWorkerError.invalidDestination }
+        return (descriptor, filename, .init(device: UInt64(metadata.st_dev), inode: UInt64(metadata.st_ino)))
     }
 
-    private func copyExclusively(from source: URL, to destination: URL) throws {
-        let descriptor = open(destination.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, S_IRUSR | S_IWUSR)
-        guard descriptor >= 0 else { throw errno == EEXIST ? ProtectedExportWorkerError.destinationExists : ProtectedExportWorkerError.invalidDestination }
-        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
-        defer { try? handle.close() }
-        let sourceHandle = try FileHandle(forReadingFrom: source)
-        defer { try? sourceHandle.close() }
-        while let chunk = try sourceHandle.read(upToCount: 1_048_576), !chunk.isEmpty { try handle.write(contentsOf: chunk) }
-        try handle.synchronize()
+    private static func destinationExists(_ parentFD: Int32, filename: String) -> Bool {
+        var metadata = stat()
+        let result = fstatat(parentFD, filename, &metadata, AT_SYMLINK_NOFOLLOW)
+        return result == 0 || errno != ENOENT
     }
+
+    private static func confirmationFingerprint(filename: String, parentIdentity: ProtectedExportParentIdentity, revision: Int64) -> String {
+        let filenameBytes = Data(filename.utf8)
+        var bytes = Data("RekonPursuit/export/review/v1\0".utf8)
+        append(UInt16(1), to: &bytes) // format version
+        bytes.append(1) // export type: logical projection
+        bytes.append(1) // category: tracker workspace data
+        append(UInt32(filenameBytes.count), to: &bytes)
+        bytes.append(filenameBytes)
+        append(parentIdentity.device, to: &bytes)
+        append(parentIdentity.inode, to: &bytes)
+        append(UInt64(bitPattern: revision), to: &bytes)
+        return SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func copyExclusivelyAndReadBack(from source: URL, parent: (descriptor: Int32, filename: String, identity: ProtectedExportParentIdentity)) throws -> Data {
+        var created = false
+        var outputFD: Int32 = -1
+        defer { if outputFD >= 0 { close(outputFD) } }
+        do {
+            guard currentIdentity(parent.descriptor) == parent.identity else { throw ProtectedExportWorkerError.destinationChanged }
+            outputFD = openat(parent.descriptor, parent.filename, O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW, S_IRUSR | S_IWUSR)
+            guard outputFD >= 0 else { throw errno == EEXIST ? ProtectedExportWorkerError.destinationExists : ProtectedExportWorkerError.invalidDestination }
+            created = true
+            var outputMetadata = stat()
+            guard fstat(outputFD, &outputMetadata) == 0 else { throw ProtectedExportWorkerError.outputMayRemainAfterFailure }
+            let outputIdentity = ProtectedExportParentIdentity(device: UInt64(outputMetadata.st_dev), inode: UInt64(outputMetadata.st_ino))
+            let sourceHandle = try FileHandle(forReadingFrom: source)
+            defer { try? sourceHandle.close() }
+            while let chunk = try sourceHandle.read(upToCount: 1_048_576), !chunk.isEmpty { try writeAll(chunk, to: outputFD) }
+            guard fsync(outputFD) == 0, currentIdentity(parent.descriptor) == parent.identity else { throw ProtectedExportWorkerError.outputMayRemainAfterFailure }
+            var verifiedMetadata = stat()
+            guard fstat(outputFD, &verifiedMetadata) == 0,
+                  outputIdentity == ProtectedExportParentIdentity(device: UInt64(verifiedMetadata.st_dev), inode: UInt64(verifiedMetadata.st_ino)),
+                  lseek(outputFD, 0, SEEK_SET) >= 0 else { throw ProtectedExportWorkerError.outputMayRemainAfterFailure }
+            return try readAll(from: outputFD)
+        } catch {
+            if created { throw ProtectedExportWorkerError.outputMayRemainAfterFailure }
+            throw error
+        }
+    }
+
+    private static func currentIdentity(_ descriptor: Int32) -> ProtectedExportParentIdentity? { var metadata = stat(); guard fstat(descriptor, &metadata) == 0 else { return nil }; return .init(device: UInt64(metadata.st_dev), inode: UInt64(metadata.st_ino)) }
+    private static func writeAll(_ data: Data, to descriptor: Int32) throws { var offset = 0; try data.withUnsafeBytes { bytes in while offset < data.count { let written = Darwin.write(descriptor, bytes.baseAddress!.advanced(by: offset), data.count - offset); guard written > 0 else { throw ProtectedExportWorkerError.outputMayRemainAfterFailure }; offset += written } } }
+    private static func readAll(from descriptor: Int32) throws -> Data { var data = Data(); var buffer = [UInt8](repeating: 0, count: 1_048_576); while true { let count = Darwin.read(descriptor, &buffer, buffer.count); guard count >= 0 else { throw ProtectedExportWorkerError.outputMayRemainAfterFailure }; if count == 0 { return data }; data.append(buffer, count: count) } }
+    private static func append<T: FixedWidthInteger>(_ value: T, to data: inout Data) { var encoded = value.bigEndian; withUnsafeBytes(of: &encoded) { data.append(contentsOf: $0) } }
 }

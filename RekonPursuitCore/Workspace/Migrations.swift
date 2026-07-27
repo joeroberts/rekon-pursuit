@@ -453,7 +453,9 @@ nonisolated enum WorkspaceMigrations {
 
     private static func exportRevisionTriggerSQL(table: String, operation: String) -> String {
         let trigger = "tracker_export_revision_\(table)_\(operation.lowercased())"
-        return "CREATE TRIGGER \(trigger) AFTER \(operation) ON \(table) BEGIN UPDATE tracker_export_revision SET revision = revision + 1 WHERE id = 1; END"
+        let activityReference = operation == "DELETE" ? "OLD.kind" : "NEW.kind"
+        let condition = table == "activity_events" ? " WHEN \(activityReference) <> 'protected_export_verified'" : ""
+        return "CREATE TRIGGER \(trigger) AFTER \(operation) ON \(table)\(condition) BEGIN UPDATE tracker_export_revision SET revision = CASE WHEN revision >= 9223372036854775807 THEN RAISE(ABORT, 'tracker export revision overflow') ELSE revision + 1 END WHERE id = 1; END"
     }
 
     private static func checksum(for manifest: String) -> String {
