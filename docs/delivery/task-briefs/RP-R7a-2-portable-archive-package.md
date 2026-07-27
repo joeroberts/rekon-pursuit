@@ -146,14 +146,19 @@ format has no optional fields in v1.
    `document_references.bookmark_data` bytes are excluded. Included document
    references encode the existing metadata with `bookmark_data` absent and
    availability fixed to `relink_required`.
-7. `WorkspaceStore` captures this projection while holding its serialized
-   store lock and within a new SQLite deferred read transaction that spans all
-   projection queries. It must roll back/close that read transaction before
-   file writing begins. No raw database file, WAL, or mutable cursor may escape
-   that boundary. The implementation must add a table/column registry whose
-   ordered column list is covered by one deterministic snapshot fixture; use
-   of `SELECT *`, dictionary iteration, `JSONEncoder`, or locale-sensitive
-   formatting is prohibited.
+7. A dedicated `PortableArchiveWorker` actor captures this projection through
+   its own SQLCipher connection opened with `createIfMissing: false`. It holds
+   one SQLite deferred read transaction across all projection queries, then
+   rolls back/closes that read transaction before file writing begins. The
+   actor receives only Sendable request values and private database URL/key
+   copies; it serializes archive jobs. `WorkspaceStore` remains MainActor
+   isolated and delegates asynchronously, so snapshot, cryptography, file
+   write/read-back, and catalogue promotion never occupy the UI thread. No raw
+   database file, WAL, key, or mutable cursor may escape this boundary. The
+   implementation must add a table/column registry whose ordered column list
+   is covered by one deterministic snapshot fixture; use of `SELECT *`,
+   dictionary iteration, `JSONEncoder`, or locale-sensitive formatting is
+   prohibited.
 8. The selected destination must be accessed through a user-granted
    read/write security scope only while creating/verifying the archive. The
    temporary sibling has a generated name and is opened with exclusive-create
