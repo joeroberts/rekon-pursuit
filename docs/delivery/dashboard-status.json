@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": null,
-  "nextEligibleTaskId": "RP-R6",
+  "activeTaskId": "RP-R6",
+  "nextEligibleTaskId": null,
   "tasks": [
     {
       "id": "RP-R0",
@@ -163,12 +163,12 @@
       "id": "RP-R6",
       "title": "Durable document references",
       "workType": "Data",
-      "status": "next_up",
-      "releaseCondition": "UX-R2 is accepted. Requires its approved dependency-safe brief and release gate before implementation.",
-      "latestTransition": "Eligible after UX-R2 product-owner acceptance; no implementation is released yet.",
+      "status": "in_progress",
+      "releaseCondition": "UX-R2 is accepted; the R6 pre-implementation gate approved the brief, ADR-004, and compatibility reconciliation. Only R6 is released.",
+      "latestTransition": "Released after independent Planning, Architect, TPM, QA, Delivery, and Security/Privacy approval; implementation has not yet begun.",
       "evidence": {
-        "label": "Remediation ledger",
-        "href": "../remediation-ledger.md"
+        "label": "R6 task brief",
+        "href": "../task-briefs/RP-R6-durable-document-references.md"
       },
       "needsUserAction": false
     },

@@ -2,8 +2,8 @@
 
 **Status:** The current evidence-backed operational state is: `RP-R0`,
 `RP-R1a`, `RP-R1b`, `RP-R2`, `RP-R3`, `RP-R4`, `RP-R5`, `UX-R1`, and
-`UX-R2` (including sub-slices A, B, and C) are Accepted. `RP-R6` is Next up
-but unreleased; `RP-R7a`–`RP-R10` remain Backlog.
+`UX-R2` (including sub-slices A, B, and C) are Accepted. `RP-R6` is In
+progress; `RP-R7a`–`RP-R10` remain Backlog.
 
 **Authority:** [dashboard-status.json](dashboard-status.json) is the canonical
 machine-readable operational view for the current remediation queue. This
@@ -71,12 +71,23 @@ ordinary sequencing.
 | `RP-R5` | User-initiated public-URL check: direct GET only, bounded/no-auth/no-script request, offline/manual-review handling, retry task, no auto-close. | `RP-R4` | **Accepted** | Focused correction verification, independent Code Review/QA/Architect approvals, and product-owner hands-on verification. | Accepted after the corrected implementation proved peer-bound, bounded, no-redirect public URL checking with manual closure only. The later product-owner UX-R1 → UX-R2 → R6 sequence now governs successor release. |
 | `UX-R1` | Shell and opportunity navigation: native icon/compact sidebar emblem, first-run onboarding, Home default with Needs Attention as its first section, Pipeline-owned add/import entry points, consistent Rekon tokens, responsive empty states, scrollable Pipeline → dedicated opportunity overview, Activity & history and Reconcile posting sub-screens, and a compact overview document area. | `RP-R5` | **Accepted** | Product-owner verification of the shell/navigation route behavior and separate local-workspace correction. | Accepted after the product owner verified a fresh build: Board Back restoration and safe History/Reconcile fallback work. The deferred live-handoff work remains separate and does not block product remediation. |
 | `UX-R2` | Pipeline-owned core workflow forms: Add Opportunity layout/validation/structured action details and creation-date default; contact validation/employer association/expandable text; and staged CSV mapping/review/completion redesign. | `UX-R1` | **Accepted** | Product-owner hands-on verification of all three serial workflow slices. | Planning, Architect, QA, TPM, and Delivery approved the brief. Product-owner acceptance closed A, B, and C; this completes UX-R2. RP-R6 is now eligible but not released. |
-| `RP-R6` | Security-scoped document bookmark, open/verify/relink, hash revalidation, and relink-required after portable restore. No copy/edit/parse. | `UX-R2` | Next up | PDF/DOCX attach, relaunch/open, moved-file relink, permission failure smoke. | Eligible after UX-R2 acceptance. It requires its own dependency-safe brief and release gate before implementation. |
+| `RP-R6` | Security-scoped document bookmark, open/verify/relink, hash revalidation, and relink-required after encrypted-backup restore. No copy/edit/parse. | `UX-R2` | **In progress** | PDF/DOCX attach, relaunch/open, moved-file relink, permission failure smoke. | Planning, Architect, TPM, QA, Delivery, and Security/Privacy approved the R6 brief, ADR-004, and compatibility reconciliation. Only R6 implementation is released. |
 | `RP-R7a` | Recovery-key enrollment/verification, authenticated portable archive/export default, manifest, and restore-as-new-workspace. | `RP-R6` | Backlog | Recovery-key, portable restore, encrypted/default-export evidence. | Requires Architect + Security/Privacy approval before release. |
 | `RP-R7b` | 30-day expiry display, deleted-data disclosure, and verified retained-backup purge/rebuild. | `RP-R7a` | Backlog | Expiry and purge success/failure evidence. | Architect + Security/Privacy approval required. |
 | `RP-R8` | Empty read-only local AI ledger with time, feature, opportunity, route, model, completion, and cost filters. No AI/network/metrics execution. | `RP-R6` | Backlog | Every filter works at zero entries; no entry/network is produced. | Release only in serial order after its predecessor gate is accepted. |
 | `RP-R9` | Settings exposes real recovery, expiry, deletion, export, document-reference, and ledger state; no fake integration controls. | `RP-R6`, `RP-R7b`, `RP-R8` | Backlog | Settings state matches stored state across relaunch. | Pending dependencies. |
 | `RP-R10` | Clean-state, hands-on acceptance of all remediation tasks and candidate-package status reconciliation. | `RP-R1a`–`RP-R9`, `UX-R1`, `UX-R2` | Backlog | Full user workflow evidence and independent milestone reviews. | Pending every preceding task. |
+
+### RP-R6 pre-implementation gate and release
+
+| Role | Decision | Evidence / boundary |
+| --- | --- | --- |
+| Planning | **Approved** | The R6 brief and plan support one or more references, place the release gate before Task 1, and keep R7a/R8/R9 unreleased. |
+| TPM | **Approved — release-safe** | UX-R2 is accepted and R6 is the sole dependency-safe successor. No recovery-key, export, AI-ledger, or Settings work is released. |
+| Architect | **Approved** | ADR-004 defines opaque bookmarks, exact-match relink, staged-restore scrub/checkpoint before swap, and reference/deletion revocation. |
+| Security / Privacy | **Approved** | The matrix and ADR retain the existing entitlement boundary without expansion; R6 is read-only by operation policy, redacts paths/bookmarks, and requires hostile-file and lease evidence. |
+| QA | **Approved** | The plan requires migration rollback, deterministic size/type/symlink fixtures, atomic relink preservation, fresh-service persistence, restore failure injection, and target membership. |
+| Delivery Manager | **Released — R6 only** | All six preconditions are recorded. Move R6 from Next up to In progress; implementation is limited to the approved bookmark/open/relink/removal and restore-revocation boundary. |
 
 ### UX-R1 external-workspace bookmark Task 1 review and release
 
