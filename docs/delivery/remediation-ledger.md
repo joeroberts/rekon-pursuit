@@ -198,6 +198,15 @@ ordinary sequencing.
 | TPM | **Approved — release-safe** | R7a-3a is accepted and R7a-3b is the only dependency-safe successor. |
 | Delivery Manager | **Released — R7a-3b only** | Set R7a-3b as the sole active task. Do not release candidate open/activation/switch, archive-creation changes, export, purge, expiry, deletion, network, or legacy route work. |
 
+### RP-R7a-3b implementation review — ready for product-owner smoke
+
+| Role | Decision | Evidence / boundary |
+| --- | --- | --- |
+| Code Reviewer | **Approved** | Visible redacted failure state now covers worker and malformed-key failures; retry/dismiss clears transient state. Direct scoped-file flow, all-path confirmation, and exclusions remain intact. |
+| QA | **Approved** | Focused signed `WorkspaceViewModelTests` plus `PortableArchiveTests`: 99 tests, 0 failures. Coverage includes scope-start failure/no worker, cancellation during verify/restore with exactly-once release, disabled controls, off-main worker, and matching-catalogue confirmation. |
+| Architect / Security | **Approved** | The worker reauthenticates and binds the exact ID/time/fingerprint confirmation before reservation for every restore. The direct selected URL is not staged, copied, bookmarked, or persisted; current workspace remains unchanged and candidate stays inactive. |
+| Delivery Manager | **Ready for product-owner smoke** | Build and independent checks are complete. R7a-3b remains In progress until the owner verifies restore identity confirmation, inactive-ready result, current-workspace preservation, and cancellation behavior. |
+
 ### UX-R1 external-workspace bookmark Task 1 review and release
 
 | Role | Decision | Evidence / required correction |

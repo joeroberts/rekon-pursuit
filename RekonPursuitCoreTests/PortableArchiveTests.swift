@@ -119,7 +119,7 @@ final class PortableArchiveTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: candidates.path))
     }
 
-    func testMatchingLocalCatalogueRestoresWithoutCleanMacConfirmation() async throws {
+    func testMatchingLocalCatalogueStillRequiresExactConfirmationBeforeReservation() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-same-mac-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -148,7 +148,23 @@ final class PortableArchiveTests: XCTestCase {
             signingIdentityStore: InMemoryRestoreCandidateSigningIdentityStore()
         ))
 
-        _ = try await worker.restore(.init(archiveURL: archiveURL, recoveryKey: recoveryKey, localCatalogue: [catalogue], confirmation: nil))
+        do {
+            _ = try await worker.restore(.init(archiveURL: archiveURL, recoveryKey: recoveryKey, localCatalogue: [catalogue], confirmation: nil))
+            XCTFail("A matching catalogue must not bypass explicit confirmation.")
+        } catch let error as PortableArchiveRestoreError {
+            guard case .confirmationRequired = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+
+        _ = try await worker.restore(.init(
+            archiveURL: archiveURL,
+            recoveryKey: recoveryKey,
+            localCatalogue: [catalogue],
+            confirmation: .init(
+                archiveID: verified.archiveID,
+                createdAt: verified.createdAt,
+                signingKeyFingerprint: verified.signingKeyFingerprint
+            )
+        ))
     }
 
     func testUnrelatedCatalogueRowUsesCleanMacConfirmationFlow() async throws {

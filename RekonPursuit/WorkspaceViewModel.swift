@@ -18,6 +18,69 @@ private enum SeparateLocalWorkspaceSelectionError: Error {
     case identityPersistenceFailed
 }
 
+nonisolated enum PortableArchiveRestoreState: Equatable {
+    case idle
+    case awaitingRecoveryKey
+    case verifying
+    case awaitingConfirmation(VerifiedPortableArchive)
+    case restoring
+    case ready(UUID)
+    case failed(PortableArchiveRestoreFailure)
+}
+
+nonisolated enum PortableArchiveRestoreFailure: Equatable {
+    case invalidRecoveryKey
+    case verificationFailed
+    case cleanupPending
+    case restoreFailed
+
+    var message: String {
+        switch self {
+        case .invalidRecoveryKey:
+            return "Enter the complete recovery key, including its checksum."
+        case .verificationFailed:
+            return "The archive could not be verified. The current workspace was not changed."
+        case .cleanupPending:
+            return "Restore cleanup is pending. The current workspace was not changed."
+        case .restoreFailed:
+            return "The archive could not be restored. The current workspace was not changed."
+        }
+    }
+}
+
+/// The only UI-facing boundary for a portable archive. The selected URL stays
+/// in memory for one restore attempt and is passed directly to the restore
+/// worker; it is never staged, bookmarked, or persisted.
+@MainActor
+struct PortableArchiveRestoreDependencies {
+    let chooseArchive: () -> URL?
+    let beginAccess: (URL) -> Bool
+    let endAccess: (URL) -> Void
+    let verify: @Sendable (URL, RecoveryKey) async throws -> VerifiedPortableArchive
+    let restore: @Sendable (PortableArchiveRestoreRequest) async throws -> RestoredWorkspaceCandidate
+
+    static func live() -> PortableArchiveRestoreDependencies {
+        let worker = PortableArchiveRestoreWorker()
+        return PortableArchiveRestoreDependencies(
+            chooseArchive: {
+                let panel = NSOpenPanel()
+                panel.allowedContentTypes = [.init(filenameExtension: "rekonarchive")!]
+                panel.allowsMultipleSelection = false
+                panel.canChooseDirectories = false
+                return panel.runModal() == .OK ? panel.url : nil
+            },
+            beginAccess: { $0.startAccessingSecurityScopedResource() },
+            endAccess: { $0.stopAccessingSecurityScopedResource() },
+            verify: { url, key in
+                try await Task.detached { try await worker.verifyArchive(at: url, recoveryKey: key) }.value
+            },
+            restore: { request in
+                try await Task.detached { try await worker.restore(request) }.value
+            }
+        )
+    }
+}
+
 @MainActor
 struct SeparateLocalWorkspaceDependencies {
     let selectedIdentity: () -> UUID?
@@ -200,6 +263,8 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var recoveryEnrollmentEnabled = false
     @Published private(set) var portableArchiveCatalogue: [PortableArchiveCatalogueRow] = []
     @Published private(set) var isCreatingPortableArchive = false
+    @Published private(set) var isRestoringPortableArchive = false
+    @Published private(set) var portableArchiveRestoreState: PortableArchiveRestoreState = .idle
 
     private let openWorkspace: () throws -> WorkspaceOpenState
     private let openExternalWorkspace: (URL) throws -> WorkspaceOpenState
@@ -210,12 +275,17 @@ final class WorkspaceViewModel: ObservableObject {
     private let documentReferenceBookmarks: DocumentReferenceBookmarkStore
     private let openDocumentURL: (URL) -> Bool
     private let portableArchiveDestination: () -> URL?
+    private let portableArchiveRestore: PortableArchiveRestoreDependencies
     private let separateLocalWorkspace: SeparateLocalWorkspaceDependencies
     private let publicURLChecker: PublicURLChecking
     private var store: WorkspaceStore?
     private var activeSeparateLocalWorkspaceIdentity: UUID?
     private var externalWorkspaceLease: WorkspaceAccessLease?
     private var stagedRestoreURL: URL?
+    private var scopedPortableArchiveURL: URL?
+    private var portableArchiveRestoreOperationID: UUID?
+    private var portableArchiveRestoreTask: Task<Void, Never>?
+    private var portableArchiveRestoreCancellationPending = false
     private var publicURLCheckTasks: [String: Task<Void, Never>] = [:]
     private var isLoadingSelectedOpportunity = false
 
@@ -233,6 +303,7 @@ final class WorkspaceViewModel: ObservableObject {
             panel.canCreateDirectories = true
             return panel.runModal() == .OK ? panel.url : nil
         },
+        portableArchiveRestore: PortableArchiveRestoreDependencies = .live(),
         openExternalWorkspace: @escaping (URL) throws -> WorkspaceOpenState = { _ in .recoveryRequired },
         closeWorkspaceStore: @escaping (WorkspaceStore) throws -> Void = { try $0.close() },
         publicURLChecker: PublicURLChecking = PublicURLChecker(),
@@ -247,6 +318,7 @@ final class WorkspaceViewModel: ObservableObject {
         self.documentReferenceBookmarks = documentReferenceBookmarks
         self.openDocumentURL = openDocumentURL
         self.portableArchiveDestination = portableArchiveDestination
+        self.portableArchiveRestore = portableArchiveRestore
         self.publicURLChecker = publicURLChecker
         self.separateLocalWorkspace = separateLocalWorkspace
     }
@@ -1112,6 +1184,165 @@ final class WorkspaceViewModel: ObservableObject {
                 self.statusMessage = "The portable archive could not be created."
             }
         }
+    }
+
+    func choosePortableArchiveForRestore() {
+        guard !isCreatingPortableArchive, !isRestoringPortableArchive else { return }
+        guard portableArchiveRestoreTask == nil else {
+            statusMessage = "The previous portable archive restore is still stopping. Try again in a moment."
+            return
+        }
+        guard let url = portableArchiveRestore.chooseArchive() else {
+            statusMessage = "Portable archive restore was cancelled."
+            return
+        }
+        guard portableArchiveRestore.beginAccess(url) else {
+            statusMessage = "The selected archive could not be accessed. Choose it again."
+            return
+        }
+        scopedPortableArchiveURL = url
+        isRestoringPortableArchive = true
+        portableArchiveRestoreState = .awaitingRecoveryKey
+        statusMessage = "Enter the recovery key to verify the selected archive."
+    }
+
+    func verifyPortableArchiveForRestore(_ recoveryKeyText: String) {
+        guard case .awaitingRecoveryKey = portableArchiveRestoreState,
+              let url = scopedPortableArchiveURL else { return }
+        guard let recoveryKey = RecoveryKey.parse(recoveryKeyText) else {
+            failPortableArchiveRestore(.invalidRecoveryKey)
+            return
+        }
+        portableArchiveRestoreRecoveryKeyText = recoveryKeyText
+        let operationID = UUID()
+        portableArchiveRestoreOperationID = operationID
+        portableArchiveRestoreState = .verifying
+        statusMessage = "Verifying portable archive…"
+        let dependencies = portableArchiveRestore
+        portableArchiveRestoreTask = Task { [weak self, dependencies] in
+            defer { self?.finishPortableArchiveRestoreTask(operationID: operationID) }
+            do {
+                let archive = try await dependencies.verify(url, recoveryKey)
+                guard let self, self.portableArchiveRestoreOperationID == operationID else { return }
+                self.portableArchiveRestoreOperationID = nil
+                self.portableArchiveRestoreState = .awaitingConfirmation(archive)
+                self.statusMessage = "Review the verified archive identity before restoring."
+            } catch {
+                guard let self else { return }
+                self.finishPortableArchiveRestoreOperation(operationID: operationID, failure: .verificationFailed)
+            }
+        }
+    }
+
+    func confirmPortableArchiveRestore() {
+        guard case let .awaitingConfirmation(archive) = portableArchiveRestoreState,
+              let url = scopedPortableArchiveURL else { return }
+        let operationID = UUID()
+        portableArchiveRestoreOperationID = operationID
+        portableArchiveRestoreState = .restoring
+        statusMessage = "Restoring portable archive…"
+        guard let recoveryKey = recoveryKeyForRestoreEntry() else {
+            failPortableArchiveRestore(.invalidRecoveryKey)
+            return
+        }
+        let request = PortableArchiveRestoreRequest(
+            archiveURL: url,
+            recoveryKey: recoveryKey,
+            localCatalogue: portableArchiveCatalogue,
+            confirmation: .init(
+                archiveID: archive.archiveID,
+                createdAt: archive.createdAt,
+                signingKeyFingerprint: archive.signingKeyFingerprint
+            )
+        )
+        let dependencies = portableArchiveRestore
+        portableArchiveRestoreTask = Task { [weak self, dependencies] in
+            defer { self?.finishPortableArchiveRestoreTask(operationID: operationID) }
+            do {
+                let candidate = try await dependencies.restore(request)
+                guard let self, self.portableArchiveRestoreOperationID == operationID else { return }
+                self.portableArchiveRestoreTask = nil
+                self.portableArchiveRestoreOperationID = nil
+                self.portableArchiveRestoreState = .ready(candidate.archiveID)
+                self.isRestoringPortableArchive = false
+                self.releasePortableArchiveScope()
+                self.statusMessage = "Restored workspace ready. It remains inactive; a future workspace-open action is required."
+            } catch {
+                guard let self else { return }
+                let failure: PortableArchiveRestoreFailure
+                if case .candidateCleanupPending = error as? PortableArchiveRestoreError {
+                    failure = .cleanupPending
+                } else {
+                    failure = .restoreFailed
+                }
+                self.finishPortableArchiveRestoreOperation(operationID: operationID, failure: failure)
+            }
+        }
+    }
+
+    func cancelPortableArchiveRestore() {
+        portableArchiveRestoreTask?.cancel()
+        portableArchiveRestoreOperationID = nil
+        portableArchiveRestoreState = .idle
+        isRestoringPortableArchive = false
+        portableArchiveRestoreRecoveryKeyText = ""
+        if portableArchiveRestoreTask == nil {
+            releasePortableArchiveScope()
+        } else {
+            portableArchiveRestoreCancellationPending = true
+        }
+        statusMessage = "Portable archive restore was cancelled."
+    }
+
+    func dismissPortableArchiveRestoreFailure() {
+        guard case .failed = portableArchiveRestoreState else { return }
+        portableArchiveRestoreState = .idle
+        statusMessage = "Portable archive restore is ready for another archive."
+    }
+
+    // The key is intentionally held only while a verified archive awaits its
+    // explicit identity confirmation.
+    private var portableArchiveRestoreRecoveryKeyText = ""
+
+    private func recoveryKeyForRestoreEntry() -> RecoveryKey? {
+        defer { portableArchiveRestoreRecoveryKeyText = "" }
+        return RecoveryKey.parse(portableArchiveRestoreRecoveryKeyText)
+    }
+
+    private func failPortableArchiveRestore(_ failure: PortableArchiveRestoreFailure) {
+        portableArchiveRestoreTask?.cancel()
+        portableArchiveRestoreTask = nil
+        portableArchiveRestoreOperationID = nil
+        portableArchiveRestoreState = .failed(failure)
+        isRestoringPortableArchive = false
+        portableArchiveRestoreRecoveryKeyText = ""
+        releasePortableArchiveScope()
+        statusMessage = failure.message
+    }
+
+    private func finishPortableArchiveRestoreOperation(operationID: UUID, failure: PortableArchiveRestoreFailure) {
+        guard portableArchiveRestoreOperationID == operationID else { return }
+        portableArchiveRestoreTask = nil
+        portableArchiveRestoreOperationID = nil
+        portableArchiveRestoreState = .failed(failure)
+        isRestoringPortableArchive = false
+        portableArchiveRestoreRecoveryKeyText = ""
+        releasePortableArchiveScope()
+        statusMessage = failure.message
+    }
+
+    private func finishPortableArchiveRestoreTask(operationID: UUID) {
+        guard portableArchiveRestoreTask != nil else { return }
+        portableArchiveRestoreTask = nil
+        guard portableArchiveRestoreCancellationPending else { return }
+        portableArchiveRestoreCancellationPending = false
+        releasePortableArchiveScope()
+    }
+
+    private func releasePortableArchiveScope() {
+        guard let url = scopedPortableArchiveURL else { return }
+        scopedPortableArchiveURL = nil
+        portableArchiveRestore.endAccess(url)
     }
 
     private func archiveAllowsWorkspaceTransition() -> Bool {

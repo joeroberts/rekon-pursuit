@@ -293,14 +293,13 @@ nonisolated final class PortableArchiveRestoreService: @unchecked Sendable {
             guard matchingArchive.signingKeyFingerprint == contents.archive.signingKeyFingerprint else {
                 throw PortableArchiveRestoreError.catalogueMismatch
             }
-        } else {
-            guard confirmation == PortableArchiveRestoreConfirmation(
-                archiveID: contents.archive.archiveID,
-                createdAt: contents.archive.createdAt,
-                signingKeyFingerprint: contents.archive.signingKeyFingerprint
-            ) else {
-                throw PortableArchiveRestoreError.confirmationRequired
-            }
+        }
+        guard confirmation == PortableArchiveRestoreConfirmation(
+            archiveID: contents.archive.archiveID,
+            createdAt: contents.archive.createdAt,
+            signingKeyFingerprint: contents.archive.signingKeyFingerprint
+        ) else {
+            throw PortableArchiveRestoreError.confirmationRequired
         }
 
         let candidateID = UUID()

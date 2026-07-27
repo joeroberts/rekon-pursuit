@@ -974,6 +974,7 @@ private struct SettingsView: View {
     @State private var recoveryKeyCopied = false
     @State private var archiveRecoveryReentry = ""
     @State private var isPresentingArchiveCreation = false
+    @State private var portableArchiveRestoreKey = ""
 
     var body: some View {
         ScrollView {
@@ -1000,7 +1001,7 @@ private struct SettingsView: View {
                         } else {
                             Button("Create recovery archive") { isPresentingArchiveCreation = true }
                                 .accessibilityIdentifier("create-portable-archive")
-                                .disabled(model.isCreatingPortableArchive)
+                                .disabled(model.isCreatingPortableArchive || model.isRestoringPortableArchive)
                             if model.isCreatingPortableArchive {
                                 ProgressView("Creating and verifying archive…")
                                     .controlSize(.small)
@@ -1014,6 +1015,21 @@ private struct SettingsView: View {
                                         .font(.footnote).foregroundStyle(.secondary)
                                 }
                             }
+                        }
+                        Divider()
+                        Text("Restore a portable archive creates an inactive local candidate. It does not replace or open your current workspace.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        Button("Restore portable archive") { model.choosePortableArchiveForRestore() }
+                            .buttonStyle(RekonSecondaryButtonStyle())
+                            .accessibilityIdentifier("restore-portable-archive")
+                            .disabled(model.isCreatingPortableArchive || model.isRestoringPortableArchive)
+                        if model.isRestoringPortableArchive {
+                            ProgressView(model.portableArchiveRestoreState == .verifying ? "Verifying portable archive…" : "Restore in progress…")
+                                .controlSize(.small)
+                        }
+                        if case .ready = model.portableArchiveRestoreState {
+                            Text("Restored workspace ready. It remains inactive; a future workspace-open action is required.")
+                                .font(.footnote).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -1063,6 +1079,76 @@ private struct SettingsView: View {
                         .keyboardShortcut(.defaultAction)
                 }
             }.padding(24).frame(width: 520)
+        }
+        .sheet(isPresented: Binding(
+            get: {
+                switch model.portableArchiveRestoreState {
+                case .awaitingRecoveryKey, .verifying, .awaitingConfirmation, .restoring: true
+                case .idle, .ready, .failed: false
+                }
+            },
+            set: { if !$0 { portableArchiveRestoreKey = ""; model.cancelPortableArchiveRestore() } }
+        )) {
+            VStack(alignment: .leading, spacing: 16) {
+                switch model.portableArchiveRestoreState {
+                case .awaitingRecoveryKey:
+                    Text("Restore portable archive").font(.title2.bold())
+                    Text("Enter the recovery key to verify the archive. The key is used only for this restore attempt.")
+                        .foregroundStyle(.secondary)
+                    TextField("Recovery key", text: $portableArchiveRestoreKey)
+                        .textFieldStyle(.roundedBorder)
+                    HStack {
+                        Button("Cancel", role: .cancel) { portableArchiveRestoreKey = ""; model.cancelPortableArchiveRestore() }
+                        Spacer()
+                        Button("Verify archive") {
+                            model.verifyPortableArchiveForRestore(portableArchiveRestoreKey)
+                            portableArchiveRestoreKey = ""
+                        }
+                        .keyboardShortcut(.defaultAction)
+                    }
+                case .verifying:
+                    ProgressView("Verifying portable archive…")
+                    Button("Cancel", role: .cancel) { model.cancelPortableArchiveRestore() }
+                case let .awaitingConfirmation(archive):
+                    Text("Confirm restore").font(.title2.bold())
+                    Text("The archive has been verified. Review its identity before creating an inactive restored workspace.")
+                        .foregroundStyle(.secondary)
+                    Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
+                        GridRow { Text("Archive ID").foregroundStyle(.secondary); Text(archive.archiveID.uuidString) }
+                        GridRow { Text("Created").foregroundStyle(.secondary); Text(archive.createdAt.formatted(date: .abbreviated, time: .shortened)) }
+                        GridRow { Text("Signing fingerprint").foregroundStyle(.secondary); Text(archive.signingKeyFingerprint.map { String(format: "%02x", $0) }.joined()) }
+                    }.font(.footnote.monospaced())
+                    HStack {
+                        Button("Cancel", role: .cancel) { model.cancelPortableArchiveRestore() }
+                        Spacer()
+                        Button("Confirm restore") { model.confirmPortableArchiveRestore() }
+                            .keyboardShortcut(.defaultAction)
+                    }
+                case .restoring:
+                    ProgressView("Creating inactive restored workspace…")
+                case .idle, .ready, .failed:
+                    EmptyView()
+                }
+            }
+            .padding(24)
+            .frame(width: 560)
+        }
+        .alert("Portable archive restore", isPresented: Binding(
+            get: {
+                if case .failed = model.portableArchiveRestoreState { return true }
+                return false
+            },
+            set: { if !$0 { model.dismissPortableArchiveRestoreFailure() } }
+        )) {
+            Button("Choose another archive") {
+                model.dismissPortableArchiveRestoreFailure()
+                model.choosePortableArchiveForRestore()
+            }
+            Button("Dismiss", role: .cancel) { model.dismissPortableArchiveRestoreFailure() }
+        } message: {
+            if case let .failed(failure) = model.portableArchiveRestoreState {
+                Text(failure.message)
+            }
         }
     }
 }
