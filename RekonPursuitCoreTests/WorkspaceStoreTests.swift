@@ -227,7 +227,9 @@ final class WorkspaceStoreTests: XCTestCase {
         try WorkspaceMigrations.apply(to: database)
 
         XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(21)]])
-        let migrated = try XCTUnwrap(try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test").opportunities().first)
+        XCTAssertEqual(try database.rows("PRAGMA foreign_key_check"), [])
+        let store = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test")
+        let migrated = try XCTUnwrap(try store.opportunities().first)
         XCTAssertEqual(migrated.compensation, "150k base")
         XCTAssertNil(migrated.compensationMinimum)
         XCTAssertNil(migrated.compensationMaximum)
@@ -235,6 +237,9 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(migrated.nextAction, legacyAction)
         XCTAssertEqual(migrated.actionType, .other)
         XCTAssertEqual(migrated.actionCustomText, legacyAction)
+        let contact = try store.createContact(CreateContact(name: "Alex Morgan", employer: "Rekon Labs"))
+        try store.linkContact(contactID: contact.id, toOpportunityID: migrated.id)
+        XCTAssertEqual(try store.opportunities(forContactID: contact.id), [migrated])
     }
 
     func testFailedVersionTwentyMigrationKeepsVersionNineteenRowsAndVerifiedSnapshot() throws {
@@ -497,6 +502,48 @@ final class WorkspaceStoreTests: XCTestCase {
             XCTAssertEqual(saved.jobURL, url)
             XCTAssertEqual(try store.activityEvents(), baselineActivity)
         }
+    }
+
+    func testUpdateRetainsUnchangedHostfulAbsoluteLegacyJobURL() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        let store = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test")
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let legacyURL = "ftp://jobs.example.com/archive/role"
+        try database.execute("UPDATE opportunities SET job_url = ? WHERE id = ?", values: [.text(legacyURL), .text(opportunity.id)])
+
+        try store.updateOpportunity(
+            id: opportunity.id, title: opportunity.title, company: opportunity.company,
+            stage: opportunity.stage, nextAction: opportunity.nextAction, dueAt: opportunity.dueAt,
+            jobURL: legacyURL, jobDescription: opportunity.jobDescription, notes: "Met the recruiter.",
+            compensation: opportunity.compensation, location: opportunity.location,
+            workArrangement: opportunity.workArrangement, applicationDate: opportunity.applicationDate,
+            responseState: opportunity.responseState, stageChangedAt: opportunity.stageChangedAt
+        )
+
+        let saved = try XCTUnwrap(store.opportunities().first)
+        XCTAssertEqual(saved.notes, "Met the recruiter.")
+        XCTAssertEqual(saved.jobURL, legacyURL)
+    }
+
+    func testUpdatePreservesUneditedLegacyCompensationByteForByte() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        let store = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test")
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let legacyCompensation = "  150k base \n"
+        try database.execute("UPDATE opportunities SET compensation = ? WHERE id = ?", values: [.text(legacyCompensation), .text(opportunity.id)])
+
+        try store.updateOpportunity(
+            id: opportunity.id, title: opportunity.title, company: opportunity.company,
+            stage: opportunity.stage, nextAction: opportunity.nextAction, dueAt: opportunity.dueAt,
+            jobURL: opportunity.jobURL, jobDescription: opportunity.jobDescription, notes: "Met the recruiter.",
+            compensation: legacyCompensation, location: opportunity.location,
+            workArrangement: opportunity.workArrangement, applicationDate: opportunity.applicationDate,
+            responseState: opportunity.responseState, stageChangedAt: opportunity.stageChangedAt
+        )
+
+        let saved = try XCTUnwrap(store.opportunities().first)
+        XCTAssertEqual(saved.notes, "Met the recruiter.")
+        XCTAssertEqual(saved.compensation, legacyCompensation)
     }
 
     func testCreateDefaultsApplicationDateToItsCreationDate() throws {
@@ -1470,10 +1517,11 @@ final class WorkspaceStoreTests: XCTestCase {
     private func makeVersionTwentyDatabase(at url: URL) throws -> EncryptedDatabase {
         let database = try EncryptedDatabase.open(url: url, key: key)
         _ = try WorkspaceStore(database: database, now: now, actorID: "fixture", correlationID: "fixture")
-        try database.execute("ALTER TABLE opportunities RENAME TO opportunities_v21")
-        try database.execute("CREATE TABLE opportunities (id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, company TEXT NOT NULL, created_at REAL NOT NULL, stage TEXT NOT NULL DEFAULT 'Saved', next_action TEXT NOT NULL DEFAULT '', due_at REAL, job_url TEXT NOT NULL DEFAULT '', job_description TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', compensation TEXT, location TEXT, work_arrangement TEXT NOT NULL DEFAULT 'Not specified', application_date REAL, response_state TEXT NOT NULL DEFAULT 'No response recorded', stage_changed_at REAL, deleted_at REAL)")
-        try database.execute("INSERT INTO opportunities (id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes, compensation, location, work_arrangement, application_date, response_state, stage_changed_at, deleted_at) SELECT id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes, compensation, location, work_arrangement, application_date, response_state, stage_changed_at, deleted_at FROM opportunities_v21")
-        try database.execute("DROP TABLE opportunities_v21")
+        try database.execute("ALTER TABLE opportunities DROP COLUMN action_custom_text")
+        try database.execute("ALTER TABLE opportunities DROP COLUMN action_type")
+        try database.execute("ALTER TABLE opportunities DROP COLUMN compensation_pay_period")
+        try database.execute("ALTER TABLE opportunities DROP COLUMN compensation_maximum")
+        try database.execute("ALTER TABLE opportunities DROP COLUMN compensation_minimum")
         try database.execute("DELETE FROM migration_history WHERE version = 21")
         try database.execute("UPDATE schema_migrations SET version = 20")
         return database

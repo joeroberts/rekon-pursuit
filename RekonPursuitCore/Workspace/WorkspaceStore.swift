@@ -344,8 +344,11 @@ final class WorkspaceStore {
         try synchronized {
             guard try isActiveOpportunity(id) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
             guard let current = try database.rows(opportunitySelect + " FROM opportunities WHERE id = ? AND deleted_at IS NULL", values: [.text(id)]).first.map(opportunity(from:)) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
-            let jobURL = jobURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard isValidJobURL(jobURL) else { throw WorkspaceStoreError.invalidOpportunityURL }
+            let submittedJobURL = jobURL
+            let jobURL = submittedJobURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            let retainsLegacyJobURL = submittedJobURL == current.jobURL && isHostfulAbsoluteURL(current.jobURL)
+            guard isValidJobURL(jobURL) || retainsLegacyJobURL else { throw WorkspaceStoreError.invalidOpportunityURL }
+            let persistedJobURL = retainsLegacyJobURL ? current.jobURL : jobURL
             let action = typedActionEdited ? resolvedAction(type: actionType, customText: actionCustomText, legacyText: "") : resolvedAction(type: nil, customText: nil, legacyText: nextAction)
             let effectiveNextAction = action.title
             let currentStage = try activeOpportunityStage(id: id)
@@ -363,7 +366,7 @@ final class WorkspaceStore {
             try database.transaction {
                 try database.execute(
                     "UPDATE opportunities SET title = ?, company = ?, stage = ?, next_action = ?, due_at = ?, job_url = ?, job_description = ?, notes = ?, compensation = ?, compensation_minimum = ?, compensation_maximum = ?, compensation_pay_period = ?, location = ?, work_arrangement = ?, application_date = ?, response_state = ?, stage_changed_at = ?, action_type = ?, action_custom_text = ? WHERE id = ?",
-                    values: [.text(title), .text(company), .text(stage.rawValue), .text(effectiveNextAction), dueAt.map { .real($0.timeIntervalSince1970) } ?? .null, .text(jobURL), .text(jobDescription.trimmingCharacters(in: .whitespacesAndNewlines)), .text(notes.trimmingCharacters(in: .whitespacesAndNewlines)), (structuredCompensationEdited ? nil : trimmedOptional(compensation) ?? current.compensation).map(DatabaseValue.text) ?? .null, (structuredCompensationEdited ? compensationMinimum : current.compensationMinimum).map(DatabaseValue.real) ?? .null, (structuredCompensationEdited ? compensationMaximum : current.compensationMaximum).map(DatabaseValue.real) ?? .null, (structuredCompensationEdited ? compensationPayPeriod : current.compensationPayPeriod).map { .text($0.rawValue) } ?? .null, trimmedOptional(location).map(DatabaseValue.text) ?? .null, .text(workArrangement.rawValue), applicationDate.map { .real($0.timeIntervalSince1970) } ?? .null, .text(responseState.rawValue), (didChangeStage ? stageChangedAt : try currentStageChangedAt(id: id)).map { .real($0.timeIntervalSince1970) } ?? .null, .text(action.type.rawValue), action.customText.map(DatabaseValue.text) ?? .null, .text(id)]
+                    values: [.text(title), .text(company), .text(stage.rawValue), .text(effectiveNextAction), dueAt.map { .real($0.timeIntervalSince1970) } ?? .null, .text(persistedJobURL), .text(jobDescription.trimmingCharacters(in: .whitespacesAndNewlines)), .text(notes.trimmingCharacters(in: .whitespacesAndNewlines)), (structuredCompensationEdited ? nil : current.compensation).map(DatabaseValue.text) ?? .null, (structuredCompensationEdited ? compensationMinimum : current.compensationMinimum).map(DatabaseValue.real) ?? .null, (structuredCompensationEdited ? compensationMaximum : current.compensationMaximum).map(DatabaseValue.real) ?? .null, (structuredCompensationEdited ? compensationPayPeriod : current.compensationPayPeriod).map { .text($0.rawValue) } ?? .null, trimmedOptional(location).map(DatabaseValue.text) ?? .null, .text(workArrangement.rawValue), applicationDate.map { .real($0.timeIntervalSince1970) } ?? .null, .text(responseState.rawValue), (didChangeStage ? stageChangedAt : try currentStageChangedAt(id: id)).map { .real($0.timeIntervalSince1970) } ?? .null, .text(action.type.rawValue), action.customText.map(DatabaseValue.text) ?? .null, .text(id)]
                 )
 
                 let activeTaskID = try database.rows(
@@ -907,6 +910,17 @@ final class WorkspaceStore {
         guard let components = URLComponents(string: value),
               let scheme = components.scheme?.lowercased(),
               ["http", "https"].contains(scheme),
+              let host = components.host,
+              !host.isEmpty else {
+            return false
+        }
+        return true
+    }
+
+    private func isHostfulAbsoluteURL(_ value: String) -> Bool {
+        guard let components = URLComponents(string: value),
+              let scheme = components.scheme,
+              !scheme.isEmpty,
               let host = components.host,
               !host.isEmpty else {
             return false
