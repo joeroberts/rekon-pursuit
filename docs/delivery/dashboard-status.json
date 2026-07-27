@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "RP-R6",
-  "nextEligibleTaskId": null,
+  "activeTaskId": null,
+  "nextEligibleTaskId": "RP-R7a",
   "tasks": [
     {
       "id": "RP-R0",
@@ -163,12 +163,12 @@
       "id": "RP-R6",
       "title": "Durable document references",
       "workType": "Data",
-      "status": "in_progress",
-      "releaseCondition": "UX-R2 is accepted; the R6 pre-implementation gate approved the brief, ADR-004, and compatibility reconciliation. Only R6 is released.",
-      "latestTransition": "Released after independent Planning, Architect, TPM, QA, Delivery, and Security/Privacy approval; implementation has not yet begun.",
+      "status": "accepted",
+      "releaseCondition": "Accepted after explicit product-owner verification of attach, open, moved-file relink, and source-file preservation.",
+      "latestTransition": "Accepted after product-owner hands-on verification, 21 focused R6 checks, and independent Architecture/Security, QA, and Code Review approval.",
       "evidence": {
-        "label": "R6 task brief",
-        "href": "../task-briefs/RP-R6-durable-document-references.md"
+        "label": "R6 acceptance record",
+        "href": "../remediation-ledger.md"
       },
       "needsUserAction": false
     },
@@ -176,9 +176,9 @@
       "id": "RP-R7a",
       "title": "Portable recovery and encrypted export",
       "workType": "Data lifecycle",
-      "status": "backlog",
+      "status": "next_up",
       "releaseCondition": "Release after RP-R6, with recovery design and Architect plus Security/Privacy approval.",
-      "latestTransition": "Planned remediation work.",
+      "latestTransition": "RP-R6 accepted; awaiting its required recovery-design and high-risk approval gate before implementation.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
