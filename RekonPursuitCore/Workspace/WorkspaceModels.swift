@@ -110,7 +110,7 @@ nonisolated struct VerifiedPortableArchive: Equatable, Sendable {
 }
 
 nonisolated enum PortableArchiveError: Error, LocalizedError, Sendable {
-    case enrollmentRequired, invalidRecoveryKey, destinationExists, invalidDestination, archiveInvalid, verificationFailed, signingKeyUnavailable, catalogueUnavailable, archiveRemovedAfterCatalogueFailure
+    case enrollmentRequired, invalidRecoveryKey, destinationExists, invalidDestination, destinationUnavailable, archiveInvalid, verificationFailed, signingKeyUnavailable, catalogueUnavailable, archiveMayRemainAfterOutputFailure
 
     var errorDescription: String? {
         switch self {
@@ -118,10 +118,11 @@ nonisolated enum PortableArchiveError: Error, LocalizedError, Sendable {
         case .invalidRecoveryKey: return "The recovery key could not unlock this archive operation."
         case .destinationExists: return "Choose a new archive file name; Rekon Pursuit will not overwrite an existing archive."
         case .invalidDestination: return "Choose a new .rekonarchive destination."
+        case .destinationUnavailable: return "Rekon Pursuit could not write to that destination. Choose another folder or file name."
         case .archiveInvalid, .verificationFailed: return "The archive could not be verified, so it was not saved."
         case .signingKeyUnavailable: return "The archive signing identity is unavailable; no archive was created."
         case .catalogueUnavailable: return "The archive was verified but could not be recorded locally. It may still exist at the chosen destination."
-        case .archiveRemovedAfterCatalogueFailure: return "The archive was removed because its local catalogue could not be saved; no archive was kept."
+        case .archiveMayRemainAfterOutputFailure: return "Final archive writing or verification failed. The selected file may remain; treat it as unusable and remove it yourself."
         }
     }
 }

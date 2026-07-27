@@ -3,8 +3,8 @@
 **Status:** The current evidence-backed operational state is: `RP-R0`,
 `RP-R1a`, `RP-R1b`, `RP-R2`, `RP-R3`, `RP-R4`, `RP-R5`, `UX-R1`, and
 `UX-R2` (including sub-slices A, B, and C) and `RP-R6` are Accepted.
-`RP-R7a-1` is Accepted. `RP-R7a-2` is In progress for the approved portable
-archive snapshot/package slice only; restore and export remain unreleased.
+`RP-R7a-1` and `RP-R7a-2` are Accepted. The `RP-R7a` parent remains in
+progress: restore and export remain unreleased.
 `RP-R7b`–`RP-R10` remain Backlog.
 
 **Authority:** [dashboard-status.json](dashboard-status.json) is the canonical
@@ -140,6 +140,16 @@ ordinary sequencing.
 | TPM | **Approved** | `RP-R7a-2` is the sole dependency-safe successor; no downstream recovery, export, purge, or unrelated remediation task is released. |
 | QA | **Approved** | The focused archive fixture, failure-atomicity, tamper, redaction, relaunch/catalogue, and product-owner archive-creation smoke evidence is proportionate to this high-risk slice. |
 | Delivery Manager | **Released — RP-R7a-2 implementation only** | All named gate approvals are recorded. Move only `RP-R7a-2` from Next up to In progress. Implement only archive snapshot/package creation and catalogue display; no restore, import, export, purge, expiry removal, or legacy-route access is released. |
+
+### RP-R7a-2 acceptance record
+
+| Role | Decision | Evidence / successor boundary |
+| --- | --- | --- |
+| Product owner | **Accepted** | Created a portable archive through the app successfully. |
+| Architect | **Approved** | Final output is staged in app-owned temporary storage, created exclusive/no-follow, identity-checked before promotion, and never auto-deleted after creation. |
+| QA | **Approved** | Six focused archive checks passed, including post-create metadata failure, partial copy, destination collision, replacement detection, and catalogue behavior. |
+| Code Reviewer | **Approved** | No P0/P1 remained after the post-create metadata failure correction. |
+| Delivery Manager | **Accepted — no successor released** | `RP-R7a-2` is complete. The parent recovery milestone remains in progress, and restore/export, purge, expiry removal, and legacy-route access are still unreleased. |
 
 ### UX-R1 external-workspace bookmark Task 1 review and release
 
@@ -380,6 +390,7 @@ not release R5.
 | 2026-07-27 | `UX-R2-C` / `UX-R2` | **Accepted — RP-R6 Next up** | Product-owner hands-on verification accepted the staged CSV mapping, validation, review, completion, and durable report workflow. This accepts C and the parent UX-R2. RP-R6 is the sole eligible successor, but remains unreleased pending its own brief and gate. |
 | 2026-07-27 | `RP-R6` | **Accepted — RP-R7a Next up** | Product-owner hands-on verification accepted durable PDF/DOCX references. Final focused evidence covered structural DOCX validation, migration/recovery revocation, scoped open/release, unavailable/moved-file relink, and explicit relink before any retry. Architecture/Security, QA, and Code Review approved. RP-R7a is Next up only for its required recovery-design gate; no implementation is released. |
 | 2026-07-27 | `RP-R7a-2` | **Released for implementation** | Planning, Architect/Security, TPM, QA, and Delivery approved the frozen v1 portable archive contract. Implement only authenticated logical-snapshot package creation, same-operation read-back verification, and the safe catalogue display. Restore, import, export, purge, expiry removal, and legacy-route access remain unreleased. |
+| 2026-07-27 | `RP-R7a-2` | **Accepted — portable archive package complete** | Product owner successfully created an archive through the app. Focused archive evidence passed six tests covering normal catalogue creation, post-create metadata failure, partial copy, destination collision, replacement detection, and failed readback. Architect, QA, and Code Review approved the final design: verified app-container staging and exclusive/no-follow final output; failed final output is never auto-deleted and is truthfully left for manual removal. Restore, import, export, purge, expiry removal, and legacy-route access remain unreleased. |
 
 ### UX-R2-A acceptance record
 

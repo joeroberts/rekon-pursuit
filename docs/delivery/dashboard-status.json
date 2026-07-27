@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "RP-R7a-2",
+  "activeTaskId": null,
   "nextEligibleTaskId": null,
   "tasks": [
     {
@@ -189,9 +189,9 @@
       "id": "RP-R7a-2",
       "title": "Portable archive snapshot and authenticated package",
       "workType": "Data lifecycle",
-      "status": "in_progress",
+      "status": "accepted",
       "releaseCondition": "Released only for an authenticated portable logical-snapshot package and catalogue; no restore, export, purge, or expiry removal.",
-      "latestTransition": "Independent Planning, Architect/Security, TPM, QA, and Delivery gates approved the frozen v1 archive package contract.",
+      "latestTransition": "Accepted after product-owner archive creation and independent Architecture, QA, and Code Review approval of the no-auto-delete final-output design.",
       "evidence": {
         "label": "R7a recovery design",
         "href": "../../superpowers/specs/2026-07-27-r7a-portable-recovery-design.md"

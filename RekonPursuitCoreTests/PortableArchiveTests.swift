@@ -5,6 +5,194 @@ import XCTest
 
 @MainActor
 final class PortableArchiveTests: XCTestCase {
+    func testArchiveStagingUsesAppTemporaryDirectoryInsteadOfUserSelectedDirectory() {
+        let selectedDestination = URL(fileURLWithPath: "/Users/example/Desktop/Recovery Archive.rekonarchive")
+        let appTemporaryDirectory = URL(fileURLWithPath: "/private/var/folders/example/RekonPursuit/")
+
+        let stagingURL = PortableArchiveStagingLocation.url(
+            temporaryDirectory: appTemporaryDirectory,
+            temporaryID: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+        )
+
+        XCTAssertEqual(stagingURL.deletingLastPathComponent(), appTemporaryDirectory)
+        XCTAssertNotEqual(stagingURL.deletingLastPathComponent(), selectedDestination.deletingLastPathComponent())
+        XCTAssertEqual(stagingURL.pathExtension, "tmp")
+    }
+
+    func testPostCreateMetadataFailureReportsOutputMayRemain() throws {
+        let source = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-source-\(UUID().uuidString).tmp")
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-\(UUID().uuidString).rekonarchive")
+        defer {
+            try? FileManager.default.removeItem(at: source)
+            try? FileManager.default.removeItem(at: destination)
+        }
+        try Data("archive".utf8).write(to: source)
+
+        XCTAssertThrowsError(
+            try PortableArchiveOutputWriter.copyExclusively(
+                from: source,
+                to: destination,
+                metadataReader: { _, _ in -1 }
+            )
+        ) { error in
+            XCTAssertTrue(error is PortableArchiveOutputWriteFailure)
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+    }
+
+    func testPostCopyVerificationFailureLeavesOutputUncatalogued() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-post-copy-failure-\(UUID().uuidString).sqlite")
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-\(UUID().uuidString).rekonarchive")
+        defer {
+            removeDatabase(at: databaseURL)
+            try? FileManager.default.removeItem(at: destination)
+        }
+        let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 6, count: 32))
+        let worker = PortableArchiveWorker(
+            configuration: database.portableArchiveConnectionConfiguration(),
+            signingKeyStore: InMemoryArchiveSigningKeyStore(),
+            archiveVerifier: { _, _ in throw PortableArchiveError.verificationFailed }
+        )
+        let store = try WorkspaceStore(
+            database: database,
+            now: Date(timeIntervalSince1970: 1_704_067_200),
+            actorID: "test",
+            correlationID: "test",
+            portableArchiveWorker: worker
+        )
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+
+        do {
+            _ = try await store.createPortableArchive(recoveryKey: recoveryKey, at: destination)
+            XCTFail("An archive that fails final verification must not be accepted.")
+        } catch let error as LocalizedError {
+            XCTAssertEqual(error.errorDescription, "Final archive writing or verification failed. The selected file may remain; treat it as unusable and remove it yourself.")
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+        XCTAssertTrue(try store.portableArchiveCatalogue().isEmpty)
+    }
+
+    func testPartialFinalCopyIsLeftUncatalogued() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-partial-copy-\(UUID().uuidString).sqlite")
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-\(UUID().uuidString).rekonarchive")
+        defer {
+            removeDatabase(at: databaseURL)
+            try? FileManager.default.removeItem(at: destination)
+        }
+        let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 7, count: 32))
+        let worker = PortableArchiveWorker(
+            configuration: database.portableArchiveConnectionConfiguration(),
+            signingKeyStore: InMemoryArchiveSigningKeyStore(),
+            finalOutputWriter: { _, output in
+                try Data("partial".utf8).write(to: output)
+                throw PortableArchiveOutputWriteFailure()
+            }
+        )
+        let store = try WorkspaceStore(
+            database: database,
+            now: Date(timeIntervalSince1970: 1_704_067_200),
+            actorID: "test",
+            correlationID: "test",
+            portableArchiveWorker: worker
+        )
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+
+        do {
+            _ = try await store.createPortableArchive(recoveryKey: recoveryKey, at: destination)
+            XCTFail("A partial final copy must not be accepted.")
+        } catch let error as LocalizedError {
+            XCTAssertEqual(error.errorDescription, "Final archive writing or verification failed. The selected file may remain; treat it as unusable and remove it yourself.")
+        }
+        XCTAssertEqual(try Data(contentsOf: destination), Data("partial".utf8))
+        XCTAssertTrue(try store.portableArchiveCatalogue().isEmpty)
+    }
+
+    func testReplacementAfterCreationIsNotRemovedOrCatalogued() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-replacement-\(UUID().uuidString).sqlite")
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-\(UUID().uuidString).rekonarchive")
+        let replacementContents = Data("replacement-by-another-operation".utf8)
+        defer {
+            removeDatabase(at: databaseURL)
+            try? FileManager.default.removeItem(at: destination)
+        }
+        let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 10, count: 32))
+        let worker = PortableArchiveWorker(
+            configuration: database.portableArchiveConnectionConfiguration(),
+            signingKeyStore: InMemoryArchiveSigningKeyStore(),
+            archiveVerifier: { _, _ in
+                try replacementContents.write(to: destination, options: .atomic)
+                throw PortableArchiveError.verificationFailed
+            }
+        )
+        let store = try WorkspaceStore(
+            database: database,
+            now: Date(timeIntervalSince1970: 1_704_067_200),
+            actorID: "test",
+            correlationID: "test",
+            portableArchiveWorker: worker
+        )
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+
+        do {
+            _ = try await store.createPortableArchive(recoveryKey: recoveryKey, at: destination)
+            XCTFail("A replacement output must not be accepted.")
+        } catch let error as LocalizedError {
+            XCTAssertEqual(error.errorDescription, "Final archive writing or verification failed. The selected file may remain; treat it as unusable and remove it yourself.")
+        }
+        XCTAssertEqual(try Data(contentsOf: destination), replacementContents)
+        XCTAssertTrue(try store.portableArchiveCatalogue().isEmpty)
+    }
+
+    func testConcurrentDestinationIsNotRemovedWhenThisOperationDidNotCreateIt() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-concurrent-destination-\(UUID().uuidString).sqlite")
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-\(UUID().uuidString).rekonarchive")
+        let preexistingContents = Data("another-operation".utf8)
+        defer {
+            removeDatabase(at: databaseURL)
+            try? FileManager.default.removeItem(at: destination)
+        }
+        let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 8, count: 32))
+        let worker = PortableArchiveWorker(
+            configuration: database.portableArchiveConnectionConfiguration(),
+            signingKeyStore: InMemoryArchiveSigningKeyStore(),
+            finalOutputWriter: { _, output in
+                try preexistingContents.write(to: output)
+                throw PortableArchiveError.destinationExists
+            }
+        )
+        let store = try WorkspaceStore(
+            database: database,
+            now: Date(timeIntervalSince1970: 1_704_067_200),
+            actorID: "test",
+            correlationID: "test",
+            portableArchiveWorker: worker
+        )
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+
+        do {
+            _ = try await store.createPortableArchive(recoveryKey: recoveryKey, at: destination)
+            XCTFail("A destination created by another operation must not be accepted.")
+        } catch let error as LocalizedError {
+            XCTAssertEqual(error.errorDescription, "Choose a new archive file name; Rekon Pursuit will not overwrite an existing archive.")
+        }
+        XCTAssertEqual(try Data(contentsOf: destination), preexistingContents)
+        XCTAssertTrue(try store.portableArchiveCatalogue().isEmpty)
+    }
+
     func testManifestV1MatchesFrozenSixtyThreeByteEncoding() throws {
         let archiveID = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
         let createdAt = Date(timeIntervalSince1970: 1.25)
@@ -116,7 +304,13 @@ final class PortableArchiveTests: XCTestCase {
 
         let archive = try await store.createPortableArchive(recoveryKey: recoveryKey, at: destination)
         let activity = try XCTUnwrap(try store.activityEvents().last)
+        let catalogue = try store.portableArchiveCatalogue()
 
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+        XCTAssertNoThrow(try PortableArchiveService.verify(data: Data(contentsOf: destination), recoveryKey: recoveryKey))
+        XCTAssertEqual(catalogue.count, 1)
+        XCTAssertEqual(catalogue.first?.archiveID, archive.archiveID)
+        XCTAssertEqual(catalogue.first?.verificationState, "Verified")
         XCTAssertEqual(activity.kind, "portable_backup_created")
         XCTAssertEqual(activity.correlationID, archive.archiveID.uuidString)
         XCTAssertFalse(activity.correlationID.contains(destination.path))

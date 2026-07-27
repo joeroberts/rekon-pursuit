@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import Foundation
 
 nonisolated struct PortableArchiveDatabaseConfiguration: Sendable {
@@ -17,6 +18,79 @@ nonisolated struct PortableArchiveRequest: Sendable {
     let correlationID: String
 }
 
+/// Archive assembly stays inside the app container. The user-selected path is used only
+/// after verification, because a sandbox save-panel grant may not permit sibling files.
+nonisolated enum PortableArchiveStagingLocation {
+    static func url(temporaryDirectory: URL, temporaryID: UUID) -> URL {
+        temporaryDirectory.appendingPathComponent(".rekon-archive-\(temporaryID.uuidString.lowercased()).tmp")
+    }
+}
+
+/// The destination's stable identity lets the worker reject a path that changes
+/// after exclusive creation. It is a detection mechanism, not a deletion claim.
+nonisolated struct PortableArchiveOutputOwnership: Equatable, Sendable {
+    let device: UInt64
+    let inode: UInt64
+
+    static func current(at url: URL) -> PortableArchiveOutputOwnership? {
+        var metadata = stat()
+        guard lstat(url.path, &metadata) == 0 else { return nil }
+        return PortableArchiveOutputOwnership(
+            device: UInt64(metadata.st_dev),
+            inode: UInt64(metadata.st_ino)
+        )
+    }
+
+    func matchesCurrentOutput(at url: URL) -> Bool {
+        Self.current(at: url) == self
+    }
+}
+
+nonisolated struct PortableArchiveOutputWriteFailure: Error, Sendable {
+}
+
+nonisolated enum PortableArchiveOutputWriter {
+    static func copyExclusively(
+        from sourceURL: URL,
+        to destinationURL: URL,
+        metadataReader: (Int32, UnsafeMutablePointer<stat>) -> Int32 = { descriptor, metadata in
+            fstat(descriptor, metadata)
+        }
+    ) throws -> PortableArchiveOutputOwnership {
+        let descriptor = open(destinationURL.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, S_IRUSR | S_IWUSR)
+        guard descriptor >= 0 else {
+            if errno == EEXIST {
+                throw PortableArchiveError.destinationExists
+            }
+            throw PortableArchiveError.destinationUnavailable
+        }
+
+        var metadata = stat()
+        guard metadataReader(descriptor, &metadata) == 0 else {
+            close(descriptor)
+            throw PortableArchiveOutputWriteFailure()
+        }
+        let ownership = PortableArchiveOutputOwnership(
+            device: UInt64(metadata.st_dev),
+            inode: UInt64(metadata.st_ino)
+        )
+        let destination = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        do {
+            let source = try FileHandle(forReadingFrom: sourceURL)
+            defer { try? source.close() }
+            defer { try? destination.close() }
+
+            while let chunk = try source.read(upToCount: 1_048_576), !chunk.isEmpty {
+                try destination.write(contentsOf: chunk)
+            }
+            try destination.synchronize()
+            return ownership
+        } catch {
+            throw PortableArchiveOutputWriteFailure()
+        }
+    }
+}
+
 protocol PortableArchiveWorking: Actor {
     func createArchive(_ request: PortableArchiveRequest) async throws -> PortableArchiveCatalogueRow
 }
@@ -24,13 +98,23 @@ protocol PortableArchiveWorking: Actor {
 actor PortableArchiveWorker: PortableArchiveWorking {
     private let configuration: PortableArchiveDatabaseConfiguration
     private let signingKeyStore: any ArchiveSigningKeyStoring
+    private let archiveVerifier: @Sendable (Data, RecoveryKey) throws -> VerifiedPortableArchive
+    private let finalOutputWriter: @Sendable (URL, URL) throws -> PortableArchiveOutputOwnership
 
     init(
         configuration: PortableArchiveDatabaseConfiguration,
-        signingKeyStore: any ArchiveSigningKeyStoring
+        signingKeyStore: any ArchiveSigningKeyStoring,
+        archiveVerifier: @escaping @Sendable (Data, RecoveryKey) throws -> VerifiedPortableArchive = { data, recoveryKey in
+            try PortableArchiveService.verify(data: data, recoveryKey: recoveryKey)
+        },
+        finalOutputWriter: @escaping @Sendable (URL, URL) throws -> PortableArchiveOutputOwnership = { source, destination in
+            try PortableArchiveOutputWriter.copyExclusively(from: source, to: destination)
+        }
     ) {
         self.configuration = configuration
         self.signingKeyStore = signingKeyStore
+        self.archiveVerifier = archiveVerifier
+        self.finalOutputWriter = finalOutputWriter
     }
 
     func createArchive(_ request: PortableArchiveRequest) async throws -> PortableArchiveCatalogueRow {
@@ -41,11 +125,10 @@ actor PortableArchiveWorker: PortableArchiveWorking {
             throw PortableArchiveError.destinationExists
         }
 
-        let destinationDirectory = request.destinationURL.deletingLastPathComponent()
-        let accessed = destinationDirectory.startAccessingSecurityScopedResource()
+        let accessed = request.destinationURL.startAccessingSecurityScopedResource()
         defer {
             if accessed {
-                destinationDirectory.stopAccessingSecurityScopedResource()
+                request.destinationURL.stopAccessingSecurityScopedResource()
             }
         }
 
@@ -100,8 +183,10 @@ actor PortableArchiveWorker: PortableArchiveWorking {
             throw error
         }
 
-        let temporaryURL = destinationDirectory
-            .appendingPathComponent(".rekon-archive-\(request.temporaryID.uuidString.lowercased()).tmp")
+        let temporaryURL = PortableArchiveStagingLocation.url(
+            temporaryDirectory: FileManager.default.temporaryDirectory,
+            temporaryID: request.temporaryID
+        )
         defer { try? FileManager.default.removeItem(at: temporaryURL) }
 
         do {
@@ -113,21 +198,40 @@ actor PortableArchiveWorker: PortableArchiveWorking {
                 createdAt: request.createdAt,
                 to: temporaryURL
             )
+            let ownership: PortableArchiveOutputOwnership
             do {
-                try FileManager.default.moveItem(at: temporaryURL, to: request.destinationURL)
+                ownership = try finalOutputWriter(temporaryURL, request.destinationURL)
+            } catch is PortableArchiveOutputWriteFailure {
+                throw PortableArchiveError.archiveMayRemainAfterOutputFailure
             } catch {
-                throw PortableArchiveError.verificationFailed
+                throw error
+            }
+            do {
+                guard ownership.matchesCurrentOutput(at: request.destinationURL) else {
+                    throw PortableArchiveError.archiveMayRemainAfterOutputFailure
+                }
+                let saved = try archiveVerifier(Data(contentsOf: request.destinationURL), request.recoveryKey)
+                guard saved == package else {
+                    throw PortableArchiveError.verificationFailed
+                }
+            } catch {
+                throw PortableArchiveError.archiveMayRemainAfterOutputFailure
             }
 
             let bookmark: Data
             do {
+                guard ownership.matchesCurrentOutput(at: request.destinationURL) else {
+                    throw PortableArchiveError.archiveMayRemainAfterOutputFailure
+                }
                 bookmark = try request.destinationURL.bookmarkData(
                     options: [.withSecurityScope],
                     includingResourceValuesForKeys: nil,
                     relativeTo: nil
                 )
+            } catch let error as PortableArchiveError {
+                throw error
             } catch {
-                throw catalogueFailure(afterRemoving: request.destinationURL)
+                throw PortableArchiveError.catalogueUnavailable
             }
 
             let catalogue = PortableArchiveCatalogueRow(
@@ -141,8 +245,14 @@ actor PortableArchiveWorker: PortableArchiveWorking {
                 signingKeyFingerprint: package.signingKeyFingerprint
             )
             do {
+                guard ownership.matchesCurrentOutput(at: request.destinationURL) else {
+                    throw PortableArchiveError.archiveMayRemainAfterOutputFailure
+                }
                 try database.execute("BEGIN IMMEDIATE")
                 do {
+                    guard ownership.matchesCurrentOutput(at: request.destinationURL) else {
+                        throw PortableArchiveError.archiveMayRemainAfterOutputFailure
+                    }
                     try database.execute(
                         "INSERT INTO portable_archive_catalogue (archive_id, destination_bookmark, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint) VALUES (?, ?, ?, ?, ?, ?, 'Verified', ?, ?)",
                         values: [
@@ -167,8 +277,10 @@ actor PortableArchiveWorker: PortableArchiveWorking {
                     try? database.execute("ROLLBACK")
                     throw error
                 }
+            } catch let error as PortableArchiveError {
+                throw error
             } catch {
-                throw catalogueFailure(afterRemoving: request.destinationURL)
+                throw PortableArchiveError.catalogueUnavailable
             }
             return catalogue
         } catch {
@@ -194,15 +306,6 @@ actor PortableArchiveWorker: PortableArchiveWorking {
         } catch {
             try? database.execute("ROLLBACK")
             throw error
-        }
-    }
-
-    private func catalogueFailure(afterRemoving destinationURL: URL) -> PortableArchiveError {
-        do {
-            try FileManager.default.removeItem(at: destinationURL)
-            return .archiveRemovedAfterCatalogueFailure
-        } catch {
-            return .catalogueUnavailable
         }
     }
 
@@ -234,12 +337,12 @@ actor PortableArchiveWorker: PortableArchiveWorking {
             return "destination_exists"
         case PortableArchiveError.invalidDestination:
             return "invalid_destination"
+        case PortableArchiveError.destinationUnavailable:
+            return "destination_unavailable"
         case PortableArchiveError.signingKeyUnavailable:
             return "signing_key_unavailable"
         case PortableArchiveError.catalogueUnavailable:
             return "catalogue_unavailable"
-        case PortableArchiveError.archiveRemovedAfterCatalogueFailure:
-            return "catalogue_removed"
         default:
             return "verification_failed"
         }

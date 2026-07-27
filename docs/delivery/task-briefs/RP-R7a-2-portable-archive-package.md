@@ -83,11 +83,20 @@ switch to, export from, purge, rewrite, or remove an archive.
    created/expires timestamps, verification state, ciphertext checksum, and
    signing-key fingerprint. The archive is written to a newly selected,
    non-existing target only; no existing target is overwritten.
-7. Write a temporary sibling package, read it back in the same operation, and
-   verify header structure, signature, checksum, recovery-envelope unwrap, and
-   in-memory snapshot decode before atomically promoting the file and its
-   catalogue row. Store only a redacted `portable_backup_created` or failure
-   outcome activity event with archive ID and outcome category.
+7. Assemble and verify the temporary package in the app container, where the
+   app owns the staging location. Then exclusively copy it to the newly
+   selected output with exclusive-create and no-follow semantics, record the
+   created file identity, read back that final output, and verify header structure,
+   signature, checksum, recovery-envelope unwrap, and in-memory snapshot decode
+   before promoting its catalogue row. The final copy is deliberately not an
+   atomic sibling rename: a save-panel grant covers the selected output, not
+   arbitrary siblings in its parent directory. A failed copy or final
+   verification never removes the user-selected final output automatically:
+   the path can be replaced after creation, making deletion unsafe. The app
+   preserves any final output, reports that it may remain unusable, and never
+   promotes it to the catalogue after a failed operation. Store only a redacted
+   `portable_backup_created` or failure outcome activity event with archive ID
+   and outcome category.
 
 ## Frozen v1 archive encoding and snapshot projection
 
@@ -167,12 +176,16 @@ format has no optional fields in v1.
    is covered by one deterministic snapshot fixture; use of `SELECT *`,
    dictionary iteration, `JSONEncoder`, or locale-sensitive formatting is
    prohibited.
-8. The selected destination must be accessed through a user-granted
-   read/write security scope only while creating/verifying the archive. The
-   temporary sibling has a generated name and is opened with exclusive-create
-   semantics. On cancellation or failure it is removed best effort; a final
-   archive and a catalogue/activity success record are created only after
-   read-back verification succeeds. If final rename or catalogue transaction
+8. The selected destination must come from the user-granted read/write
+   `NSSavePanel` scope and is accessed only while creating/verifying the
+   archive. The app-container temporary package has a generated name and is
+   opened with exclusive-create semantics; the final destination is also new
+   and never overwritten. On cancellation or failure staging is removed best
+   effort. A partially copied or failed final output is left for the user to
+   remove, with a truthful unusable-result message; it never receives a
+   catalogue/activity success record. A final archive and catalogue/activity success record are
+   created only after final-output read-back verification succeeds. If final
+   copy or catalogue transaction
    fails, no new catalogue row is committed and the app reports a truthful
    recoverability failure; it must not overwrite or remove an earlier archive.
 
