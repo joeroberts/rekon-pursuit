@@ -10,6 +10,7 @@ final class WorkspaceStore {
     private let correlationID: String
     private let failBeforeActivityInsert: Bool
     private let portableArchiveWorker: any PortableArchiveWorking
+    private let protectedExportWorker: ProtectedExportWorker
     private let lock = NSLock()
     private let reconciliationResultSelect = "SELECT id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status, check_operation_id, method, checker_version, http_status, mime_type, declared_bytes, received_bytes, content_sha256, response_date, last_modified, etag, retry_after, redirect_target_redacted, evidence_excerpt, redacted_error_code"
 
@@ -22,7 +23,8 @@ final class WorkspaceStore {
         correlationID: String,
         failBeforeActivityInsert: Bool = false,
         archiveSigningKeyStore: any ArchiveSigningKeyStoring = ArchiveSigningKeyStore(),
-        portableArchiveWorker: (any PortableArchiveWorking)? = nil
+        portableArchiveWorker: (any PortableArchiveWorking)? = nil,
+        protectedExportWorker: ProtectedExportWorker? = nil
     ) throws {
         self.database = database
         self.clock = now.map { fixedNow in { fixedNow } } ?? clock
@@ -33,6 +35,9 @@ final class WorkspaceStore {
         self.portableArchiveWorker = portableArchiveWorker ?? PortableArchiveWorker(
             configuration: database.portableArchiveConnectionConfiguration(),
             signingKeyStore: archiveSigningKeyStore
+        )
+        self.protectedExportWorker = protectedExportWorker ?? ProtectedExportWorker(
+            configuration: database.portableArchiveConnectionConfiguration()
         )
         try WorkspaceMigrations.apply(to: database)
         try interruptAbandonedPublicURLChecksAtLaunch()
@@ -843,6 +848,17 @@ final class WorkspaceStore {
             correlationID: correlationID
         )
         return try await portableArchiveWorker.createArchive(request)
+    }
+
+    func reviewProtectedExport(recoveryKey: RecoveryKey, at destinationURL: URL) async throws -> ProtectedExportReview {
+        try await protectedExportWorker.review(destinationURL: destinationURL, recoveryKey: recoveryKey)
+    }
+
+    func createProtectedExport(review: ProtectedExportReview, recoveryKey: RecoveryKey) async throws -> ProtectedExportReceipt {
+        try await protectedExportWorker.create(.init(
+            review: review, recoveryKey: recoveryKey, exportID: UUID(), createdAt: clock(),
+            activityID: nextIdentifier(), actorID: actorID, correlationID: correlationID
+        ))
     }
 
     func recordDocumentReference(_ command: RecordDocumentReference) throws -> DocumentReference {

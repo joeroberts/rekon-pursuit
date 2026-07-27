@@ -277,6 +277,8 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var recoveryEnrollmentEnabled = false
     @Published private(set) var portableArchiveCatalogue: [PortableArchiveCatalogueRow] = []
     @Published private(set) var isCreatingPortableArchive = false
+    @Published private(set) var protectedExportReview: ProtectedExportReview?
+    @Published private(set) var isCreatingProtectedExport = false
     @Published private(set) var isRestoringPortableArchive = false
     @Published private(set) var portableArchiveRestoreState: PortableArchiveRestoreState = .idle
 
@@ -289,6 +291,7 @@ final class WorkspaceViewModel: ObservableObject {
     private let documentReferenceBookmarks: DocumentReferenceBookmarkStore
     private let openDocumentURL: (URL) -> Bool
     private let portableArchiveDestination: () -> URL?
+    private let protectedExportDestination: () -> URL?
     private let portableArchiveRestore: PortableArchiveRestoreDependencies
     private let separateLocalWorkspace: SeparateLocalWorkspaceDependencies
     private let publicURLChecker: PublicURLChecking
@@ -317,6 +320,13 @@ final class WorkspaceViewModel: ObservableObject {
             panel.canCreateDirectories = true
             return panel.runModal() == .OK ? panel.url : nil
         },
+        protectedExportDestination: @escaping () -> URL? = {
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.init(filenameExtension: "rekonexport")!]
+            panel.nameFieldStringValue = "Rekon Pursuit Export.rekonexport"
+            panel.canCreateDirectories = true
+            return panel.runModal() == .OK ? panel.url : nil
+        },
         portableArchiveRestore: PortableArchiveRestoreDependencies = .live(),
         openExternalWorkspace: @escaping (URL) throws -> WorkspaceOpenState = { _ in .recoveryRequired },
         closeWorkspaceStore: @escaping (WorkspaceStore) throws -> Void = { try $0.close() },
@@ -332,6 +342,7 @@ final class WorkspaceViewModel: ObservableObject {
         self.documentReferenceBookmarks = documentReferenceBookmarks
         self.openDocumentURL = openDocumentURL
         self.portableArchiveDestination = portableArchiveDestination
+        self.protectedExportDestination = protectedExportDestination
         self.portableArchiveRestore = portableArchiveRestore
         self.publicURLChecker = publicURLChecker
         self.separateLocalWorkspace = separateLocalWorkspace
@@ -1199,6 +1210,42 @@ final class WorkspaceViewModel: ObservableObject {
             }
         }
     }
+
+    func reviewProtectedExport(reentry: String) {
+        guard let key = RecoveryKey.parse(reentry) else { statusMessage = "Enter the complete recovery key, including its checksum."; return }
+        guard let url = protectedExportDestination() else { statusMessage = "Protected export was cancelled."; return }
+        guard let store = readyStore() else { return }
+        isCreatingProtectedExport = true
+        Task { @MainActor [weak self, store] in
+            defer { self?.isCreatingProtectedExport = false }
+            do {
+                let review = try await store.reviewProtectedExport(recoveryKey: key, at: url)
+                guard let self, self.store === store else { return }
+                self.protectedExportReview = review
+                self.statusMessage = "Review the protected export before confirming."
+            } catch let error as LocalizedError {
+                self?.statusMessage = error.errorDescription ?? "The protected export could not be prepared."
+            } catch { self?.statusMessage = "The protected export could not be prepared." }
+        }
+    }
+
+    func confirmProtectedExport(reentry: String) {
+        guard let review = protectedExportReview, let key = RecoveryKey.parse(reentry), let store = readyStore() else { statusMessage = "Enter the complete recovery key before confirming."; return }
+        isCreatingProtectedExport = true
+        Task { @MainActor [weak self, store] in
+            defer { self?.isCreatingProtectedExport = false }
+            do {
+                _ = try await store.createProtectedExport(review: review, recoveryKey: key)
+                guard let self, self.store === store else { return }
+                self.protectedExportReview = nil
+                self.statusMessage = "Protected export verified and saved."
+            } catch let error as LocalizedError {
+                self?.statusMessage = error.errorDescription ?? "The protected export could not be created."
+            } catch { self?.statusMessage = "The protected export could not be created." }
+        }
+    }
+
+    func cancelProtectedExport() { protectedExportReview = nil }
 
     func choosePortableArchiveForRestore() {
         guard !isCreatingPortableArchive, !isRestoringPortableArchive else { return }

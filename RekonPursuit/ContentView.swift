@@ -974,6 +974,8 @@ private struct SettingsView: View {
     @State private var recoveryKeyCopied = false
     @State private var archiveRecoveryReentry = ""
     @State private var isPresentingArchiveCreation = false
+    @State private var protectedExportReentry = ""
+    @State private var isPresentingProtectedExport = false
     @State private var portableArchiveRestoreKey = ""
 
     var body: some View {
@@ -1002,6 +1004,12 @@ private struct SettingsView: View {
                             Button("Create recovery archive") { isPresentingArchiveCreation = true }
                                 .accessibilityIdentifier("create-portable-archive")
                                 .disabled(model.isCreatingPortableArchive || model.isRestoringPortableArchive)
+                            Button("Export protected copy") { isPresentingProtectedExport = true }
+                                .accessibilityIdentifier("create-protected-export")
+                                .disabled(model.isCreatingProtectedExport || model.isCreatingPortableArchive || model.isRestoringPortableArchive)
+                            if model.isCreatingProtectedExport {
+                                ProgressView("Preparing protected export…").controlSize(.small)
+                            }
                             if model.isCreatingPortableArchive {
                                 ProgressView("Creating and verifying archive…")
                                     .controlSize(.small)
@@ -1079,6 +1087,37 @@ private struct SettingsView: View {
                         .keyboardShortcut(.defaultAction)
                 }
             }.padding(24).frame(width: 520)
+        }
+        .sheet(isPresented: $isPresentingProtectedExport) {
+            VStack(alignment: .leading, spacing: 16) {
+                if let review = model.protectedExportReview {
+                    Text("Confirm protected export").font(.title2.bold())
+                    Text("A new encrypted .rekonexport file will be created. It contains your active tracker data only; document file access is excluded and requires relinking.").foregroundStyle(.secondary)
+                    LabeledContent("Filename", value: review.displayFilename)
+                    LabeledContent("Destination", value: "Selected local folder")
+                    LabeledContent("Data", value: "Active tracker workspace data")
+                    Text("Re-enter the recovery key to confirm.").font(.footnote).foregroundStyle(.secondary)
+                    TextField("Recovery key", text: $protectedExportReentry).textFieldStyle(.roundedBorder)
+                    HStack {
+                        Button("Cancel", role: .cancel) { model.cancelProtectedExport(); isPresentingProtectedExport = false; protectedExportReentry = "" }
+                        Spacer()
+                        Button("Confirm and export") { model.confirmProtectedExport(reentry: protectedExportReentry); protectedExportReentry = "" }
+                            .disabled(model.isCreatingProtectedExport)
+                            .keyboardShortcut(.defaultAction)
+                    }
+                } else {
+                    Text("Export protected copy").font(.title2.bold())
+                    Text("Choose a destination, then review the encrypted export before it is written. Your recovery key is used only for this action.").foregroundStyle(.secondary)
+                    TextField("Recovery key", text: $protectedExportReentry).textFieldStyle(.roundedBorder)
+                    HStack {
+                        Button("Cancel", role: .cancel) { isPresentingProtectedExport = false; protectedExportReentry = "" }
+                        Spacer()
+                        Button("Choose destination and review") { model.reviewProtectedExport(reentry: protectedExportReentry); protectedExportReentry = "" }
+                            .disabled(model.isCreatingProtectedExport)
+                            .keyboardShortcut(.defaultAction)
+                    }
+                }
+            }.padding(24).frame(width: 540)
         }
         .sheet(isPresented: Binding(
             get: {

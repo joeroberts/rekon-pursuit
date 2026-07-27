@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 nonisolated enum WorkspaceMigrations {
-    static let currentVersion = 25
+    static let currentVersion = 26
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
@@ -25,6 +25,7 @@ nonisolated enum WorkspaceMigrations {
     static let versionTwentyThreeChecksum = checksum(for: "23|document_references.bookmark_data.availability")
     static let versionTwentyFourChecksum = checksum(for: "24|recovery_enrollment.versioned_fingerprint")
     static let versionTwentyFiveChecksum = checksum(for: "25|portable_archive_catalogue.v1")
+    static let versionTwentySixChecksum = checksum(for: "26|tracker_export_revision|protected_export_events|active-data-triggers.v1")
 
     static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false, failVersionSixteen: Bool = false, failVersionSeventeen: Bool = false, failVersionNineteen: Bool = false, failVersionTwenty: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
@@ -418,11 +419,41 @@ nonisolated enum WorkspaceMigrations {
                 database.removeMigrationSnapshot()
             } catch { throw error }
         }
+        if version < 26 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    try database.execute("CREATE TABLE tracker_export_revision (id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL CHECK (revision >= 0))")
+                    try database.execute("INSERT INTO tracker_export_revision (id, revision) VALUES (1, 0)")
+                    try database.execute("CREATE TABLE protected_export_events (id TEXT PRIMARY KEY NOT NULL, export_id TEXT NOT NULL, category TEXT NOT NULL, destination_class TEXT NOT NULL, confirmation_fingerprint TEXT NOT NULL, outcome TEXT NOT NULL, occurred_at REAL NOT NULL)")
+                    for table in protectedExportRevisionTables {
+                        try database.execute(exportRevisionTriggerSQL(table: table, operation: "INSERT"))
+                        try database.execute(exportRevisionTriggerSQL(table: table, operation: "UPDATE"))
+                        try database.execute(exportRevisionTriggerSQL(table: table, operation: "DELETE"))
+                    }
+                    try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(26), .text(versionTwentySixChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 26")
+                }
+                database.removeMigrationSnapshot()
+            } catch { throw error }
+        }
     }
 
     private static func isActiveOpportunity(_ opportunityID: String, in database: EncryptedDatabase) throws -> Bool {
         guard case .text? = try database.rows("SELECT id FROM opportunities WHERE id = ? AND deleted_at IS NULL", values: [.text(opportunityID)]).first?.first else { return false }
         return true
+    }
+
+    private static let protectedExportRevisionTables = [
+        "opportunities", "task_reminders", "opportunity_stage_history", "opportunity_response_history",
+        "contacts", "contact_opportunities", "interactions", "import_reports", "import_report_rows",
+        "posting_checks", "reconciliation_reviews", "reconciliation_results", "reconciliation_check_operations",
+        "document_references", "activity_events", "deletion_tombstones"
+    ]
+
+    private static func exportRevisionTriggerSQL(table: String, operation: String) -> String {
+        let trigger = "tracker_export_revision_\(table)_\(operation.lowercased())"
+        return "CREATE TRIGGER \(trigger) AFTER \(operation) ON \(table) BEGIN UPDATE tracker_export_revision SET revision = revision + 1 WHERE id = 1; END"
     }
 
     private static func checksum(for manifest: String) -> String {
