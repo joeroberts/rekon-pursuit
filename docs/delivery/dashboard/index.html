@@ -20,25 +20,14 @@
   <main>
     <header><div class="eyebrow">Rekon Pursuit</div><h1>Delivery dashboard</h1><p class="subhead">Local operational view. This page refreshes every 30 seconds.</p></header>
     <section class="summary" aria-label="Delivery summary">
-      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">RP-R7b — Automatic portable archive expiry (R7b-1)</span></div>
-      <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">No successor eligible</span></div>
-      <div class="summary-item"><span class="summary-label">Accepted</span><span class="summary-value">19</span></div>
-      <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">3</span></div>
+      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">No task in progress</span></div>
+      <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">RP-R8 — Searchable local AI ledger</span></div>
+      <div class="summary-item"><span class="summary-label">Accepted</span><span class="summary-value">20</span></div>
+      <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">2</span></div>
       <div class="summary-item"><span class="summary-label">Blocked</span><span class="summary-value">0</span></div>
     </section>
     <section class="attention" aria-label="Attention queue"><h2>Attention queue</h2><p class="attention-empty">Nothing needs your attention.</p></section>
-    <section class="board" aria-label="Delivery status board"><section class="lane lane-backlog"><header><h2>Backlog</h2><span class="lane-count">3</span></header>
-      <article class="task-card status-backlog">
-        <div class="card-heading"><span class="task-id">RP-R8</span><span class="work-type">Observability</span></div>
-        <h3>Searchable local AI ledger</h3>
-        <dl>
-          <div><dt>Release condition</dt><dd>Release only after the R7a/R7b lifecycle sequence is accepted; its former R6-only dependency was superseded by the approved serial delivery order.</dd></div>
-          <div><dt>Latest transition</dt><dd>Backlog: R8 is not eligible while portable restore/export and lifecycle removal remain unreleased.</dd></div>
-        </dl>
-        <p class="action">No action needed</p>
-        <a class="details-link" href="remediation.html#RP-R8">View task details</a>
-      </article>
-
+    <section class="board" aria-label="Delivery status board"><section class="lane lane-backlog"><header><h2>Backlog</h2><span class="lane-count">2</span></header>
       <article class="task-card status-backlog">
         <div class="card-heading"><span class="task-id">RP-R9</span><span class="work-type">Settings</span></div>
         <h3>Lifecycle-aware settings</h3>
@@ -59,17 +48,17 @@
         </dl>
         <p class="action">No action needed</p>
         <a class="details-link" href="remediation.html#RP-R10">View task details</a>
-      </article></section><section class="lane lane-next_up"><header><h2>Next up</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section><section class="lane lane-in_progress"><header><h2>In progress</h2><span class="lane-count">1</span></header>
-      <article class="task-card status-in_progress">
-        <div class="card-heading"><span class="task-id">RP-R7b</span><span class="work-type">Data lifecycle</span></div>
-        <h3>Automatic portable archive expiry (R7b-1)</h3>
+      </article></section><section class="lane lane-next_up"><header><h2>Next up</h2><span class="lane-count">1</span></header>
+      <article class="task-card status-next_up">
+        <div class="card-heading"><span class="task-id">RP-R8</span><span class="work-type">Observability</span></div>
+        <h3>Searchable local AI ledger</h3>
         <dl>
-          <div><dt>Release condition</dt><dd>R7b-1 only is released after Planning, Architect/Security, QA, TPM, and Delivery approval; R7b-2 purge/rebuild remains unreleased.</dd></div>
-          <div><dt>Latest transition</dt><dd>R7b-1 automatic expiry was released after the independent plan gate; R7b-2 remains out of scope.</dd></div>
+          <div><dt>Release condition</dt><dd>Eligible after the accepted R7a/R7b lifecycle sequence; requires its own approved plan and release gate before implementation.</dd></div>
+          <div><dt>Latest transition</dt><dd>Moved to Next up after R7b-1 acceptance; no R8 implementation is released.</dd></div>
         </dl>
         <p class="action">No action needed</p>
-        <a class="details-link" href="remediation.html#RP-R7b">View task details</a>
-      </article></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">19</span></header>
+        <a class="details-link" href="remediation.html#RP-R8">View task details</a>
+      </article></section><section class="lane lane-in_progress"><header><h2>In progress</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">20</span></header>
       <article class="task-card status-accepted">
         <div class="card-heading"><span class="task-id">RP-R0</span><span class="work-type">Foundation</span></div>
         <h3>Evidence-only remediation baseline</h3>
@@ -277,6 +266,17 @@
         </dl>
         <p class="action">No action needed</p>
         <a class="details-link" href="remediation.html#RP-R7a-4">View task details</a>
+      </article>
+
+      <article class="task-card status-accepted">
+        <div class="card-heading"><span class="task-id">RP-R7b</span><span class="work-type">Data lifecycle</span></div>
+        <h3>Automatic portable archive expiry (R7b-1)</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>Accepted R7b-1 automatic expiry only; R7b-2 purge/rebuild remains unreleased.</dd></div>
+          <div><dt>Latest transition</dt><dd>Accepted after focused lifecycle safety verification, independent code/QA/security re-review, and product-owner protected-export verification.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="details-link" href="remediation.html#RP-R7b">View task details</a>
       </article></section><section class="lane lane-blocked"><header><h2>Blocked</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section></section>
     <footer>Source: <code>docs/delivery/dashboard-status.json</code> · Generated locally · No server required</footer>
   </main>
