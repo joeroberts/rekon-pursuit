@@ -1,6 +1,6 @@
 # RP-R7a-2 — Portable archive snapshot and authenticated package
 
-**State:** Next up — planning and high-risk gate only  
+**State:** In progress — released for portable archive package implementation only
 **Depends on:** `RP-R7a-1` accepted; [ADR-001](../../architecture/adr/ADR-001-local-data-lifecycle.md), the [lifecycle contract](../../architecture/local-data-lifecycle-contract.md), and the [R7a recovery design](../../superpowers/specs/2026-07-27-r7a-portable-recovery-design.md)  
 **Blocks:** Restore-as-new-workspace and both export flows  
 **Implementation release requires:** Independent Planning, Architect,
