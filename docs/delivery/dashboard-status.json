@@ -113,12 +113,13 @@
       "workType": "UX",
       "status": "in_progress",
       "releaseCondition": "UX-R2-A only: opportunity Add/Overview compatibility data, validation, and focused persistence tests. Contacts, CSV redesign, and RP-R6 are unreleased.",
-      "latestTransition": "Planning, Architect, QA, TPM, and Delivery approved the brief; UX-R2-A was released as the sole implementation slice.",
+      "latestTransition": "UX-R2-A implementation and corrective reviews are complete; a fresh Debug build is ready for product-owner hands-on verification.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
       },
-      "needsUserAction": false
+      "needsUserAction": true,
+      "userActionDetail": "Run the fresh Debug app through Add Opportunity and an existing opportunity Overview, then report whether the form and saved values behave as expected."
     },
     {
       "id": "RP-R6",
