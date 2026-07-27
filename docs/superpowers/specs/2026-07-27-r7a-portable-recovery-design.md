@@ -68,8 +68,11 @@ their retention, deletion, or export rules.
   inside the encrypted package and must hash to the authenticated header value.
 - The recovery key is combined with a per-backup random salt through
   HKDF-SHA256 to derive a wrapping key. A recovery envelope AES-GCM seals the
-  content key and binds it to the backup ID, archive format version, and
-  outer-header manifest hash as authenticated associated data.
+  content key and binds it to the backup ID, archive format version, and a
+  canonical header commitment as authenticated associated data. The commitment
+  contains the manifest hash, signing-public-key fingerprint, archive checksum,
+  and fixed header fields, but excludes the envelope and signature fields so it
+  is non-circular and can be verified before trusting the header key.
 - The manifest contains only IDs, versions, creation/expiry timestamps,
   checksums, deleted-material inventory summary, recovery-envelope hash, and
   signing-public-key fingerprint. It contains no recovery secret, database
