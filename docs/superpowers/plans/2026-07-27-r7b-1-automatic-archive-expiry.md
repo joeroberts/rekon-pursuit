@@ -76,7 +76,7 @@
 
   Run:
   ```bash
-  xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -destination 'platform=macOS,arch=arm64' -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testPortableArchiveCatalogueMigrationDefaultsExistingRowsToVerified
+  xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -destination 'platform=macOS,arch=arm64' -only-testing:RekonPursuitTests/PortableArchiveTests/testPortableArchiveCatalogueMigrationDefaultsExistingRowsToVerified
   ```
   Expected: FAIL because the model fields and catalogue columns do not exist.
 
@@ -95,7 +95,7 @@
 
   Run the command from Step 2, then run the existing portable archive test class:
   ```bash
-  xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -destination 'platform=macOS,arch=arm64' -only-testing:RekonPursuitCoreTests/PortableArchiveTests
+  xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -destination 'platform=macOS,arch=arm64' -only-testing:RekonPursuitTests/PortableArchiveTests
   ```
   Expected: PASS; existing rows remain visible as verified and unknown lifecycle data fails closed.
 
@@ -149,7 +149,7 @@
 
   Run:
   ```bash
-  xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -destination 'platform=macOS,arch=arm64' -only-testing:RekonPursuitCoreTests/PortableArchiveTests
+  xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -destination 'platform=macOS,arch=arm64' -only-testing:RekonPursuitTests/PortableArchiveTests
   ```
   Expected: FAIL because `verifyPublicBinding` and the expiry service do not exist.
 
@@ -245,7 +245,7 @@
 
   Run:
   ```bash
-  xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -destination 'platform=macOS,arch=arm64' -only-testing:RekonPursuitCoreTests/PortableArchiveTests
+  xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -destination 'platform=macOS,arch=arm64' -only-testing:RekonPursuitTests/PortableArchiveTests
   xcodebuild build -project RekonPursuit.xcodeproj -scheme RekonPursuit -destination 'platform=macOS,arch=arm64'
   ```
   Expected: focused portable-archive tests pass and the signed Debug build succeeds.
