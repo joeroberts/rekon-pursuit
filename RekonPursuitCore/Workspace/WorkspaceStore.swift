@@ -2,6 +2,18 @@ import CryptoKit
 import Foundation
 import Darwin
 
+nonisolated private final class PortableArchiveExpiryClock: @unchecked Sendable {
+    private let value: () -> Date
+
+    init(_ value: @escaping () -> Date) {
+        self.value = value
+    }
+
+    func now() -> Date {
+        value()
+    }
+}
+
 final class WorkspaceStore {
     private let database: EncryptedDatabase
     private let clock: () -> Date
@@ -28,7 +40,12 @@ final class WorkspaceStore {
         portableArchiveExpiryWorker: (any PortableArchiveExpiryWorking)? = nil,
         protectedExportWorker: ProtectedExportWorker? = nil
     ) throws {
-        let resolvedClock: () -> Date = now.map { fixedNow in { fixedNow } } ?? clock
+        let resolvedClock: () -> Date
+        if let now {
+            resolvedClock = { now }
+        } else {
+            resolvedClock = clock
+        }
         self.database = database
         self.clock = resolvedClock
         self.nextIdentifier = nextIdentifier
@@ -39,8 +56,10 @@ final class WorkspaceStore {
             configuration: database.portableArchiveConnectionConfiguration(),
             signingKeyStore: archiveSigningKeyStore
         )
+        let expiryClock = PortableArchiveExpiryClock(resolvedClock)
         self.portableArchiveExpiryWorker = portableArchiveExpiryWorker ?? PortableArchiveExpiryWorker(
             configuration: database.portableArchiveConnectionConfiguration(),
+            now: expiryClock.now,
             actorID: actorID
         )
         self.protectedExportWorker = protectedExportWorker ?? ProtectedExportWorker(
@@ -842,10 +861,10 @@ final class WorkspaceStore {
     }
 
     func runPortableArchiveExpiryServiceOpportunity() async throws -> [PortableArchiveCatalogueRow] {
+        acquireWorkspaceLock()
+        defer { releaseWorkspaceLock() }
         try await portableArchiveExpiryWorker.run()
-        return try synchronized {
-            try portableArchiveCatalogueRowsLocked()
-        }
+        return try portableArchiveCatalogueRowsLocked()
     }
 
     func updatePortableArchiveCatalogueLifecycle(
@@ -1030,9 +1049,17 @@ final class WorkspaceStore {
     }
 
     private func synchronized<T>(_ work: () throws -> T) throws -> T {
-        lock.lock()
-        defer { lock.unlock() }
+        acquireWorkspaceLock()
+        defer { releaseWorkspaceLock() }
         return try work()
+    }
+
+    private func acquireWorkspaceLock() {
+        lock.lock()
+    }
+
+    private func releaseWorkspaceLock() {
+        lock.unlock()
     }
 
     private func activeTaskOpportunityID(_ taskID: String) throws -> String {

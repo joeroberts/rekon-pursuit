@@ -121,7 +121,8 @@ nonisolated struct PortableArchiveService {
         let header = try reader.take(Int(headerLength))
         var h = ArchiveReader(header)
         let archiveID = try h.uuid(); let createdAt = try h.int64(); let expiresAt = try h.int64(); guard try h.byte() == 1 else { throw PortableArchiveError.archiveInvalid }
-        guard expiresAt == createdAt + 30 * 24 * 60 * 60 * 1000 else { throw PortableArchiveError.archiveInvalid }
+        let (expectedExpiresAt, overflow) = createdAt.addingReportingOverflow(30 * 24 * 60 * 60 * 1000)
+        guard !overflow, expiresAt == expectedExpiresAt else { throw PortableArchiveError.archiveInvalid }
         let salt = try h.take(32); let manifestHash = try h.take(32); let checksum = try h.take(32); let publicKey = try h.take(32); let fingerprint = try h.take(32); let envelope = try h.take(60); let signature = try h.take(64)
         guard h.isAtEnd, Data(SHA256.hash(data: publicKey)) == fingerprint else { throw PortableArchiveError.archiveInvalid }
         let commitment = headerCommitment(archiveID: archiveID, createdAt: Date(timeIntervalSince1970: Double(createdAt) / 1000), expiresAt: Date(timeIntervalSince1970: Double(expiresAt) / 1000), salt: salt, manifestHash: manifestHash, payloadChecksum: checksum, publicKey: publicKey, fingerprint: fingerprint)

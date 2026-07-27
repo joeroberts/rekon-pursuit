@@ -45,12 +45,14 @@ nonisolated struct PortableArchiveExpiryFileOperations: Sendable {
     var readDescriptor: @Sendable (Int32) throws -> Data
     var closeDescriptor: @Sendable (Int32) -> Void
     var targetMetadata: @Sendable (URL) throws -> PortableArchiveExpiryFileMetadata
+    var quarantineTarget: @Sendable (URL) throws -> URL
+    var restoreQuarantinedTarget: @Sendable (URL, URL) -> Void
     var unlinkTarget: @Sendable (URL) throws -> Void
 
     static var live: PortableArchiveExpiryFileOperations {
         PortableArchiveExpiryFileOperations(
             openDescriptor: { url in
-                let descriptor = Darwin.open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
+                let descriptor = Darwin.open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
                 guard descriptor >= 0 else {
                     switch errno {
                     case ENOENT:
@@ -102,6 +104,39 @@ nonisolated struct PortableArchiveExpiryFileOperations: Sendable {
                     throw PortableArchiveExpiryError.ioFailure
                 }
                 return metadata(value)
+            },
+            quarantineTarget: { url in
+                let directory = url.deletingLastPathComponent()
+                for _ in 0..<8 {
+                    let quarantine = directory.appendingPathComponent(".rekon-expiry-\(UUID().uuidString).pending")
+                    guard Darwin.renameatx_np(
+                        AT_FDCWD,
+                        url.path,
+                        AT_FDCWD,
+                        quarantine.path,
+                        UInt32(RENAME_EXCL)
+                    ) == 0 else {
+                        switch errno {
+                        case ENOENT:
+                            throw PortableArchiveExpiryError.targetMissing
+                        case EEXIST:
+                            continue
+                        default:
+                            throw PortableArchiveExpiryError.ioFailure
+                        }
+                    }
+                    return quarantine
+                }
+                throw PortableArchiveExpiryError.ioFailure
+            },
+            restoreQuarantinedTarget: { quarantine, original in
+                _ = Darwin.renameatx_np(
+                    AT_FDCWD,
+                    quarantine.path,
+                    AT_FDCWD,
+                    original.path,
+                    UInt32(RENAME_EXCL)
+                )
             },
             unlinkTarget: { url in
                 guard Darwin.unlink(url.path) == 0 else {
@@ -247,6 +282,7 @@ actor PortableArchiveExpiryWorker: PortableArchiveExpiryWorking {
         guard candidate.row.formatVersion == Int(PortableArchiveService.formatVersion),
               candidate.row.verificationState == "Verified",
               binding.archiveID == candidate.row.archiveID,
+              binding.expiresAt == candidate.row.expiresAt,
               binding.ciphertextChecksum == candidate.row.ciphertextChecksum,
               binding.signingKeyFingerprint == candidate.row.signingKeyFingerprint else {
             throw PortableArchiveExpiryError.archiveMismatch
@@ -259,7 +295,17 @@ actor PortableArchiveExpiryWorker: PortableArchiveExpiryWorking {
         guard currentMetadata.identity == openedMetadata.identity else {
             throw PortableArchiveExpiryError.identityMismatch
         }
-        try fileOperations.unlinkTarget(scope.url)
+        let quarantine = try fileOperations.quarantineTarget(scope.url)
+        let quarantinedMetadata = try fileOperations.targetMetadata(quarantine)
+        guard quarantinedMetadata.isRegular, !quarantinedMetadata.isSymbolicLink else {
+            fileOperations.restoreQuarantinedTarget(quarantine, scope.url)
+            throw PortableArchiveExpiryError.targetUnsafe
+        }
+        guard quarantinedMetadata.identity == openedMetadata.identity else {
+            fileOperations.restoreQuarantinedTarget(quarantine, scope.url)
+            throw PortableArchiveExpiryError.identityMismatch
+        }
+        try fileOperations.unlinkTarget(quarantine)
 
         do {
             try database.transaction {
