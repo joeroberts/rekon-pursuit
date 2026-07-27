@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "UX-R2",
-  "nextEligibleTaskId": "UX-R2-B",
+  "activeTaskId": "UX-R2-B",
+  "nextEligibleTaskId": null,
   "tasks": [
     {
       "id": "RP-R0",
@@ -137,9 +137,9 @@
       "id": "UX-R2-B",
       "title": "Contacts and employer relationship flow",
       "workType": "Workflow",
-      "status": "next_up",
-      "releaseCondition": "Eligible after UX-R2-A acceptance; implementation has not been released.",
-      "latestTransition": "UX-R2-A accepted; B is the only eligible successor.",
+      "status": "in_progress",
+      "releaseCondition": "Implement only the approved Contacts and employer relationship flow. UX-R2-C and RP-R6 remain unreleased.",
+      "latestTransition": "Released after UX-R2-A acceptance under the already-approved serial brief.",
       "evidence": {
         "label": "UX-R2 task brief",
         "href": "../task-briefs/UX-R2-core-workflow-forms.md"
