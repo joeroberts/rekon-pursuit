@@ -11,6 +11,12 @@ Rekon Pursuit retains workspace data indefinitely by default, until the user exp
 
 Recoverable backups are opt-in. They require a user-held recovery key and have no product, support, or password-reset recovery path. Backups retain deleted data for 30 days by default, measured from the backup creation time. The UI must show the user the applicable backup expiry date. The user may explicitly purge deleted data from every retained backup; this is a destructive operation and requires a dedicated confirmation.
 
+**Implementation refinement (2026-07-27):** The recovery key is an
+app-generated 256-bit secret, displayed once as grouped Base32 text with a
+checksum and verified by re-entry. It is never copied to the clipboard or
+written to a file by the app. This does not change the no-reset, no-escrow, or
+user-held recovery decision above.
+
 The app permits unencrypted exports only after an explicit warning and a final filename/location review. Encrypted export remains available as the safer default. OAuth tokens, database keys, and recovery secrets are never exported.
 
 ## Rationale
@@ -94,4 +100,3 @@ Logical deletion cascades only through user-visible availability, never by silen
 - Treat backup rewrite/purge as an idempotent job with a durable progress record, per-backup verification, and no destructive removal of the predecessor until its replacement verifies.
 - Keep retention policy, destructive confirmations, and export disclosures as versioned settings/consent records so activity evidence can identify the rule in effect.
 - Define detailed schemas, migration behavior, test fixtures, and UI copy in the M0 readiness package and implementation task briefs.
-
