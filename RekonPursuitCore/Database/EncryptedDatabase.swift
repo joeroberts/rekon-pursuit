@@ -110,13 +110,16 @@ nonisolated final class EncryptedDatabase {
             result.append((0..<sqlite3_column_count(statement)).map { column in
                 switch sqlite3_column_type(statement, column) {
                 case SQLITE_INTEGER:
-                    .integer(sqlite3_column_int64(statement, column))
+                    return .integer(sqlite3_column_int64(statement, column))
                 case SQLITE_FLOAT:
-                    .real(sqlite3_column_double(statement, column))
+                    return .real(sqlite3_column_double(statement, column))
                 case SQLITE_TEXT:
-                    .text(String(cString: sqlite3_column_text(statement, column)))
+                    return .text(String(cString: sqlite3_column_text(statement, column)))
+                case SQLITE_BLOB:
+                    guard let bytes = sqlite3_column_blob(statement, column) else { return .blob(Data()) }
+                    return .blob(Data(bytes: bytes, count: Int(sqlite3_column_bytes(statement, column))))
                 default:
-                    .null
+                    return .null
                 }
             })
         }
@@ -251,6 +254,8 @@ nonisolated final class EncryptedDatabase {
                 result = sqlite3_bind_double(statement, index, number)
             case let .text(text):
                 result = text.withCString { sqlite3_bind_text(statement, index, $0, -1, sqliteTransient) }
+            case let .blob(data):
+                result = data.withUnsafeBytes { sqlite3_bind_blob(statement, index, $0.baseAddress, Int32(data.count), sqliteTransient) }
             }
             guard result == SQLITE_OK else {
                 throw sqliteError(handle: handle, code: result)
@@ -264,4 +269,5 @@ enum DatabaseValue: Equatable {
     case integer(Int64)
     case real(Double)
     case text(String)
+    case blob(Data)
 }

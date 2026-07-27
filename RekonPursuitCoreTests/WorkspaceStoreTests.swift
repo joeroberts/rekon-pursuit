@@ -1471,6 +1471,24 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents().suffix(2).map(\.kind), ["document_reference_linked", "document_reference_marked_final"])
     }
 
+    func testDocumentReferencePersistsOpaqueBookmarkAndAvailability() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let reference = try store.recordDocumentReference(RecordDocumentReference(
+            opportunityID: opportunity.id,
+            kind: .resume,
+            filename: "resume.pdf",
+            contentType: "application/pdf",
+            sourceHash: String(repeating: "b", count: 64),
+            byteCount: 2_048,
+            bookmarkData: Data([0x01, 0x02])
+        ))
+
+        XCTAssertEqual(reference.availability, .available)
+        XCTAssertEqual(reference.bookmarkData, Data([0x01, 0x02]))
+        XCTAssertEqual(try store.documentReferences(forOpportunityID: opportunity.id).first?.bookmarkData, Data([0x01, 0x02]))
+    }
+
     func testEncryptedBackupCreatesReadableWorkspaceAndRecordsActivity() throws {
         let store = try makeStore()
         _ = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))

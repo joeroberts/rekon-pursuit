@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 enum WorkspaceMigrations {
-    static let currentVersion = 22
+    static let currentVersion = 23
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
@@ -22,6 +22,7 @@ enum WorkspaceMigrations {
     static let versionTwentyChecksum = checksum(for: "20|reconciliation_check_operations|reconciliation_results.public_url_evidence")
     static let versionTwentyOneChecksum = checksum(for: "21|opportunities.structured_compensation|opportunities.typed_next_action")
     static let versionTwentyTwoChecksum = checksum(for: "22|import_report_rows.display_title_company")
+    static let versionTwentyThreeChecksum = checksum(for: "23|document_references.bookmark_data.availability")
 
     static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false, failVersionSixteen: Bool = false, failVersionSeventeen: Bool = false, failVersionNineteen: Bool = false, failVersionTwenty: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
@@ -380,6 +381,18 @@ enum WorkspaceMigrations {
                 try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(22), .text(versionTwentyTwoChecksum)])
                 try database.execute("UPDATE schema_migrations SET version = 22")
             }
+        }
+        if version < 23 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    try database.execute("ALTER TABLE document_references ADD COLUMN bookmark_data BLOB")
+                    try database.execute("ALTER TABLE document_references ADD COLUMN availability TEXT NOT NULL DEFAULT 'relink_required'")
+                    try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(23), .text(versionTwentyThreeChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 23")
+                }
+                database.removeMigrationSnapshot()
+            } catch { throw error }
         }
     }
 

@@ -219,6 +219,7 @@ final class WorkspaceStore {
                         values: [.real(commandNow.timeIntervalSince1970), .text(redactedURLSnapshot(urlSnapshot)), .text(operationID)]
                     )
                 }
+                try database.execute("UPDATE document_references SET bookmark_data = NULL, availability = 'relink_required' WHERE opportunity_id = ?", values: [.text(id)])
                 try database.execute("UPDATE opportunities SET deleted_at = ? WHERE id = ?", values: [.real(commandNow.timeIntervalSince1970), .text(id)])
                 try database.execute("DELETE FROM task_reminders WHERE opportunity_id = ? AND NOT EXISTS (SELECT 1 FROM reconciliation_reviews WHERE reconciliation_reviews.task_reminder_id = task_reminders.id)", values: [.text(id)])
                 try database.execute(
@@ -790,9 +791,9 @@ final class WorkspaceStore {
         guard !filename.isEmpty, !sourceHash.isEmpty, command.byteCount >= 0 else { throw WorkspaceStoreError.invalidDocumentReference }
         return try synchronized {
             guard try isActiveOpportunity(command.opportunityID) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
-            let reference = DocumentReference(id: nextIdentifier(), opportunityID: command.opportunityID, kind: command.kind, filename: filename, contentType: command.contentType, sourceHash: sourceHash, byteCount: command.byteCount, attachedAt: commandNow, finalSentAt: nil)
+            let reference = DocumentReference(id: nextIdentifier(), opportunityID: command.opportunityID, kind: command.kind, filename: filename, contentType: command.contentType, sourceHash: sourceHash, byteCount: command.byteCount, bookmarkData: command.bookmarkData, availability: command.bookmarkData == nil ? .relinkRequired : .available, attachedAt: commandNow, finalSentAt: nil)
             try database.transaction {
-                try database.execute("INSERT INTO document_references (id, opportunity_id, kind, filename, content_type, source_hash, byte_count, attached_at, final_sent_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)", values: [.text(reference.id), .text(reference.opportunityID), .text(reference.kind.rawValue), .text(reference.filename), .text(reference.contentType), .text(reference.sourceHash), .integer(Int64(reference.byteCount)), .real(reference.attachedAt.timeIntervalSince1970)])
+                try database.execute("INSERT INTO document_references (id, opportunity_id, kind, filename, content_type, source_hash, byte_count, bookmark_data, availability, attached_at, final_sent_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)", values: [.text(reference.id), .text(reference.opportunityID), .text(reference.kind.rawValue), .text(reference.filename), .text(reference.contentType), .text(reference.sourceHash), .integer(Int64(reference.byteCount)), reference.bookmarkData.map(DatabaseValue.blob) ?? .null, .text(reference.availability.rawValue), .real(reference.attachedAt.timeIntervalSince1970)])
                 try appendActivity(kind: "document_reference_linked", opportunityID: reference.opportunityID, occurredAt: commandNow)
             }
             return reference
@@ -814,7 +815,7 @@ final class WorkspaceStore {
     func documentReferences(forOpportunityID opportunityID: String) throws -> [DocumentReference] {
         try synchronized {
             guard try isActiveOpportunity(opportunityID) else { return [] }
-            return try database.rows("SELECT id, opportunity_id, kind, filename, content_type, source_hash, byte_count, attached_at, final_sent_at FROM document_references WHERE opportunity_id = ? ORDER BY attached_at DESC, id DESC", values: [.text(opportunityID)]).map(documentReference(from:))
+            return try database.rows("SELECT id, opportunity_id, kind, filename, content_type, source_hash, byte_count, bookmark_data, availability, attached_at, final_sent_at FROM document_references WHERE opportunity_id = ? ORDER BY attached_at DESC, id DESC", values: [.text(opportunityID)]).map(documentReference(from:))
         }
     }
 
@@ -1410,15 +1411,18 @@ final class WorkspaceStore {
     }
 
     private func documentReference(from row: [DatabaseValue]) throws -> DocumentReference {
-        guard row.count == 9,
+        guard row.count == 11,
               case let .text(id) = row[0], case let .text(opportunityID) = row[1],
               case let .text(kindValue) = row[2], let kind = DocumentReferenceKind(rawValue: kindValue),
               case let .text(filename) = row[3], case let .text(contentType) = row[4],
               case let .text(sourceHash) = row[5], case let .integer(byteCount) = row[6],
-              case let .real(attachedAt) = row[7] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+              case let .text(availabilityValue) = row[8], let availability = DocumentReferenceAvailability(rawValue: availabilityValue),
+              case let .real(attachedAt) = row[9] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+        let bookmarkData: Data?
+        if case let .blob(value) = row[7] { bookmarkData = value } else { bookmarkData = nil }
         let finalSentAt: Date?
-        if case let .real(value) = row[8] { finalSentAt = Date(timeIntervalSince1970: value) } else { finalSentAt = nil }
-        return DocumentReference(id: id, opportunityID: opportunityID, kind: kind, filename: filename, contentType: contentType, sourceHash: sourceHash, byteCount: Int(byteCount), attachedAt: Date(timeIntervalSince1970: attachedAt), finalSentAt: finalSentAt)
+        if case let .real(value) = row[10] { finalSentAt = Date(timeIntervalSince1970: value) } else { finalSentAt = nil }
+        return DocumentReference(id: id, opportunityID: opportunityID, kind: kind, filename: filename, contentType: contentType, sourceHash: sourceHash, byteCount: Int(byteCount), bookmarkData: bookmarkData, availability: availability, attachedAt: Date(timeIntervalSince1970: attachedAt), finalSentAt: finalSentAt)
     }
 
     private func activityEvent(from row: [DatabaseValue]) throws -> ActivityEvent {

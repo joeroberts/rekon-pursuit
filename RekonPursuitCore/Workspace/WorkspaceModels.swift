@@ -329,6 +329,11 @@ enum DocumentReferenceKind: String, CaseIterable, Equatable {
     case coverLetter = "Cover letter"
 }
 
+enum DocumentReferenceAvailability: String, Equatable {
+    case available = "available"
+    case relinkRequired = "relink_required"
+}
+
 struct DocumentReference: Equatable {
     let id: String
     let opportunityID: String
@@ -337,6 +342,8 @@ struct DocumentReference: Equatable {
     let contentType: String
     let sourceHash: String
     let byteCount: Int
+    let bookmarkData: Data?
+    let availability: DocumentReferenceAvailability
     let attachedAt: Date
     let finalSentAt: Date?
 }
@@ -348,6 +355,7 @@ struct RecordDocumentReference {
     let contentType: String
     let sourceHash: String
     let byteCount: Int
+    let bookmarkData: Data? = nil
 }
 
 enum PipelineStage: String, CaseIterable, Equatable {
