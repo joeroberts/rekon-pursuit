@@ -1086,6 +1086,7 @@ final class WorkspaceViewModelTests: XCTestCase {
         model.start()
         model.contactName = "Alex Morgan"
         model.contactEmail = "alex@"
+        XCTAssertEqual(model.contactEmailWarning, "Enter an email address with a local part, @, and domain.")
         model.createContact()
 
         XCTAssertEqual(model.contactSaveError, "Enter an email address with a local part, @, and domain.")

@@ -571,6 +571,14 @@ final class WorkspaceViewModel: ObservableObject {
         return hasExactMatch ? nil : query
     }
 
+    var contactEmailWarning: String? {
+        let value = contactEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        return value.range(of: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", options: .regularExpression) == nil
+            ? "Enter an email address with a local part, @, and domain."
+            : nil
+    }
+
     var contactProfileURLWarning: String? { profileURLWarning(for: contactProfileURL) }
 
     var selectedContact: Contact? {

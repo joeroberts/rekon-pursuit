@@ -825,6 +825,7 @@ private struct ContactsView: View {
                         }
                         TextField("Title (optional)", text: $model.contactTitle)
                         TextField("Email (optional)", text: $model.contactEmail)
+                        if let warning = model.contactEmailWarning { Text(warning).font(.caption).foregroundStyle(.orange) }
                         TextField("Profile URL (optional)", text: $model.contactProfileURL)
                         if let warning = model.contactProfileURLWarning { Text(warning).font(.caption).foregroundStyle(.orange) }
                         VStack(alignment: .leading, spacing: 4) {
