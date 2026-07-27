@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "RP-R7a-3",
+  "activeTaskId": "RP-R7a-3a",
   "nextEligibleTaskId": null,
   "tasks": [
     {
@@ -203,11 +203,37 @@
       "title": "Restore authenticated archive as new workspace",
       "workType": "Data lifecycle",
       "status": "in_progress",
-      "releaseCondition": "Requires its own Architecture/Security, QA, TPM, and Delivery gate; no activation, export, purge, or expiry work is included.",
-      "latestTransition": "Delivery Manager released the bounded restore-as-new-workspace slice; implementation is active with no switch, export, purge, or expiry scope.",
+      "releaseCondition": "The parent remains in progress while its serial corrective sub-slices are gated; no activation, export, purge, or expiry work is included.",
+      "latestTransition": "R7a-3a restore-worker foundation is the sole active corrective sub-slice; the UI/owner-smoke sub-slice remains unreleased.",
       "evidence": {
         "label": "R7a-3 task brief",
         "href": "../task-briefs/RP-R7a-3-restore-as-new-workspace.md"
+      },
+      "needsUserAction": false
+    },
+    {
+      "id": "RP-R7a-3a",
+      "title": "Restore worker foundation",
+      "workType": "Data lifecycle",
+      "status": "in_progress",
+      "releaseCondition": "R7a-2 is accepted and Planning, Architecture/Security, QA, TPM, and Delivery approved this worker-only sub-slice. It excludes all UI, activation, switching, export, purge, and expiry work.",
+      "latestTransition": "Released as the sole active corrective sub-slice under the in-progress R7a-3 parent.",
+      "evidence": {
+        "label": "R7a-3a task brief",
+        "href": "../task-briefs/RP-R7a-3a-restore-worker-foundation.md"
+      },
+      "needsUserAction": false
+    },
+    {
+      "id": "RP-R7a-3b",
+      "title": "Restore UI and owner smoke",
+      "workType": "Workflow",
+      "status": "backlog",
+      "releaseCondition": "Release only after R7a-3a is accepted and after its own plan and Architecture/Security, QA, TPM, and Delivery gates approve the UI scope.",
+      "latestTransition": "Unreleased dependency-gated successor; no user intervention is required.",
+      "evidence": {
+        "label": "R7a-3a task brief",
+        "href": "../task-briefs/RP-R7a-3a-restore-worker-foundation.md"
       },
       "needsUserAction": false
     },

@@ -4,8 +4,10 @@
 `RP-R1a`, `RP-R1b`, `RP-R2`, `RP-R3`, `RP-R4`, `RP-R5`, `UX-R1`, and
 `UX-R2` (including sub-slices A, B, and C) and `RP-R6` are Accepted.
 `RP-R7a-1` and `RP-R7a-2` are Accepted. The `RP-R7a` parent remains in
-progress: `RP-R7a-3` restore-as-new-workspace implementation is active. Export,
-purge, and expiry remain unreleased.
+progress: its `RP-R7a-3` restore-as-new-workspace work is active through the
+sole released corrective sub-slice, `RP-R7a-3a` restore-worker foundation.
+`RP-R7a-3b` restore UI/owner smoke remains unreleased and dependency-gated.
+Export, purge, and expiry remain unreleased.
 `RP-R7b`–`RP-R10` remain Backlog.
 
 **Authority:** [dashboard-status.json](dashboard-status.json) is the canonical
@@ -75,8 +77,10 @@ ordinary sequencing.
 | `UX-R1` | Shell and opportunity navigation: native icon/compact sidebar emblem, first-run onboarding, Home default with Needs Attention as its first section, Pipeline-owned add/import entry points, consistent Rekon tokens, responsive empty states, scrollable Pipeline → dedicated opportunity overview, Activity & history and Reconcile posting sub-screens, and a compact overview document area. | `RP-R5` | **Accepted** | Product-owner verification of the shell/navigation route behavior and separate local-workspace correction. | Accepted after the product owner verified a fresh build: Board Back restoration and safe History/Reconcile fallback work. The deferred live-handoff work remains separate and does not block product remediation. |
 | `UX-R2` | Pipeline-owned core workflow forms: Add Opportunity layout/validation/structured action details and creation-date default; contact validation/employer association/expandable text; and staged CSV mapping/review/completion redesign. | `UX-R1` | **Accepted** | Product-owner hands-on verification of all three serial workflow slices. | Planning, Architect, QA, TPM, and Delivery approved the brief. Product-owner acceptance closed A, B, and C; this completes UX-R2. RP-R6 is now eligible but not released. |
 | `RP-R6` | Security-scoped document bookmark, open/verify/relink, hash revalidation, and relink-required after encrypted-backup restore. No copy/edit/parse. | `UX-R2` | **Accepted** | PDF/DOCX attach, relaunch/open, moved-file relink, permission failure smoke; 21 focused R6 checks; signed Debug build. | Product owner accepted hands-on verification. Independent Architecture/Security, QA, and Code Review approved the final guarded open/relink implementation. Release `RP-R7a` only to its required design gate; do not implement it yet. |
-| `RP-R7a` | Recovery-key enrollment/verification, authenticated portable archive/export default, minimal creation/expiry/recoverability and retained-deletion disclosure, and restore-as-new-workspace. | `RP-R6` | **In progress — R7a-1 and R7a-2 accepted; R7a-3 planned** | Recovery-key, portable restore, encrypted/default-export, and truthful backup-state evidence. | Recovery-key setup and archive creation/cataloguing are accepted. R7a-3 has a draft restore brief only; restore, export, purge, and expiry removal remain unreleased and require their own high-risk gates. |
-| `RP-R7a-3` | Verify a portable archive and import it into a fresh separate local workspace; do not activate/switch it. | `RP-R7a-2` | **In progress — released** | Typed package/snapshot verification; fresh-key target; document relink-required; non-destructive candidate lifecycle. | Delivery Manager released this task only. No switch, export, purge, expiry, deletion, or legacy-route behavior is released. |
+| `RP-R7a` | Recovery-key enrollment/verification, authenticated portable archive/export default, minimal creation/expiry/recoverability and retained-deletion disclosure, and restore-as-new-workspace. | `RP-R6` | **In progress — R7a-1 and R7a-2 accepted; R7a-3a active** | Recovery-key, portable restore, encrypted/default-export, and truthful backup-state evidence. | Recovery-key setup and archive creation/cataloguing are accepted. The R7a-3 parent is active only through R7a-3a. Restore UI/owner smoke, export, purge, and expiry removal remain unreleased and require their own high-risk gates. |
+| `RP-R7a-3` | Verify a portable archive and import it into a fresh separate local workspace; do not activate/switch it. | `RP-R7a-2` | **In progress — R7a-3a active** | Typed package/snapshot verification; fresh-key target; document relink-required; non-destructive candidate lifecycle. | R7a-3a is the sole released corrective sub-slice. No switch, export, purge, expiry, deletion, legacy-route, or UI work is released. |
+| `RP-R7a-3a` | Non-UI restore worker foundation: authenticated package verification, inactive candidate lifecycle, exact import, key/root cleanup, and durable registry. | `RP-R7a-2`, in-progress `RP-R7a-3` parent | **In progress — released** | Worker/boundary, candidate bootstrap/import/checkpoint/reopen, clean-Mac confirmation contract, durable registry, redaction, source-invariant, and failure-cleanup evidence. | Planning, Architect/Security, QA, TPM, and Delivery approved. This is the sole active corrective sub-slice; it excludes UI, activation, switch/open, export, purge, and expiry. |
+| `RP-R7a-3b` | Restore UI adapter, recovery-key entry, confirmation/progress surfaces, and owner smoke. | `RP-R7a-3a` accepted plus its own plan and gates | Backlog — dependency-gated | Its own plan, Architecture/Security, QA, TPM, Delivery approval, and hands-on evidence. | Not blocked: it is ordinary sequencing and has not been released. |
 | `RP-R7b` | Expiry removal and verified retained-backup purge/rebuild. | Full `RP-R7a` restore/export sequence | Backlog | Expiry removal and purge success/failure evidence. | Architect + Security/Privacy approval required; R7b is not eligible while R7a restore/export are unreleased. |
 | `RP-R8` | Empty read-only local AI ledger with time, feature, opportunity, route, model, completion, and cost filters. No AI/network/metrics execution. | Full `RP-R7a` and `RP-R7b` lifecycle sequence | Backlog | Every filter works at zero entries; no entry/network is produced. | The former R6-only dependency is superseded by the approved serial order: R8 is not eligible while restore/export and lifecycle removal are unreleased. |
 | `RP-R9` | Settings exposes real recovery, expiry, deletion, export, document-reference, and ledger state; no fake integration controls. | `RP-R6`, `RP-R7b`, `RP-R8` | Backlog | Settings state matches stored state across relaunch. | Pending dependencies. |
@@ -163,6 +167,16 @@ ordinary sequencing.
 | TPM | **Approved — planning only** | `RP-R7b` follows the full R7a restore/export sequence. `RP-R8`'s former R6-only dependency is superseded by the approved serial lifecycle order, so it is not eligible. |
 | Delivery Manager | **Approved — R7a-3 Next up** | R7a-3 is the sole dependency-safe successor. It is Next up for a separate implementation-release decision; dashboard has no active implementation task. |
 | Delivery Manager | **Released — R7a-3 only** | Implement authenticated v1 package verification and import into a fresh inactive candidate workspace. Do not change the active selector, source workspace, or selected archive; do not implement switch, export, purge, expiry, deletion, or legacy routes. |
+
+### RP-R7a-3a restore-worker foundation release
+
+| Role | Decision | Evidence / release boundary |
+| --- | --- | --- |
+| Planning | **Approved** | [R7a-3a worker brief](task-briefs/RP-R7a-3a-restore-worker-foundation.md) makes the worker foundation the sole corrective sub-slice and confines it to a Sendable, non-UI restore boundary. |
+| Architect / Security | **Approved** | The bounded correction preserves the v1 trust/lifecycle contract, candidate isolation, no-activation rule, and no export/purge/expiry scope. |
+| QA | **Approved** | The amended R3A-TRUST-001 gate requires wrong-key, package-mutation, unsupported-version, and same-Mac catalogue-mismatch failures to leave no candidate material. |
+| TPM | **Approved — release-safe** | The parent remains in progress; R7a-3a is the only eligible corrective implementation sub-slice. R7a-3b is ordinary dependency sequencing, not a material block. |
+| Delivery Manager | **Released — R7a-3a only** | All required approvals are recorded. Set `RP-R7a-3a` as the dashboard active task while retaining the `RP-R7a-3` parent in progress. Do not release R7a-3b, activation/switching, export, purge, expiry, or any UI work. |
 
 ### UX-R1 external-workspace bookmark Task 1 review and release
 
