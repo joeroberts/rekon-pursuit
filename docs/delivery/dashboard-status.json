@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "activeTaskId": "UX-R2",
-  "nextEligibleTaskId": null,
+  "nextEligibleTaskId": "UX-R2-B",
   "tasks": [
     {
       "id": "RP-R0",
@@ -112,14 +112,39 @@
       "title": "Core workflow forms",
       "workType": "UX",
       "status": "in_progress",
-      "releaseCondition": "UX-R2-A only: opportunity Add/Overview compatibility data, validation, and focused persistence tests. Contacts, CSV redesign, and RP-R6 are unreleased.",
-      "latestTransition": "UX-R2-A implementation and corrective reviews are complete; a fresh Debug build is ready for product-owner hands-on verification.",
+      "releaseCondition": "UX-R2-A is accepted. UX-R2-B is the only eligible successor; UX-R2-C and RP-R6 remain unreleased.",
+      "latestTransition": "Product owner accepted UX-R2-A; the parent remains in progress pending B and C.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
       },
-      "needsUserAction": true,
-      "userActionDetail": "Run the fresh Debug app through Add Opportunity and an existing opportunity Overview, then report whether the form and saved values behave as expected."
+      "needsUserAction": false
+    },
+    {
+      "id": "UX-R2-A",
+      "title": "Opportunity forms and compatibility data",
+      "workType": "Workflow",
+      "status": "accepted",
+      "releaseCondition": "Accepted Add Opportunity and Overview compatibility, validation, persistence, and hands-on workflow evidence.",
+      "latestTransition": "Accepted by the product owner after hands-on Add/Overview workflow verification and corrective save fixes.",
+      "evidence": {
+        "label": "Remediation ledger",
+        "href": "../remediation-ledger.md"
+      },
+      "needsUserAction": false
+    },
+    {
+      "id": "UX-R2-B",
+      "title": "Contacts and employer relationship flow",
+      "workType": "Workflow",
+      "status": "next_up",
+      "releaseCondition": "Eligible after UX-R2-A acceptance; implementation has not been released.",
+      "latestTransition": "UX-R2-A accepted; B is the only eligible successor.",
+      "evidence": {
+        "label": "UX-R2 task brief",
+        "href": "../task-briefs/UX-R2-core-workflow-forms.md"
+      },
+      "needsUserAction": false
     },
     {
       "id": "RP-R6",
