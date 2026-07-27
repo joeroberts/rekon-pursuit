@@ -14,6 +14,13 @@ nonisolated private final class PortableArchiveExpiryClock: @unchecked Sendable 
     }
 }
 
+nonisolated private final class WorkspaceSynchronizationLock: @unchecked Sendable {
+    private let value = NSLock()
+
+    func lock() { value.lock() }
+    func unlock() { value.unlock() }
+}
+
 final class WorkspaceStore {
     private let database: EncryptedDatabase
     private let clock: () -> Date
@@ -24,7 +31,7 @@ final class WorkspaceStore {
     private let portableArchiveWorker: any PortableArchiveWorking
     private let portableArchiveExpiryWorker: any PortableArchiveExpiryWorking
     private let protectedExportWorker: ProtectedExportWorker
-    private let lock = NSLock()
+    private let lock = WorkspaceSynchronizationLock()
     private let reconciliationResultSelect = "SELECT id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status, check_operation_id, method, checker_version, http_status, mime_type, declared_bytes, received_bytes, content_sha256, response_date, last_modified, etag, retry_after, redirect_target_redacted, evidence_excerpt, redacted_error_code"
 
     init(
@@ -861,10 +868,9 @@ final class WorkspaceStore {
     }
 
     func runPortableArchiveExpiryServiceOpportunity() async throws -> [PortableArchiveCatalogueRow] {
-        acquireWorkspaceLock()
-        defer { releaseWorkspaceLock() }
-        try await portableArchiveExpiryWorker.run()
-        return try portableArchiveCatalogueRowsLocked()
+        let worker = portableArchiveExpiryWorker
+        try await Self.runExpiryWorker(worker, whileHolding: lock)
+        return try synchronized { try portableArchiveCatalogueRowsLocked() }
     }
 
     func updatePortableArchiveCatalogueLifecycle(
@@ -1060,6 +1066,25 @@ final class WorkspaceStore {
 
     private func releaseWorkspaceLock() {
         lock.unlock()
+    }
+
+    nonisolated private static func runExpiryWorker(
+        _ worker: any PortableArchiveExpiryWorking,
+        whileHolding lock: WorkspaceSynchronizationLock
+    ) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            Task.detached {
+                lock.lock()
+                do {
+                    try await worker.run()
+                    lock.unlock()
+                    continuation.resume()
+                } catch {
+                    lock.unlock()
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
 
     private func activeTaskOpportunityID(_ taskID: String) throws -> String {

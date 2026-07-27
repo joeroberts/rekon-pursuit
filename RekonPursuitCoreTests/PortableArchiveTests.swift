@@ -387,8 +387,11 @@ final class PortableArchiveTests: XCTestCase {
         let fixture = try makeExpiryFixture()
         defer { fixture.cleanup() }
         let active = try fixture.store.create(CreateOpportunity(title: "Active role", company: "Example"))
+        let activeContact = try fixture.store.createContact(CreateContact(name: "Active person"))
         let recoveryKey = try RecoveryKey.generate()
         try fixture.store.enroll(recoveryKey: recoveryKey)
+        let protectedExport = try seedProtectedExportEvidence(in: fixture)
+        let workspaceMetadata = try fixture.database.rows("SELECT key, value FROM workspace_metadata ORDER BY key")
         let createdAt = Date(timeIntervalSince1970: 1_704_067_200)
         let removed = try seedExpiryArchive(
             in: fixture,
@@ -430,7 +433,10 @@ final class PortableArchiveTests: XCTestCase {
             removed.row.archiveID.uuidString
         )
         XCTAssertEqual(try fixture.store.opportunities().map(\.id), [active.id])
+        XCTAssertEqual(try fixture.store.contacts().map(\.id), [activeContact.id])
         XCTAssertTrue(try fixture.store.recoveryEnrollmentState().isEnabled)
+        XCTAssertEqual(try fixture.database.rows("SELECT key, value FROM workspace_metadata ORDER BY key"), workspaceMetadata)
+        XCTAssertEqual(try fixture.database.rows("SELECT export_id, outcome FROM protected_export_events"), protectedExport)
         for forbidden in forbiddenValues {
             XCTAssertFalse(categoryText.contains(forbidden))
             XCTAssertFalse(activityText.contains(forbidden))
@@ -441,8 +447,11 @@ final class PortableArchiveTests: XCTestCase {
         let fixture = try makeExpiryFixture()
         defer { fixture.cleanup() }
         let active = try fixture.store.create(CreateOpportunity(title: "Active role", company: "Example"))
+        let activeContact = try fixture.store.createContact(CreateContact(name: "Active person"))
         let recoveryKey = try RecoveryKey.generate()
         try fixture.store.enroll(recoveryKey: recoveryKey)
+        let protectedExport = try seedProtectedExportEvidence(in: fixture)
+        let workspaceMetadata = try fixture.database.rows("SELECT key, value FROM workspace_metadata ORDER BY key")
         let archive = try seedExpiryArchive(in: fixture, named: "activity-failure.rekonarchive", createdAt: Date(timeIntervalSince1970: 1_704_067_200))
         fixture.clock.set(archive.row.expiresAt)
         try fixture.installWorker(activityWriter: { _, _, _, _, _ in
@@ -456,7 +465,10 @@ final class PortableArchiveTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: archive.url.path))
         XCTAssertTrue(try fixture.store.activityEvents().allSatisfy { $0.kind != "portable_backup_expired_removed" })
         XCTAssertEqual(try fixture.store.opportunities().map(\.id), [active.id])
+        XCTAssertEqual(try fixture.store.contacts().map(\.id), [activeContact.id])
         XCTAssertTrue(try fixture.store.recoveryEnrollmentState().isEnabled)
+        XCTAssertEqual(try fixture.database.rows("SELECT key, value FROM workspace_metadata ORDER BY key"), workspaceMetadata)
+        XCTAssertEqual(try fixture.database.rows("SELECT export_id, outcome FROM protected_export_events"), protectedExport)
 
         try fixture.installWorker()
         let second = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
@@ -465,7 +477,10 @@ final class PortableArchiveTests: XCTestCase {
         XCTAssertEqual(secondRow.lastExpiryOutcome, .targetMissing)
         XCTAssertTrue(try fixture.store.activityEvents().allSatisfy { $0.kind != "portable_backup_expired_removed" })
         XCTAssertEqual(try fixture.store.opportunities().map(\.id), [active.id])
+        XCTAssertEqual(try fixture.store.contacts().map(\.id), [activeContact.id])
         XCTAssertTrue(try fixture.store.recoveryEnrollmentState().isEnabled)
+        XCTAssertEqual(try fixture.database.rows("SELECT key, value FROM workspace_metadata ORDER BY key"), workspaceMetadata)
+        XCTAssertEqual(try fixture.database.rows("SELECT export_id, outcome FROM protected_export_events"), protectedExport)
     }
 
     func testRestoreOutcomeDoesNotExposeCandidateFilesystemRoot() {
@@ -1838,6 +1853,13 @@ final class PortableArchiveTests: XCTestCase {
             ]
         )
         return ExpirySeededArchive(row: row, url: bookmarkTargetURL ?? url, bookmark: bookmarkData)
+    }
+
+    private func seedProtectedExportEvidence(in fixture: ExpiryTestFixture) throws -> [[DatabaseValue]] {
+        try fixture.database.execute(
+            "INSERT INTO protected_export_events (id, export_id, category, destination_class, confirmation_fingerprint, outcome, occurred_at) VALUES ('expiry-proof-export', 'expiry-proof-export-id', 'tracker_workspace_data', 'selected_local_folder', 'proof', 'verified', 1)"
+        )
+        return try fixture.database.rows("SELECT export_id, outcome FROM protected_export_events")
     }
 
     private func makeStoreAtVersion26(withArchiveCatalogueRow: Bool) throws -> (store: WorkspaceStore, database: EncryptedDatabase, databaseURL: URL) {

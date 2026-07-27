@@ -305,7 +305,12 @@ actor PortableArchiveExpiryWorker: PortableArchiveExpiryWorking {
             fileOperations.restoreQuarantinedTarget(quarantine, scope.url)
             throw PortableArchiveExpiryError.identityMismatch
         }
-        try fileOperations.unlinkTarget(quarantine)
+        do {
+            try fileOperations.unlinkTarget(quarantine)
+        } catch {
+            fileOperations.restoreQuarantinedTarget(quarantine, scope.url)
+            throw error
+        }
 
         do {
             try database.transaction {
