@@ -1019,6 +1019,44 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.selectedContactOpportunities, [])
     }
 
+    func testContactEmployerTypeaheadIsBlankUntilTypedAndCapsCanonicalMatches() throws {
+        let store = try makeStore()
+        for company in ["Albatross", "Almanac", "Alpha", "Alpine", "Altana", "Alto", "Altruist", "Beta"] {
+            _ = try store.create(CreateOpportunity(title: "Director", company: company))
+        }
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
+
+        model.start()
+        model.contactEmployerSearch = "  "
+        XCTAssertEqual(model.filteredContactEmployerSuggestions, [])
+
+        model.contactEmployerSearch = "al"
+        XCTAssertEqual(model.filteredContactEmployerSuggestions, ["Albatross", "Almanac", "Alpha", "Alpine", "Altana", "Alto"])
+    }
+
+    func testContactEmployerTypeaheadAddsOnlyANonmatchingTypedEmployer() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Director", company: "Rekon Labs"))
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
+
+        model.start()
+        model.contactEmployerSearch = "  rekon labs  "
+        XCTAssertNil(model.contactEmployerAddCandidate)
+
+        model.contactEmployerSearch = "  New Company  "
+        XCTAssertEqual(model.contactEmployerAddCandidate, "New Company")
+        model.beginNewContactEmployer(named: "New Company")
+
+        XCTAssertTrue(model.isAddingNewContactEmployer)
+        XCTAssertEqual(model.contactEmployer, "New Company")
+        XCTAssertEqual(model.selectedContactOpportunities, [])
+
+        model.selectContactEmployer("rekon labs")
+        XCTAssertEqual(model.contactEmployer, "Rekon Labs")
+        XCTAssertEqual(model.selectedContactOpportunities, [])
+        XCTAssertEqual(opportunity.company, "Rekon Labs")
+    }
+
     func testContactProfileURLShowsHTTPWarningAndRejectsMalformedInputWithoutWriting() throws {
         let store = try makeStore()
         let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)

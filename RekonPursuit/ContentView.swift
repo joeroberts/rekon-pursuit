@@ -793,14 +793,35 @@ private struct ContactsView: View {
                                     Button("Clear") { model.chooseTrackedContactEmployer() }
                                 }
                             }
-                            if model.filteredContactEmployerSuggestions.isEmpty {
-                                Text("No tracked employers match. Add one only when needed.").font(.caption).foregroundStyle(.secondary)
-                            } else {
-                                ForEach(model.filteredContactEmployerSuggestions, id: \.self) { employer in
-                                    Button(employer) { model.selectContactEmployer(employer) }
+                            if !model.contactEmployerSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    ForEach(model.filteredContactEmployerSuggestions, id: \.self) { employer in
+                                        Button {
+                                            model.selectContactEmployer(employer)
+                                        } label: {
+                                            Text(employer)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .padding(.vertical, 6)
+                                                .padding(.horizontal, 8)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                    if let candidate = model.contactEmployerAddCandidate {
+                                        if !model.filteredContactEmployerSuggestions.isEmpty { Divider() }
+                                        Button {
+                                            model.beginNewContactEmployer(named: candidate)
+                                        } label: {
+                                            Text("Add \(candidate) as new employer")
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .padding(.vertical, 6)
+                                                .padding(.horizontal, 8)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
                                 }
+                                .background(Color.primary.opacity(0.05))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
-                            Button("Add new employer") { model.beginNewContactEmployer() }
                         }
                         TextField("Title (optional)", text: $model.contactTitle)
                         TextField("Email (optional)", text: $model.contactEmail)

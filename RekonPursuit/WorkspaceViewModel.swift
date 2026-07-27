@@ -553,7 +553,19 @@ final class WorkspaceViewModel: ObservableObject {
 
     var filteredContactEmployerSuggestions: [String] {
         let query = contactEmployerSearch.trimmingCharacters(in: .whitespacesAndNewlines)
-        return contactEmployerSuggestions.filter { query.isEmpty || $0.localizedCaseInsensitiveContains(query) }
+        guard !query.isEmpty else { return [] }
+        return Array(contactEmployerSuggestions
+            .filter { $0.localizedCaseInsensitiveContains(query) }
+            .prefix(6))
+    }
+
+    var contactEmployerAddCandidate: String? {
+        let query = contactEmployerSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return nil }
+        let hasExactMatch = contactEmployerSuggestions.contains {
+            $0.compare(query, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+        }
+        return hasExactMatch ? nil : query
     }
 
     var contactProfileURLWarning: String? { profileURLWarning(for: contactProfileURL) }
@@ -739,6 +751,17 @@ final class WorkspaceViewModel: ObservableObject {
     func beginNewContactEmployer() {
         contactEmployer = ""
         contactEmployerSearch = ""
+        isAddingNewContactEmployer = true
+    }
+
+    func beginNewContactEmployer(named employer: String) {
+        let trimmedEmployer = employer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedEmployer.isEmpty else {
+            beginNewContactEmployer()
+            return
+        }
+        contactEmployer = trimmedEmployer
+        contactEmployerSearch = trimmedEmployer
         isAddingNewContactEmployer = true
     }
 
