@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "activeTaskId": null,
-  "nextEligibleTaskId": null,
+  "nextEligibleTaskId": "RP-R7a-4",
   "tasks": [
     {
       "id": "RP-R0",
@@ -234,6 +234,19 @@
       "evidence": {
         "label": "R7a-3b task brief",
         "href": "../task-briefs/RP-R7a-3b-restore-ui-owner-smoke.md"
+      },
+      "needsUserAction": false
+    },
+    {
+      "id": "RP-R7a-4",
+      "title": "Encrypted-default logical export",
+      "workType": "Data lifecycle",
+      "status": "next_up",
+      "releaseCondition": "Planning is released. Implementation requires independent Architecture/Security, TPM, QA, and Delivery approval of the fixed encrypted-only export boundary.",
+      "latestTransition": "Product owner accepted reuse of the recovery key and one fixed Tracker workspace data category; the bounded design and task brief are ready for release gates.",
+      "evidence": {
+        "label": "R7a-4 task brief",
+        "href": "../task-briefs/RP-R7a-4-encrypted-default-logical-export.md"
       },
       "needsUserAction": false
     },
