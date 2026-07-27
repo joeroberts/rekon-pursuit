@@ -10,6 +10,7 @@ final class WorkspaceStore {
     private let correlationID: String
     private let failBeforeActivityInsert: Bool
     private let portableArchiveWorker: any PortableArchiveWorking
+    private let portableArchiveExpiryWorker: any PortableArchiveExpiryWorking
     private let protectedExportWorker: ProtectedExportWorker
     private let lock = NSLock()
     private let reconciliationResultSelect = "SELECT id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status, check_operation_id, method, checker_version, http_status, mime_type, declared_bytes, received_bytes, content_sha256, response_date, last_modified, etag, retry_after, redirect_target_redacted, evidence_excerpt, redacted_error_code"
@@ -24,10 +25,12 @@ final class WorkspaceStore {
         failBeforeActivityInsert: Bool = false,
         archiveSigningKeyStore: any ArchiveSigningKeyStoring = ArchiveSigningKeyStore(),
         portableArchiveWorker: (any PortableArchiveWorking)? = nil,
+        portableArchiveExpiryWorker: (any PortableArchiveExpiryWorking)? = nil,
         protectedExportWorker: ProtectedExportWorker? = nil
     ) throws {
+        let resolvedClock: () -> Date = now.map { fixedNow in { fixedNow } } ?? clock
         self.database = database
-        self.clock = now.map { fixedNow in { fixedNow } } ?? clock
+        self.clock = resolvedClock
         self.nextIdentifier = nextIdentifier
         self.actorID = actorID
         self.correlationID = correlationID
@@ -35,6 +38,10 @@ final class WorkspaceStore {
         self.portableArchiveWorker = portableArchiveWorker ?? PortableArchiveWorker(
             configuration: database.portableArchiveConnectionConfiguration(),
             signingKeyStore: archiveSigningKeyStore
+        )
+        self.portableArchiveExpiryWorker = portableArchiveExpiryWorker ?? PortableArchiveExpiryWorker(
+            configuration: database.portableArchiveConnectionConfiguration(),
+            actorID: actorID
         )
         self.protectedExportWorker = protectedExportWorker ?? ProtectedExportWorker(
             configuration: database.portableArchiveConnectionConfiguration()
@@ -830,6 +837,13 @@ final class WorkspaceStore {
 
     func portableArchiveCatalogueRows() throws -> [PortableArchiveCatalogueRow] {
         try synchronized {
+            try portableArchiveCatalogueRowsLocked()
+        }
+    }
+
+    func runPortableArchiveExpiryServiceOpportunity() async throws -> [PortableArchiveCatalogueRow] {
+        try await portableArchiveExpiryWorker.run()
+        return try synchronized {
             try portableArchiveCatalogueRowsLocked()
         }
     }
