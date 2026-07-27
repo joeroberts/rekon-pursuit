@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": null,
-  "nextEligibleTaskId": "RP-R7a-3",
+  "activeTaskId": "RP-R7a-3",
+  "nextEligibleTaskId": null,
   "tasks": [
     {
       "id": "RP-R0",
@@ -202,9 +202,9 @@
       "id": "RP-R7a-3",
       "title": "Restore authenticated archive as new workspace",
       "workType": "Data lifecycle",
-      "status": "next_up",
+      "status": "in_progress",
       "releaseCondition": "Requires its own Architecture/Security, QA, TPM, and Delivery gate; no activation, export, purge, or expiry work is included.",
-      "latestTransition": "Planning, Architect/Security, TPM, QA, and Delivery approved the bounded restore-as-new-workspace plan; implementation is not released.",
+      "latestTransition": "Delivery Manager released the bounded restore-as-new-workspace slice; implementation is active with no switch, export, purge, or expiry scope.",
       "evidence": {
         "label": "R7a-3 task brief",
         "href": "../task-briefs/RP-R7a-3-restore-as-new-workspace.md"
