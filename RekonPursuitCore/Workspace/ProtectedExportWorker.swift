@@ -6,6 +6,7 @@ nonisolated struct ProtectedExportReview: Equatable, Sendable {
     let destinationURL: URL
     let sourceRevision: Int64
     let parentIdentity: ProtectedExportParentIdentity
+    let destinationIdentityDigest: Data
     let confirmationFingerprint: String
 
     var displayFilename: String { destinationURL.lastPathComponent }
@@ -51,6 +52,8 @@ actor ProtectedExportWorker {
     }
 
     func review(destinationURL: URL, recoveryKey: RecoveryKey) throws -> ProtectedExportReview {
+        let accessed = destinationURL.startAccessingSecurityScopedResource()
+        defer { if accessed { destinationURL.stopAccessingSecurityScopedResource() } }
         let parent = try Self.openParent(for: destinationURL)
         defer { close(parent.descriptor) }
         guard !Self.destinationExists(parent.descriptor, filename: parent.filename) else { throw ProtectedExportWorkerError.destinationExists }
@@ -64,21 +67,22 @@ actor ProtectedExportWorker {
             destinationURL: destinationURL,
             sourceRevision: revision,
             parentIdentity: parent.identity,
-            confirmationFingerprint: Self.confirmationFingerprint(filename: parent.filename, parentIdentity: parent.identity, revision: revision)
+            destinationIdentityDigest: Self.destinationIdentityDigest(filename: parent.filename, parentIdentity: parent.identity),
+            confirmationFingerprint: Self.confirmationFingerprint(filename: parent.filename, destinationIdentityDigest: Self.destinationIdentityDigest(filename: parent.filename, parentIdentity: parent.identity), revision: revision)
         )
     }
 
     func create(_ request: ProtectedExportRequest) throws -> ProtectedExportReceipt {
+        let accessed = request.review.destinationURL.startAccessingSecurityScopedResource()
+        defer { if accessed { request.review.destinationURL.stopAccessingSecurityScopedResource() } }
         let parent = try Self.openParent(for: request.review.destinationURL)
         defer { close(parent.descriptor) }
         guard parent.identity == request.review.parentIdentity,
-              request.review.confirmationFingerprint == Self.confirmationFingerprint(filename: parent.filename, parentIdentity: parent.identity, revision: request.review.sourceRevision) else {
+              request.review.destinationIdentityDigest == Self.destinationIdentityDigest(filename: parent.filename, parentIdentity: parent.identity),
+              request.review.confirmationFingerprint == Self.confirmationFingerprint(filename: parent.filename, destinationIdentityDigest: request.review.destinationIdentityDigest, revision: request.review.sourceRevision) else {
             throw ProtectedExportWorkerError.destinationChanged
         }
         guard !Self.destinationExists(parent.descriptor, filename: parent.filename) else { throw ProtectedExportWorkerError.destinationExists }
-        let accessed = request.review.destinationURL.startAccessingSecurityScopedResource()
-        defer { if accessed { request.review.destinationURL.stopAccessingSecurityScopedResource() } }
-
         let database = try EncryptedDatabase.open(url: configuration.url, key: configuration.key, createIfMissing: false)
         defer { try? database.close() }
         let snapshot = try database.deferredReadTransaction { () throws -> Data in
@@ -105,15 +109,19 @@ actor ProtectedExportWorker {
         } catch {
             throw ProtectedExportWorkerError.outputMayRemainAfterFailure
         }
-        try database.transaction {
-            try database.execute(
-                "INSERT INTO protected_export_events (id, export_id, category, destination_class, confirmation_fingerprint, outcome, occurred_at) VALUES (?, ?, 'tracker_workspace_data', 'selected_local_folder', ?, 'verified', ?)",
-                values: [.text(UUID().uuidString), .text(receipt.exportID.uuidString), .text(request.review.confirmationFingerprint), .real(request.createdAt.timeIntervalSince1970)]
-            )
-            try database.execute(
-                "INSERT INTO activity_events (id, kind, opportunity_id, contact_id, actor_id, correlation_id, occurred_at) VALUES (?, 'protected_export_verified', NULL, NULL, ?, ?, ?)",
-                values: [.text(request.activityID), .text(request.actorID), .text(request.correlationID), .real(request.createdAt.timeIntervalSince1970)]
-            )
+        do {
+            try database.transaction {
+                try database.execute(
+                    "INSERT INTO protected_export_events (id, export_id, category, destination_class, confirmation_fingerprint, outcome, occurred_at) VALUES (?, ?, 'tracker_workspace_data', 'selected_local_folder', ?, 'verified', ?)",
+                    values: [.text(UUID().uuidString), .text(receipt.exportID.uuidString), .text(request.review.confirmationFingerprint), .real(request.createdAt.timeIntervalSince1970)]
+                )
+                try database.execute(
+                    "INSERT INTO activity_events (id, kind, opportunity_id, contact_id, actor_id, correlation_id, occurred_at) VALUES (?, 'protected_export_verified', NULL, NULL, ?, ?, ?)",
+                    values: [.text(request.activityID), .text(request.actorID), .text(request.correlationID), .real(request.createdAt.timeIntervalSince1970)]
+                )
+            }
+        } catch {
+            throw ProtectedExportWorkerError.outputMayRemainAfterFailure
         }
         return receipt
     }
@@ -145,16 +153,26 @@ actor ProtectedExportWorker {
         return result == 0 || errno != ENOENT
     }
 
-    private static func confirmationFingerprint(filename: String, parentIdentity: ProtectedExportParentIdentity, revision: Int64) -> String {
+    private static func destinationIdentityDigest(filename: String, parentIdentity: ProtectedExportParentIdentity) -> Data {
         let filenameBytes = Data(filename.utf8)
+        var bytes = Data("RekonPursuit/export/destination/v1\0".utf8)
+        append(parentIdentity.device, to: &bytes)
+        append(parentIdentity.inode, to: &bytes)
+        append(UInt32(filenameBytes.count), to: &bytes)
+        bytes.append(filenameBytes)
+        return Data(SHA256.hash(data: bytes))
+    }
+
+    private static func confirmationFingerprint(filename: String, destinationIdentityDigest: Data, revision: Int64) -> String {
+        let filenameBytes = Data(filename.utf8)
+        guard destinationIdentityDigest.count == 32 else { return "" }
         var bytes = Data("RekonPursuit/export/review/v1\0".utf8)
         append(UInt16(1), to: &bytes) // format version
         bytes.append(1) // export type: logical projection
         bytes.append(1) // category: tracker workspace data
         append(UInt32(filenameBytes.count), to: &bytes)
         bytes.append(filenameBytes)
-        append(parentIdentity.device, to: &bytes)
-        append(parentIdentity.inode, to: &bytes)
+        bytes.append(destinationIdentityDigest)
         append(UInt64(bitPattern: revision), to: &bytes)
         return SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
     }

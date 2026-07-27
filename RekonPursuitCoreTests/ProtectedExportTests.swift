@@ -43,6 +43,7 @@ final class ProtectedExportTests: XCTestCase {
         let review = try await store.reviewProtectedExport(recoveryKey: key, at: destinationDirectory.appendingPathComponent("bound.rekonexport"))
 
         XCTAssertNotEqual(review.parentIdentity.device, 0)
+        XCTAssertEqual(review.destinationIdentityDigest.count, 32)
         try store.close()
     }
 
