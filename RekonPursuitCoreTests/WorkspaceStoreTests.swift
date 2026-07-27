@@ -60,6 +60,24 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.recoveryEnrollmentRecordForTesting(), original)
     }
 
+    func testPortableArchiveCreatesOneVerifiedCatalogueRowWithFixedThirtyDayExpiry() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        let store = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test", archiveSigningKeyStore: InMemoryArchiveSigningKeyStore())
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+        _ = try store.create(CreateOpportunity(title: "Archive fixture", company: "Rekon Labs"))
+        let destination = FileManager.default.temporaryDirectory.appendingPathComponent("archive-\(UUID().uuidString).rekonarchive")
+        defer { try? FileManager.default.removeItem(at: destination) }
+
+        let archive = try store.createPortableArchive(recoveryKey: recoveryKey, at: destination)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
+        XCTAssertEqual(archive.verificationState, "Verified")
+        XCTAssertEqual(archive.expiresAt, now.addingTimeInterval(30 * 24 * 60 * 60))
+        XCTAssertEqual(try store.portableArchiveCatalogue(), [archive])
+        XCTAssertEqual(try store.activityEvents().last?.kind, "portable_backup_created")
+    }
+
     override func setUpWithError() throws {
         databaseURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("rekon-workspace-\(UUID().uuidString)")
@@ -75,7 +93,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 24)
+        XCTAssertEqual(try store.schemaVersion(), 25)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -91,7 +109,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 24)
+        XCTAssertEqual(try store.schemaVersion(), 25)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -116,6 +134,7 @@ final class WorkspaceStoreTests: XCTestCase {
                 , [.integer(22), .text(WorkspaceMigrations.versionTwentyTwoChecksum)]
                 , [.integer(23), .text(WorkspaceMigrations.versionTwentyThreeChecksum)]
                 , [.integer(24), .text(WorkspaceMigrations.versionTwentyFourChecksum)]
+                , [.integer(25), .text(WorkspaceMigrations.versionTwentyFiveChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
@@ -144,7 +163,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 24)
+        XCTAssertEqual(try store.schemaVersion(), 25)
         XCTAssertEqual(try database.rows("SELECT id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at FROM interactions"), [[.text("interaction-1"), .null, .text("opportunity-1"), .text("Note"), .text("Legacy note"), .real(1_704_067_200), .null]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
@@ -1564,7 +1583,7 @@ final class WorkspaceStoreTests: XCTestCase {
         let migratedStore = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test")
         let reference = try XCTUnwrap(migratedStore.documentReferences(forOpportunityID: opportunity.id).first)
 
-        XCTAssertEqual(try migratedStore.schemaVersion(), 24)
+        XCTAssertEqual(try migratedStore.schemaVersion(), 25)
         XCTAssertNil(reference.bookmarkData)
         XCTAssertEqual(reference.availability, .relinkRequired)
     }

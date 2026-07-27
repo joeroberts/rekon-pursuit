@@ -2,6 +2,12 @@ import CryptoKit
 import Foundation
 import Darwin
 
+private extension Data {
+    mutating func appendUInt32(_ value: UInt32) { append(contentsOf: Swift.withUnsafeBytes(of: value.bigEndian, Array.init)) }
+    mutating func appendUInt64(_ value: UInt64) { append(contentsOf: Swift.withUnsafeBytes(of: value.bigEndian, Array.init)) }
+    mutating func appendInt64(_ value: Int64) { appendUInt64(UInt64(bitPattern: value)) }
+}
+
 final class WorkspaceStore {
     private let database: EncryptedDatabase
     private let clock: () -> Date
@@ -9,6 +15,7 @@ final class WorkspaceStore {
     private let actorID: String
     private let correlationID: String
     private let failBeforeActivityInsert: Bool
+    private let archiveSigningKeyStore: ArchiveSigningKeyStoring
     private let lock = NSLock()
     private let reconciliationResultSelect = "SELECT id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status, check_operation_id, method, checker_version, http_status, mime_type, declared_bytes, received_bytes, content_sha256, response_date, last_modified, etag, retry_after, redirect_target_redacted, evidence_excerpt, redacted_error_code"
 
@@ -19,7 +26,8 @@ final class WorkspaceStore {
         nextIdentifier: @escaping () -> String = { UUID().uuidString },
         actorID: String,
         correlationID: String,
-        failBeforeActivityInsert: Bool = false
+        failBeforeActivityInsert: Bool = false,
+        archiveSigningKeyStore: ArchiveSigningKeyStoring = ArchiveSigningKeyStore()
     ) throws {
         self.database = database
         self.clock = now.map { fixedNow in { fixedNow } } ?? clock
@@ -27,6 +35,7 @@ final class WorkspaceStore {
         self.actorID = actorID
         self.correlationID = correlationID
         self.failBeforeActivityInsert = failBeforeActivityInsert
+        self.archiveSigningKeyStore = archiveSigningKeyStore
         try WorkspaceMigrations.apply(to: database)
         try interruptAbandonedPublicURLChecksAtLaunch()
     }
@@ -812,6 +821,46 @@ final class WorkspaceStore {
         }
     }
 
+    func portableArchiveCatalogue() throws -> [PortableArchiveCatalogueRow] {
+        try synchronized {
+            try database.rows("SELECT archive_id, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint FROM portable_archive_catalogue ORDER BY created_at DESC, archive_id DESC").compactMap { row in
+                guard row.count == 8, case let .text(id) = row[0], let archiveID = UUID(uuidString: id), case let .text(filename) = row[1], case let .integer(version) = row[2], case let .real(createdAt) = row[3], case let .real(expiresAt) = row[4], case let .text(state) = row[5], case let .blob(checksum) = row[6], case let .blob(fingerprint) = row[7] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+                return PortableArchiveCatalogueRow(archiveID: archiveID, displayFilename: filename, formatVersion: Int(version), createdAt: Date(timeIntervalSince1970: createdAt), expiresAt: Date(timeIntervalSince1970: expiresAt), verificationState: state, ciphertextChecksum: checksum, signingKeyFingerprint: fingerprint)
+            }
+        }
+    }
+
+    func createPortableArchive(recoveryKey: RecoveryKey, at destinationURL: URL) throws -> PortableArchiveCatalogueRow {
+        guard destinationURL.pathExtension.lowercased() == "rekonarchive", !FileManager.default.fileExists(atPath: destinationURL.path) else { throw FileManager.default.fileExists(atPath: destinationURL.path) ? PortableArchiveError.destinationExists : PortableArchiveError.invalidDestination }
+        let accessed = destinationURL.deletingLastPathComponent().startAccessingSecurityScopedResource()
+        defer { if accessed { destinationURL.deletingLastPathComponent().stopAccessingSecurityScopedResource() } }
+        let now = clock()
+        return try synchronized {
+            guard let row = try database.rows("SELECT fingerprint FROM recovery_enrollment WHERE id = 1").first, case let .text(fingerprint) = row.first else { throw PortableArchiveError.enrollmentRequired }
+            guard fingerprint == recoveryKey.fingerprint else { throw PortableArchiveError.invalidRecoveryKey }
+            let snapshot = try capturePortableArchiveSnapshot()
+            guard case let .text(workspaceID)? = try database.rows("SELECT value FROM workspace_metadata WHERE key = 'workspace_id'").first?.first else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+            let catalogueExists = !(try database.rows("SELECT archive_id FROM portable_archive_catalogue LIMIT 1")).isEmpty
+            let signingKey = try archiveSigningKeyStore.privateKey(for: workspaceID, catalogueExists: catalogueExists)
+            let archiveID = UUID()
+            let temporaryURL = destinationURL.deletingLastPathComponent().appendingPathComponent(".rekon-archive-\(UUID().uuidString).tmp")
+            defer { try? FileManager.default.removeItem(at: temporaryURL) }
+            let package = try PortableArchiveService.writeAndVerify(snapshot: snapshot, recoveryKey: recoveryKey, signingKey: signingKey, archiveID: archiveID, createdAt: now, to: temporaryURL)
+            do { try FileManager.default.moveItem(at: temporaryURL, to: destinationURL) } catch { throw PortableArchiveError.verificationFailed }
+            let bookmark: Data
+            do { bookmark = try destinationURL.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil) }
+            catch { try? FileManager.default.removeItem(at: destinationURL); throw PortableArchiveError.catalogueUnavailable }
+            let catalogue = PortableArchiveCatalogueRow(archiveID: archiveID, displayFilename: destinationURL.lastPathComponent, formatVersion: Int(PortableArchiveService.formatVersion), createdAt: now, expiresAt: package.expiresAt, verificationState: "Verified", ciphertextChecksum: package.checksum, signingKeyFingerprint: package.fingerprint)
+            do {
+                try database.transaction {
+                    try database.execute("INSERT INTO portable_archive_catalogue (archive_id, destination_bookmark, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint) VALUES (?, ?, ?, ?, ?, ?, 'Verified', ?, ?)", values: [.text(archiveID.uuidString), .blob(bookmark), .text(catalogue.displayFilename), .integer(Int64(catalogue.formatVersion)), .real(now.timeIntervalSince1970), .real(catalogue.expiresAt.timeIntervalSince1970), .blob(package.checksum), .blob(package.fingerprint)])
+                    try appendActivity(kind: "portable_backup_created", opportunityID: nil, occurredAt: now)
+                }
+            } catch { try? FileManager.default.removeItem(at: destinationURL); throw PortableArchiveError.catalogueUnavailable }
+            return catalogue
+        }
+    }
+
     func recordDocumentReference(_ command: RecordDocumentReference) throws -> DocumentReference {
         let commandNow = clock()
         let filename = command.filename.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1141,6 +1190,50 @@ final class WorkspaceStore {
     private func appendActivity(kind: String, opportunityID: String?, contactID: String? = nil, occurredAt: Date) throws {
         let event = ActivityEvent(id: nextIdentifier(), kind: kind, opportunityID: opportunityID, contactID: contactID, actorID: actorID, correlationID: correlationID, occurredAt: occurredAt)
         try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, contact_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), event.opportunityID.map(DatabaseValue.text) ?? .null, event.contactID.map(DatabaseValue.text) ?? .null, .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
+    }
+
+    /// Produces an application-owned logical projection while the store lock and one
+    /// deferred SQLite read transaction are held. No database file or cursor escapes.
+    private func capturePortableArchiveSnapshot() throws -> Data {
+        try database.deferredReadTransaction {
+            let tables: [(String, String)] = [
+                ("opportunities", "SELECT id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes, compensation, compensation_minimum, compensation_maximum, compensation_pay_period, location, work_arrangement, application_date, response_state, stage_changed_at, action_type, action_custom_text FROM opportunities WHERE deleted_at IS NULL ORDER BY id"),
+                ("task_reminders", "SELECT task_reminders.id, task_reminders.opportunity_id, task_reminders.title, task_reminders.due_at, task_reminders.is_complete FROM task_reminders JOIN opportunities ON opportunities.id = task_reminders.opportunity_id WHERE opportunities.deleted_at IS NULL ORDER BY task_reminders.id"),
+                ("opportunity_stage_history", "SELECT opportunity_stage_history.id, opportunity_stage_history.opportunity_id, opportunity_stage_history.from_stage, opportunity_stage_history.to_stage, opportunity_stage_history.occurred_at FROM opportunity_stage_history JOIN opportunities ON opportunities.id = opportunity_stage_history.opportunity_id WHERE opportunities.deleted_at IS NULL ORDER BY opportunity_stage_history.id"),
+                ("opportunity_response_history", "SELECT opportunity_response_history.id, opportunity_response_history.opportunity_id, opportunity_response_history.from_state, opportunity_response_history.to_state, opportunity_response_history.occurred_at FROM opportunity_response_history JOIN opportunities ON opportunities.id = opportunity_response_history.opportunity_id WHERE opportunities.deleted_at IS NULL ORDER BY opportunity_response_history.id"),
+                ("contacts", "SELECT id, name, employer, title, email, profile_url, relationship_context, notes FROM contacts WHERE deleted_at IS NULL ORDER BY id"),
+                ("contact_opportunities", "SELECT contact_opportunities.contact_id, contact_opportunities.opportunity_id FROM contact_opportunities JOIN contacts ON contacts.id = contact_opportunities.contact_id JOIN opportunities ON opportunities.id = contact_opportunities.opportunity_id WHERE contacts.deleted_at IS NULL AND opportunities.deleted_at IS NULL ORDER BY contact_opportunities.contact_id, contact_opportunities.opportunity_id"),
+                ("interactions", "SELECT interactions.id, interactions.contact_id, interactions.opportunity_id, interactions.kind, interactions.summary, interactions.occurred_at, interactions.next_touch_at FROM interactions LEFT JOIN contacts ON contacts.id = interactions.contact_id LEFT JOIN opportunities ON opportunities.id = interactions.opportunity_id WHERE (interactions.contact_id IS NULL OR contacts.deleted_at IS NULL) AND (interactions.opportunity_id IS NULL OR opportunities.deleted_at IS NULL) ORDER BY interactions.id"),
+                ("import_reports", "SELECT import_reports.id, import_reports.imported_count, import_reports.skipped_count, import_reports.duplicate_kept_count, import_reports.invalid_count, import_reports.created_at, import_reports.updated_count, import_reports.source_basename, import_reports.mapping_summary, import_reports.failed_count FROM import_reports WHERE EXISTS (SELECT 1 FROM import_report_rows JOIN opportunities ON opportunities.id = import_report_rows.opportunity_id WHERE import_report_rows.report_id = import_reports.id AND opportunities.deleted_at IS NULL) ORDER BY import_reports.id"),
+                ("import_report_rows", "SELECT import_report_rows.id, import_report_rows.report_id, import_report_rows.source_row, import_report_rows.outcome, import_report_rows.reason, import_report_rows.duplicate_rationale, import_report_rows.opportunity_id, import_report_rows.display_title, import_report_rows.display_company FROM import_report_rows JOIN opportunities ON opportunities.id = import_report_rows.opportunity_id WHERE opportunities.deleted_at IS NULL ORDER BY import_report_rows.id"),
+                ("posting_checks", "SELECT posting_checks.id, posting_checks.opportunity_id, posting_checks.url, posting_checks.status, posting_checks.evidence, posting_checks.checked_at FROM posting_checks JOIN opportunities ON opportunities.id = posting_checks.opportunity_id WHERE opportunities.deleted_at IS NULL ORDER BY posting_checks.id"),
+                ("reconciliation_reviews", "SELECT reconciliation_reviews.opportunity_id, reconciliation_reviews.task_reminder_id, reconciliation_reviews.created_at, reconciliation_reviews.closure_confirmed_at FROM reconciliation_reviews JOIN opportunities ON opportunities.id = reconciliation_reviews.opportunity_id WHERE opportunities.deleted_at IS NULL ORDER BY reconciliation_reviews.opportunity_id"),
+                ("reconciliation_results", "SELECT reconciliation_results.id, reconciliation_results.opportunity_id, reconciliation_results.url, reconciliation_results.recorded_at, reconciliation_results.outcome, reconciliation_results.classification, reconciliation_results.reason, reconciliation_results.confidence, reconciliation_results.evidence, reconciliation_results.error, reconciliation_results.review_task_reminder_id, reconciliation_results.closure_confirmed_at, reconciliation_results.legacy_posting_check_id, reconciliation_results.legacy_status, reconciliation_results.check_operation_id, reconciliation_results.method, reconciliation_results.checker_version, reconciliation_results.http_status, reconciliation_results.mime_type, reconciliation_results.declared_bytes, reconciliation_results.received_bytes, reconciliation_results.content_sha256, reconciliation_results.response_date, reconciliation_results.last_modified, reconciliation_results.etag, reconciliation_results.retry_after, reconciliation_results.redirect_target_redacted, reconciliation_results.evidence_excerpt, reconciliation_results.redacted_error_code FROM reconciliation_results JOIN opportunities ON opportunities.id = reconciliation_results.opportunity_id WHERE opportunities.deleted_at IS NULL ORDER BY reconciliation_results.id"),
+                ("reconciliation_check_operations", "SELECT reconciliation_check_operations.id, reconciliation_check_operations.opportunity_id, reconciliation_check_operations.correlation_id, reconciliation_check_operations.url_snapshot, reconciliation_check_operations.state, reconciliation_check_operations.started_at, reconciliation_check_operations.terminal_at FROM reconciliation_check_operations JOIN opportunities ON opportunities.id = reconciliation_check_operations.opportunity_id WHERE opportunities.deleted_at IS NULL ORDER BY reconciliation_check_operations.id"),
+                ("document_references", "SELECT document_references.id, document_references.opportunity_id, document_references.kind, document_references.filename, document_references.content_type, document_references.source_hash, document_references.byte_count, NULL, 'relink_required', document_references.attached_at, document_references.final_sent_at FROM document_references JOIN opportunities ON opportunities.id = document_references.opportunity_id WHERE opportunities.deleted_at IS NULL ORDER BY document_references.id"),
+                ("activity_events", "SELECT activity_events.id, activity_events.kind, activity_events.opportunity_id, activity_events.contact_id, activity_events.actor_id, activity_events.correlation_id, activity_events.occurred_at FROM activity_events LEFT JOIN opportunities ON opportunities.id = activity_events.opportunity_id LEFT JOIN contacts ON contacts.id = activity_events.contact_id WHERE (activity_events.opportunity_id IS NULL OR opportunities.deleted_at IS NULL) AND (activity_events.contact_id IS NULL OR contacts.deleted_at IS NULL) ORDER BY activity_events.id"),
+                ("deletion_tombstones", "SELECT subject_id, subject_type, deleted_at, display_value FROM deletion_tombstones ORDER BY subject_id")
+            ]
+            var result = Data("RPSNAP01".utf8)
+            result.appendUInt32(UInt32(tables.count))
+            for (name, query) in tables {
+                let rows = try database.rows(query)
+                appendArchiveValue(.text(name), to: &result)
+                result.appendUInt32(UInt32(rows.count))
+                for row in rows { result.appendUInt32(UInt32(row.count)); for value in row { appendArchiveValue(value, to: &result) } }
+            }
+            return result
+        }
+    }
+
+    private func appendArchiveValue(_ value: DatabaseValue, to data: inout Data) {
+        switch value {
+        case .null: data.append(0); data.appendUInt32(0)
+        case let .integer(number): data.append(1); data.appendUInt32(8); data.appendInt64(number)
+        case let .real(number): data.append(2); data.appendUInt32(8); data.appendUInt64(number.bitPattern)
+        case let .text(text): let bytes = Data(text.utf8); data.append(3); data.appendUInt32(UInt32(bytes.count)); data.append(bytes)
+        case let .blob(blob): data.append(4); data.appendUInt32(UInt32(blob.count)); data.append(blob)
+        }
     }
 
     private func deletedOpportunityReferenceUnlocked(for opportunityID: String) throws -> String {

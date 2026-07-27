@@ -972,6 +972,8 @@ private struct SettingsView: View {
     @State private var generatedRecoveryKey: RecoveryKey?
     @State private var reentry = ""
     @State private var recoveryKeyCopied = false
+    @State private var archiveRecoveryReentry = ""
+    @State private var isPresentingArchiveCreation = false
 
     var body: some View {
         ScrollView {
@@ -995,6 +997,17 @@ private struct SettingsView: View {
                                 recoveryKeyCopied = false
                             }
                                 .accessibilityIdentifier("set-up-recovery-key")
+                        } else {
+                            Button("Create recovery archive") { isPresentingArchiveCreation = true }
+                                .accessibilityIdentifier("create-portable-archive")
+                            if model.portableArchiveCatalogue.isEmpty {
+                                Text("No portable archive exists yet.").font(.footnote).foregroundStyle(.secondary)
+                            } else {
+                                ForEach(model.portableArchiveCatalogue, id: \.archiveID) { archive in
+                                    Text("\(archive.displayFilename) · \(archive.createdAt.formatted(date: .abbreviated, time: .shortened)) · expires \(archive.expiresAt.formatted(date: .abbreviated, time: .omitted)) · \(archive.verificationState)")
+                                        .font(.footnote).foregroundStyle(.secondary)
+                                }
+                            }
                         }
                     }
                 }
@@ -1030,6 +1043,18 @@ private struct SettingsView: View {
                     }
                 }.padding(24).frame(width: 520)
             }
+        }
+        .sheet(isPresented: $isPresentingArchiveCreation) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Create portable recovery archive").font(.title2.bold())
+                Text("Re-enter your recovery key. The archive will be encrypted and verified before it is added to this catalogue.").foregroundStyle(.secondary)
+                TextField("Re-enter the complete recovery key", text: $archiveRecoveryReentry).textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("Cancel", role: .cancel) { isPresentingArchiveCreation = false; archiveRecoveryReentry = "" }
+                    Spacer()
+                    Button("Choose destination and create") { model.createPortableArchive(reentry: archiveRecoveryReentry); isPresentingArchiveCreation = false; archiveRecoveryReentry = "" }.keyboardShortcut(.defaultAction)
+                }
+            }.padding(24).frame(width: 520)
         }
     }
 }

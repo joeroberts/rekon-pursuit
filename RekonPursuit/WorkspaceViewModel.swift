@@ -198,6 +198,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var workspaceRequiresRecovery = false
     @Published private(set) var usingSeparateLocalWorkspace = false
     @Published private(set) var recoveryEnrollmentEnabled = false
+    @Published private(set) var portableArchiveCatalogue: [PortableArchiveCatalogueRow] = []
 
     private let openWorkspace: () throws -> WorkspaceOpenState
     private let openExternalWorkspace: (URL) throws -> WorkspaceOpenState
@@ -1060,6 +1061,31 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
+    func createPortableArchive(reentry: String) {
+        guard let key = RecoveryKey.parse(reentry) else {
+            statusMessage = "Enter the complete recovery key, including its checksum."
+            return
+        }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.init(filenameExtension: "rekonarchive")!]
+        panel.nameFieldStringValue = "Recovery Archive.rekonarchive"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else {
+            statusMessage = "Portable archive creation was cancelled."
+            return
+        }
+        guard let store = readyStore() else { return }
+        do {
+            _ = try store.createPortableArchive(recoveryKey: key, at: url)
+            refreshCounts()
+            statusMessage = "Portable recovery archive verified and saved."
+        } catch let error as LocalizedError {
+            statusMessage = error.errorDescription ?? "The portable archive could not be created."
+        } catch {
+            statusMessage = "The portable archive could not be created."
+        }
+    }
+
     func restoreEncryptedBackup(from url: URL) {
         guard let store = readyStore() else { return }
         defer {
@@ -1424,6 +1450,7 @@ final class WorkspaceViewModel: ObservableObject {
             csvImportReport = try store?.importReports().last
             csvImportReportRows = try csvImportReport.map { try store?.importReportRows(for: $0.id) ?? [] } ?? []
             recoveryEnrollmentEnabled = try store?.recoveryEnrollmentState().isEnabled ?? false
+            portableArchiveCatalogue = try store?.portableArchiveCatalogue() ?? []
         } catch {
             statusMessage = "The local workspace could not be read."
         }

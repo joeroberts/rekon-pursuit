@@ -141,6 +141,18 @@ nonisolated final class EncryptedDatabase {
         }
     }
 
+    func deferredReadTransaction<T>(_ work: () throws -> T) throws -> T {
+        try execute("BEGIN DEFERRED")
+        do {
+            let result = try work()
+            try execute("ROLLBACK")
+            return result
+        } catch {
+            try? execute("ROLLBACK")
+            throw error
+        }
+    }
+
     func scalarInt(_ sql: String) throws -> Int {
         guard let handle else {
             throw EncryptedDatabaseError.sqlite(code: SQLITE_MISUSE, message: "Database is closed.")

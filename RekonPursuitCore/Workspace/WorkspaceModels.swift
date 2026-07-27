@@ -31,6 +31,8 @@ struct RecoveryKey: Equatable {
         "v1:" + SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
     }
 
+    var operationBytes: Data { bytes }
+
     private init(bytes: Data) throws {
         guard bytes.count == 32 else { throw RecoveryKeyError.invalidLength }
         self.bytes = bytes
@@ -87,6 +89,33 @@ enum RecoveryKeyError: Error { case randomnessUnavailable, invalidLength }
 
 struct RecoveryEnrollmentState: Equatable { let isEnabled: Bool }
 struct RecoveryEnrollmentRecord: Equatable { let fingerprint: String, enrolledAt: Date }
+
+struct PortableArchiveCatalogueRow: Equatable {
+    let archiveID: UUID
+    let displayFilename: String
+    let formatVersion: Int
+    let createdAt: Date
+    let expiresAt: Date
+    let verificationState: String
+    let ciphertextChecksum: Data
+    let signingKeyFingerprint: Data
+}
+
+enum PortableArchiveError: Error, LocalizedError {
+    case enrollmentRequired, invalidRecoveryKey, destinationExists, invalidDestination, archiveInvalid, verificationFailed, signingKeyUnavailable, catalogueUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .enrollmentRequired: return "Set up portable recovery before creating an archive."
+        case .invalidRecoveryKey: return "The recovery key could not unlock this archive operation."
+        case .destinationExists: return "Choose a new archive file name; Rekon Pursuit will not overwrite an existing archive."
+        case .invalidDestination: return "Choose a new .rekonarchive destination."
+        case .archiveInvalid, .verificationFailed: return "The archive could not be verified, so it was not saved."
+        case .signingKeyUnavailable: return "The archive signing identity is unavailable; no archive was created."
+        case .catalogueUnavailable: return "The archive was verified but its local catalogue could not be saved."
+        }
+    }
+}
 
 struct Opportunity: Equatable {
     let id: String
