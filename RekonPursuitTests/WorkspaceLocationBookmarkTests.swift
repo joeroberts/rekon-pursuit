@@ -17,6 +17,44 @@ final class WorkspaceLocationBookmarkTests: XCTestCase {
         }
     }
 
+    func testDocumentReferenceValidationRequiresDOCXPackageEntries() throws {
+        XCTAssertThrowsError(try DocumentReferenceBookmarkStore.validateContents(Data([0x50, 0x4b, 0x03, 0x04]), pathExtension: "docx"))
+        let docx = Data([0x50, 0x4b, 0x03, 0x04]) + Data("[Content_Types].xml word/document.xml".utf8)
+        XCTAssertEqual(try DocumentReferenceBookmarkStore.validateContents(docx, pathExtension: "docx"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    }
+
+    func testDocumentReferenceCreateBalancesSecurityScope() throws {
+        let fixture = DocumentBookmarkFixture(data: Data("%PDF-1.7".utf8))
+        let url = URL(fileURLWithPath: "/fixture/resume.pdf")
+
+        let result = try fixture.makeStore().create(from: url)
+
+        XCTAssertEqual(result.bookmark, fixture.bookmark)
+        XCTAssertEqual(result.contentType, "application/pdf")
+        XCTAssertEqual(result.byteCount, fixture.data.count)
+        XCTAssertEqual(fixture.startedURLs, [url])
+        XCTAssertEqual(fixture.stoppedURLs, [url])
+    }
+
+    func testDocumentReferenceMismatchStopsSecurityScope() throws {
+        let fixture = DocumentBookmarkFixture(data: Data("%PDF-1.7".utf8))
+        let url = URL(fileURLWithPath: "/fixture/resume.pdf")
+        let reference = DocumentReference(
+            id: "reference", opportunityID: "opportunity", kind: .resume,
+            filename: "resume.pdf", contentType: "application/pdf",
+            sourceHash: String(repeating: "0", count: 64), byteCount: fixture.data.count,
+            bookmarkData: fixture.bookmark, availability: .available,
+            attachedAt: .distantPast, finalSentAt: nil
+        )
+
+        XCTAssertThrowsError(try fixture.makeStore().resolveAndVerify(reference)) { error in
+            XCTAssertEqual(error as? DocumentReferenceBookmarkError, .mismatch)
+        }
+
+        XCTAssertEqual(fixture.startedURLs, [url])
+        XCTAssertEqual(fixture.stoppedURLs, [url])
+    }
+
     func testValidateAndSavePersistsOpaqueBookmarkOnlyAfterDirectDatabaseValidation() throws {
         let fixture = BookmarkFixture()
         let priorBookmark = Data("prior-bookmark".utf8)
@@ -208,4 +246,31 @@ private final class BookmarkFixture {
 private enum BookmarkFixtureError: Error {
     case unresolvable
     case persistenceFailed
+}
+
+@MainActor
+private final class DocumentBookmarkFixture {
+    let data: Data
+    let bookmark = Data("document-bookmark".utf8)
+    let url = URL(fileURLWithPath: "/fixture/resume.pdf")
+    private(set) var startedURLs: [URL] = []
+    private(set) var stoppedURLs: [URL] = []
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    func makeStore() -> DocumentReferenceBookmarkStore {
+        DocumentReferenceBookmarkStore(dependencies: .init(
+            createBookmark: { [bookmark] _ in bookmark },
+            resolveBookmark: { [url] _ in (url, false) },
+            startAccessing: { [weak self] url in self?.startedURLs.append(url); return true },
+            stopAccessing: { [weak self] url in self?.stoppedURLs.append(url) },
+            inspectFile: { [weak self] _ in
+                guard let self else { return nil }
+                return DocumentReferenceFileInspection(isRegularFile: true, byteCount: self.data.count)
+            },
+            readData: { [weak self] _ in self?.data ?? Data() }
+        ))
+    }
 }

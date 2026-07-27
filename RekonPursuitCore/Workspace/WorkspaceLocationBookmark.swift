@@ -176,35 +176,72 @@ enum DocumentReferenceBookmarkError: Error {
     case mismatch
 }
 
+struct DocumentReferenceFileInspection {
+    let isRegularFile: Bool
+    let byteCount: Int
+}
+
+struct DocumentReferenceBookmarkDependencies {
+    let createBookmark: (URL) throws -> Data
+    let resolveBookmark: (Data) throws -> (URL, Bool)
+    let startAccessing: (URL) -> Bool
+    let stopAccessing: (URL) -> Void
+    let inspectFile: (URL) -> DocumentReferenceFileInspection?
+    let readData: (URL) throws -> Data
+
+    static func live() -> Self {
+        Self(
+            createBookmark: { try $0.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil) },
+            resolveBookmark: { bookmark in
+                var stale = false
+                let url = try URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope], relativeTo: nil, bookmarkDataIsStale: &stale)
+                return (url, stale)
+            },
+            startAccessing: { $0.startAccessingSecurityScopedResource() },
+            stopAccessing: { $0.stopAccessingSecurityScopedResource() },
+            inspectFile: { url in
+                var status = stat()
+                guard lstat(url.path, &status) == 0 else { return nil }
+                return DocumentReferenceFileInspection(isRegularFile: (status.st_mode & S_IFMT) == S_IFREG, byteCount: Int(status.st_size))
+            },
+            readData: { try Data(contentsOf: $0, options: .mappedIfSafe) }
+        )
+    }
+}
+
 /// Owns short-lived access to an externally selected document. It stores no
 /// path and returns only opaque bookmark data plus the identity needed by the
 /// encrypted workspace record.
 struct DocumentReferenceBookmarkStore {
     static let maximumByteCount = 25_000_000
+    private let dependencies: DocumentReferenceBookmarkDependencies
+
+    init(dependencies: DocumentReferenceBookmarkDependencies = .live()) {
+        self.dependencies = dependencies
+    }
 
     func create(from url: URL) throws -> (bookmark: Data, contentType: String, hash: String, byteCount: Int) {
-        guard url.startAccessingSecurityScopedResource() else { throw DocumentReferenceBookmarkError.unavailable }
-        defer { url.stopAccessingSecurityScopedResource() }
+        guard dependencies.startAccessing(url) else { throw DocumentReferenceBookmarkError.unavailable }
+        defer { dependencies.stopAccessing(url) }
         let identity = try verify(url: url, expectedHash: nil, expectedByteCount: nil)
-        let bookmark = try url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+        let bookmark = try dependencies.createBookmark(url)
         return (bookmark, identity.contentType, identity.hash, identity.byteCount)
     }
 
     func resolveAndVerify(_ reference: DocumentReference) throws -> URL {
         guard let bookmark = reference.bookmarkData else { throw DocumentReferenceBookmarkError.unavailable }
-        var stale = false
-        let url = try URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope], relativeTo: nil, bookmarkDataIsStale: &stale)
-        guard !stale, url.startAccessingSecurityScopedResource() else { throw DocumentReferenceBookmarkError.unavailable }
+        let (url, stale) = try dependencies.resolveBookmark(bookmark)
+        guard !stale, dependencies.startAccessing(url) else { throw DocumentReferenceBookmarkError.unavailable }
         do {
             _ = try verify(url: url, expectedHash: reference.sourceHash, expectedByteCount: reference.byteCount)
             return url
         } catch {
-            url.stopAccessingSecurityScopedResource()
+            dependencies.stopAccessing(url)
             throw error
         }
     }
 
-    func release(_ url: URL) { url.stopAccessingSecurityScopedResource() }
+    func release(_ url: URL) { dependencies.stopAccessing(url) }
 
     static func validateContents(_ data: Data, pathExtension: String) throws -> String {
         guard data.count <= maximumByteCount else { throw DocumentReferenceBookmarkError.tooLarge }
@@ -213,7 +250,9 @@ struct DocumentReferenceBookmarkStore {
             guard data.starts(with: Data("%PDF-".utf8)) else { throw DocumentReferenceBookmarkError.unsupportedType }
             return "application/pdf"
         case "docx":
-            guard data.starts(with: Data([0x50, 0x4b, 0x03, 0x04])) else { throw DocumentReferenceBookmarkError.unsupportedType }
+            guard data.starts(with: Data([0x50, 0x4b, 0x03, 0x04])),
+                  data.range(of: Data("[Content_Types].xml".utf8)) != nil,
+                  data.range(of: Data("word/document.xml".utf8)) != nil else { throw DocumentReferenceBookmarkError.unsupportedType }
             return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         default:
             throw DocumentReferenceBookmarkError.unsupportedType
@@ -221,12 +260,11 @@ struct DocumentReferenceBookmarkStore {
     }
 
     private func verify(url: URL, expectedHash: String?, expectedByteCount: Int?) throws -> (contentType: String, hash: String, byteCount: Int) {
-        var status = stat()
-        guard lstat(url.path, &status) == 0, (status.st_mode & S_IFMT) == S_IFREG else { throw DocumentReferenceBookmarkError.unsafeFile }
+        guard let inspection = dependencies.inspectFile(url), inspection.isRegularFile else { throw DocumentReferenceBookmarkError.unsafeFile }
         let ext = url.pathExtension.lowercased()
-        let size = Int(status.st_size)
+        let size = inspection.byteCount
         guard size >= 0, size <= Self.maximumByteCount else { throw DocumentReferenceBookmarkError.tooLarge }
-        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        let data = try dependencies.readData(url)
         guard data.count == size else { throw DocumentReferenceBookmarkError.mismatch }
         let contentType = try Self.validateContents(data, pathExtension: ext)
         let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
