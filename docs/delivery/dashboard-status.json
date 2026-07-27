@@ -242,8 +242,8 @@
       "title": "Encrypted-default logical export",
       "workType": "Data lifecycle",
       "status": "next_up",
-      "releaseCondition": "Planning is released. Implementation requires independent Architecture/Security, TPM, QA, and Delivery approval of the fixed encrypted-only export boundary.",
-      "latestTransition": "Product owner accepted reuse of the recovery key and one fixed Tracker workspace data category; the bounded design and task brief are ready for release gates.",
+      "releaseCondition": "Planning, Architecture/Security, and TPM are approved. QA and Delivery approval, plus frozen container framing/review binding, are required before implementation.",
+      "latestTransition": "TPM approved the planning/release-gate stage; R7a-4 remains Next up while QA and Delivery review the fixed encrypted-only boundary.",
       "evidence": {
         "label": "R7a-4 task brief",
         "href": "../task-briefs/RP-R7a-4-encrypted-default-logical-export.md"
