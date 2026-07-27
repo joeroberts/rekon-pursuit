@@ -809,6 +809,23 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents(), [])
     }
 
+    func testContactRetainsMultilineRelationshipContextAndNotes() throws {
+        let store = try makeStore()
+        let relationshipContext = "Met at an industry event.\nAsked for an introduction to the hiring manager."
+        let notes = "Prefers email.\nFollow up after the team planning meeting."
+
+        let contact = try store.createContact(CreateContact(
+            name: "Alex Morgan",
+            employer: "Rekon Labs",
+            relationshipContext: relationshipContext,
+            notes: notes
+        ))
+
+        XCTAssertEqual(try store.contacts(), [contact])
+        XCTAssertEqual(try store.contacts().first?.relationshipContext, relationshipContext)
+        XCTAssertEqual(try store.contacts().first?.notes, notes)
+    }
+
     func testEmployerOpportunitiesUseNormalizedExactMatchWithoutImplicitLinks() throws {
         let store = try makeStore()
         let matching = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
