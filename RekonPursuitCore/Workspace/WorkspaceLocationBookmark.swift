@@ -220,6 +220,13 @@ struct DocumentReferenceBookmarkStore {
         guard size >= 0, size <= Self.maximumByteCount else { throw DocumentReferenceBookmarkError.tooLarge }
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
         guard data.count == size else { throw DocumentReferenceBookmarkError.mismatch }
+        let isExpectedFormat: Bool
+        switch ext {
+        case "pdf": isExpectedFormat = data.starts(with: Data("%PDF-".utf8))
+        case "docx": isExpectedFormat = data.starts(with: Data([0x50, 0x4b, 0x03, 0x04]))
+        default: isExpectedFormat = false
+        }
+        guard isExpectedFormat else { throw DocumentReferenceBookmarkError.unsupportedType }
         let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         if let expectedHash, let expectedByteCount, (hash != expectedHash || size != expectedByteCount) { throw DocumentReferenceBookmarkError.mismatch }
         return (contentType, hash, size)

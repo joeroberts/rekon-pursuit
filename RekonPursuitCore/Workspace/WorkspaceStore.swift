@@ -813,26 +813,38 @@ final class WorkspaceStore {
     }
 
     func replaceDocumentReferenceBookmark(id: String, bookmarkData: Data) throws {
+        let commandNow = clock()
         try synchronized {
             try database.transaction {
+                let rows = try database.rows("SELECT opportunity_id FROM document_references WHERE id = ?", values: [.text(id)])
+                guard let row = rows.first, case let .text(opportunityID) = row.first else { throw WorkspaceStoreError.unexpectedDatabaseValue }
                 try database.execute("UPDATE document_references SET bookmark_data = ?, availability = 'available' WHERE id = ?", values: [.blob(bookmarkData), .text(id)])
+                try appendActivity(kind: "document_reference_relinked", opportunityID: opportunityID, occurredAt: commandNow)
             }
         }
     }
 
     func markDocumentReferenceRelinkRequired(id: String) throws {
+        let commandNow = clock()
         try synchronized {
             try database.transaction {
+                let rows = try database.rows("SELECT opportunity_id FROM document_references WHERE id = ?", values: [.text(id)])
+                guard let row = rows.first, case let .text(opportunityID) = row.first else { throw WorkspaceStoreError.unexpectedDatabaseValue }
                 try database.execute("UPDATE document_references SET availability = 'relink_required' WHERE id = ?", values: [.text(id)])
+                try appendActivity(kind: "document_reference_relink_required", opportunityID: opportunityID, occurredAt: commandNow)
             }
         }
     }
 
     func removeDocumentReference(id: String) throws {
+        let commandNow = clock()
         try synchronized {
             try database.transaction {
+                let rows = try database.rows("SELECT opportunity_id FROM document_references WHERE id = ?", values: [.text(id)])
+                guard let row = rows.first, case let .text(opportunityID) = row.first else { throw WorkspaceStoreError.unexpectedDatabaseValue }
                 try database.execute("UPDATE document_references SET bookmark_data = NULL, availability = 'relink_required' WHERE id = ?", values: [.text(id)])
                 try database.execute("DELETE FROM document_references WHERE id = ?", values: [.text(id)])
+                try appendActivity(kind: "document_reference_removed", opportunityID: opportunityID, occurredAt: commandNow)
             }
         }
     }

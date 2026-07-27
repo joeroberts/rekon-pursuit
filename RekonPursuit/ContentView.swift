@@ -116,6 +116,7 @@ struct ContentView: View {
                     model.attachDocumentReference(at: url)
                 }
             }
+            if case .failure = result { documentReferenceToRelink = nil }
         }
         .fileExporter(isPresented: $showsCSVExporter, document: exportDocument, contentType: .commaSeparatedText, defaultFilename: "rekon-pursuit-opportunities") { result in
             if case .success = result { model.noteExportSaved() }

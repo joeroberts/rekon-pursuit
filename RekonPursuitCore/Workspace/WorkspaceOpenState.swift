@@ -192,19 +192,23 @@ final class WorkspaceSession {
         let stagingURL = root.appendingPathComponent(".restoring-\(UUID().uuidString)")
         let previousURL = root.appendingPathComponent(".restore-rollback-\(UUID().uuidString)")
         try FileManager.default.copyItem(at: backupURL, to: stagingURL)
+        var movedActiveWorkspace = false
         do {
             let staged = try openStore(at: stagingURL, with: key, createIfMissing: false)
             try staged.revokeDocumentReferenceBookmarksForRestore()
             try staged.close()
             try FileManager.default.moveItem(at: databaseURL, to: previousURL)
+            movedActiveWorkspace = true
             try FileManager.default.moveItem(at: stagingURL, to: databaseURL)
             let restored = try openStore(with: key, createIfMissing: false)
             try? FileManager.default.removeItem(at: previousURL)
             return restored
         } catch {
-            try? FileManager.default.removeItem(at: databaseURL)
-            if FileManager.default.fileExists(atPath: previousURL.path) {
-                try? FileManager.default.moveItem(at: previousURL, to: databaseURL)
+            if movedActiveWorkspace {
+                try? FileManager.default.removeItem(at: databaseURL)
+                if FileManager.default.fileExists(atPath: previousURL.path) {
+                    try? FileManager.default.moveItem(at: previousURL, to: databaseURL)
+                }
             }
             try? FileManager.default.removeItem(at: stagingURL)
             throw error
