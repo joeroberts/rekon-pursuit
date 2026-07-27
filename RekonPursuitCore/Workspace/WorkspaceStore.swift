@@ -868,8 +868,7 @@ final class WorkspaceStore {
     }
 
     func runPortableArchiveExpiryServiceOpportunity() async throws -> [PortableArchiveCatalogueRow] {
-        let worker = portableArchiveExpiryWorker
-        try await Self.runExpiryWorker(worker, whileHolding: lock)
+        try await portableArchiveExpiryWorker.run()
         return try synchronized { try portableArchiveCatalogueRowsLocked() }
     }
 
@@ -1066,25 +1065,6 @@ final class WorkspaceStore {
 
     private func releaseWorkspaceLock() {
         lock.unlock()
-    }
-
-    nonisolated private static func runExpiryWorker(
-        _ worker: any PortableArchiveExpiryWorking,
-        whileHolding lock: WorkspaceSynchronizationLock
-    ) async throws {
-        try await withCheckedThrowingContinuation { continuation in
-            Task.detached {
-                lock.lock()
-                do {
-                    try await worker.run()
-                    lock.unlock()
-                    continuation.resume()
-                } catch {
-                    lock.unlock()
-                    continuation.resume(throwing: error)
-                }
-            }
-        }
     }
 
     private func activeTaskOpportunityID(_ taskID: String) throws -> String {

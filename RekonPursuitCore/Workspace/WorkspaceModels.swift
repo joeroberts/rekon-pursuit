@@ -96,6 +96,9 @@ nonisolated enum PortableArchiveLifecycleState: String, Equatable, Sendable {
     case expiredRetryable = "expired_retryable"
     case expiredBlocked = "expired_blocked"
     case expiredMissing = "expired_missing"
+    case expiredManualRemovalRequired = "expired_manual_removal_required"
+    case expiredPrepared = "expired_prepared"
+    case expiredQuarantined = "expired_quarantined"
 }
 
 nonisolated enum PortableArchiveExpiryOutcome: String, Equatable, Sendable {
@@ -107,6 +110,7 @@ nonisolated enum PortableArchiveExpiryOutcome: String, Equatable, Sendable {
     case archiveMismatch
     case ioFailure
     case removed
+    case manualRemovalRequired = "manual_removal_required"
 }
 
 nonisolated struct PortableArchiveCatalogueRow: Equatable, Sendable {

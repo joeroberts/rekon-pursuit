@@ -237,9 +237,18 @@ actor PortableArchiveExpiryWorker: PortableArchiveExpiryWorking {
         let candidates = try dueCandidates(at: opportunityTime, in: database)
 
         for candidate in candidates {
+            guard candidate.storageClass == "managed" else {
+                try update(
+                    candidate.row.archiveID,
+                    lifecycleState: .expiredManualRemovalRequired,
+                    outcome: .manualRemovalRequired,
+                    in: database
+                )
+                continue
+            }
             try update(
                 candidate.row.archiveID,
-                lifecycleState: .expiredPendingRemoval,
+                lifecycleState: .expiredPrepared,
                 outcome: .none,
                 in: database
             )
@@ -258,15 +267,16 @@ actor PortableArchiveExpiryWorker: PortableArchiveExpiryWorking {
         at opportunityTime: Date,
         from database: EncryptedDatabase
     ) throws {
-        let scope: PortableArchiveExpiryScopedAccess
-        do {
-            scope = try bookmarkResolver(candidate.bookmark)
-        } catch {
-            throw PortableArchiveExpiryError.scopeUnavailable
+        guard let relativePath = candidate.managedRelativePath,
+              !relativePath.contains(".."),
+              !relativePath.hasPrefix("/") else {
+            throw PortableArchiveExpiryError.targetUnsafe
         }
-        defer { scope.stopAccessing() }
+        let managedRoot = configuration.url.deletingLastPathComponent()
+            .appendingPathComponent("portable-archives", isDirectory: true)
+        let archiveURL = managedRoot.appendingPathComponent(relativePath)
 
-        let descriptor = try fileOperations.openDescriptor(scope.url)
+        let descriptor = try fileOperations.openDescriptor(archiveURL)
         defer { fileOperations.closeDescriptor(descriptor) }
         let openedMetadata = try fileOperations.descriptorMetadata(descriptor)
         guard openedMetadata.isRegular, !openedMetadata.isSymbolicLink else {
@@ -288,27 +298,33 @@ actor PortableArchiveExpiryWorker: PortableArchiveExpiryWorking {
             throw PortableArchiveExpiryError.archiveMismatch
         }
 
-        let currentMetadata = try fileOperations.targetMetadata(scope.url)
+        let currentMetadata = try fileOperations.targetMetadata(archiveURL)
         guard currentMetadata.isRegular, !currentMetadata.isSymbolicLink else {
             throw PortableArchiveExpiryError.targetUnsafe
         }
         guard currentMetadata.identity == openedMetadata.identity else {
             throw PortableArchiveExpiryError.identityMismatch
         }
-        let quarantine = try fileOperations.quarantineTarget(scope.url)
+        let quarantine = try fileOperations.quarantineTarget(archiveURL)
+        try update(
+            candidate.row.archiveID,
+            lifecycleState: .expiredQuarantined,
+            outcome: .none,
+            in: database
+        )
         let quarantinedMetadata = try fileOperations.targetMetadata(quarantine)
         guard quarantinedMetadata.isRegular, !quarantinedMetadata.isSymbolicLink else {
-            fileOperations.restoreQuarantinedTarget(quarantine, scope.url)
+            fileOperations.restoreQuarantinedTarget(quarantine, archiveURL)
             throw PortableArchiveExpiryError.targetUnsafe
         }
         guard quarantinedMetadata.identity == openedMetadata.identity else {
-            fileOperations.restoreQuarantinedTarget(quarantine, scope.url)
+            fileOperations.restoreQuarantinedTarget(quarantine, archiveURL)
             throw PortableArchiveExpiryError.identityMismatch
         }
         do {
             try fileOperations.unlinkTarget(quarantine)
         } catch {
-            fileOperations.restoreQuarantinedTarget(quarantine, scope.url)
+            fileOperations.restoreQuarantinedTarget(quarantine, archiveURL)
             throw error
         }
 
@@ -344,15 +360,16 @@ actor PortableArchiveExpiryWorker: PortableArchiveExpiryWorking {
             """
             SELECT archive_id, destination_bookmark, display_filename, format_version,
                    created_at, expires_at, verification_state, ciphertext_checksum,
-                   signing_key_fingerprint, lifecycle_state, last_expiry_outcome
+                   signing_key_fingerprint, lifecycle_state, last_expiry_outcome,
+                   storage_class, managed_relative_path
             FROM portable_archive_catalogue
             WHERE expires_at <= ?
-              AND lifecycle_state IN ('Verified', 'expired_pending_removal', 'expired_retryable')
+              AND lifecycle_state IN ('Verified', 'expired_pending_removal', 'expired_retryable', 'expired_prepared', 'expired_quarantined')
             ORDER BY expires_at, archive_id
             """,
             values: [.real(opportunityTime.timeIntervalSince1970)]
         ).map { values in
-            guard values.count == 11,
+            guard values.count == 13,
                   case let .text(id) = values[0],
                   let archiveID = UUID(uuidString: id),
                   case let .blob(bookmark) = values[1],
@@ -366,7 +383,8 @@ actor PortableArchiveExpiryWorker: PortableArchiveExpiryWorking {
                   case let .text(lifecycleText) = values[9],
                   let lifecycle = PortableArchiveLifecycleState(rawValue: lifecycleText),
                   case let .text(outcomeText) = values[10],
-                  let outcome = PortableArchiveExpiryOutcome(rawValue: outcomeText)
+                  let outcome = PortableArchiveExpiryOutcome(rawValue: outcomeText),
+                  case let .text(storageClass) = values[11]
             else {
                 throw WorkspaceStoreError.unexpectedDatabaseValue
             }
@@ -383,7 +401,13 @@ actor PortableArchiveExpiryWorker: PortableArchiveExpiryWorking {
                     lifecycleState: lifecycle,
                     lastExpiryOutcome: outcome
                 ),
-                bookmark: bookmark
+                bookmark: bookmark,
+                storageClass: storageClass,
+                managedRelativePath: try {
+                    if case let .text(path) = values[12] { return path }
+                    if case .null = values[12] { return nil }
+                    throw WorkspaceStoreError.unexpectedDatabaseValue
+                }()
             )
         }
     }
@@ -511,4 +535,6 @@ actor PortableArchiveExpiryWorker: PortableArchiveExpiryWorking {
 nonisolated private struct PortableArchiveExpiryCandidate {
     let row: PortableArchiveCatalogueRow
     let bookmark: Data
+    let storageClass: String
+    let managedRelativePath: String?
 }

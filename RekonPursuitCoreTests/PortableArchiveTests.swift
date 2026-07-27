@@ -76,13 +76,13 @@ final class PortableArchiveTests: XCTestCase {
         }
 
         XCTAssertEqual(atBoundary.map(\.archiveID), [future.row.archiveID])
-        XCTAssertEqual(pendingStates.values, [PortableArchiveLifecycleState.expiredPendingRemoval.rawValue])
+        XCTAssertEqual(pendingStates.values, [PortableArchiveLifecycleState.expiredQuarantined.rawValue])
         XCTAssertFalse(FileManager.default.fileExists(atPath: due.url.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: future.url.path))
         XCTAssertEqual(removalActivity.count, 1)
         XCTAssertEqual(removalActivity.first?.correlationID, due.row.archiveID.uuidString)
-        XCTAssertEqual(fixture.bookmarks.resolveCount(for: due.bookmark), 1)
-        XCTAssertEqual(fixture.bookmarks.stopCount(for: due.bookmark), 1)
+        XCTAssertEqual(fixture.bookmarks.resolveCount(for: due.bookmark), 0)
+        XCTAssertEqual(fixture.bookmarks.stopCount(for: due.bookmark), 0)
         XCTAssertEqual(fixture.bookmarks.resolveCount(for: future.bookmark), 0)
     }
 
@@ -149,8 +149,30 @@ final class PortableArchiveTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: archive.url.path))
         XCTAssertEqual(removalActivity.count, 1)
         XCTAssertEqual(removalActivity.first?.correlationID, archive.row.archiveID.uuidString)
-        XCTAssertEqual(fixture.bookmarks.resolveCount(for: archive.bookmark), 2)
-        XCTAssertEqual(fixture.bookmarks.stopCount(for: archive.bookmark), 2)
+        XCTAssertEqual(fixture.bookmarks.resolveCount(for: archive.bookmark), 0)
+        XCTAssertEqual(fixture.bookmarks.stopCount(for: archive.bookmark), 0)
+    }
+
+    func testExpiryNeverRenamesOrDeletesExternalArchive() async throws {
+        let fixture = try makeExpiryFixture()
+        defer { fixture.cleanup() }
+        let archive = try seedExpiryArchive(
+            in: fixture,
+            named: "external.rekonarchive",
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200),
+            storageClass: "external"
+        )
+        fixture.clock.set(archive.row.expiresAt)
+
+        let catalogue = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+        let retained = try XCTUnwrap(catalogue.first)
+
+        XCTAssertEqual(retained.lifecycleState, .expiredManualRemovalRequired)
+        XCTAssertEqual(retained.lastExpiryOutcome, .manualRemovalRequired)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: archive.url.path))
+        XCTAssertTrue(try fixture.store.activityEvents().allSatisfy {
+            $0.kind != "portable_backup_expired_removed"
+        })
     }
 
     func testExpiryUnlinkFailureRestoresArchiveAndLeavesRetryableState() async throws {
@@ -202,7 +224,8 @@ final class PortableArchiveTests: XCTestCase {
             in: fixture,
             named: "symlink-backing.rekonarchive",
             createdAt: createdAt,
-            bookmarkTargetURL: symlinkURL
+            bookmarkTargetURL: symlinkURL,
+            storageClass: "external"
         )
         try FileManager.default.createSymbolicLink(
             at: symlinkURL,
@@ -240,8 +263,8 @@ final class PortableArchiveTests: XCTestCase {
         let symlinkState = try XCTUnwrap(catalogue.first { $0.archiveID == symlinkArchive.row.archiveID })
         let changedState = try XCTUnwrap(catalogue.first { $0.archiveID == changedArchive.row.archiveID })
 
-        XCTAssertEqual(symlinkState.lifecycleState, .expiredBlocked)
-        XCTAssertEqual(symlinkState.lastExpiryOutcome, .targetUnsafe)
+        XCTAssertEqual(symlinkState.lifecycleState, .expiredManualRemovalRequired)
+        XCTAssertEqual(symlinkState.lastExpiryOutcome, .manualRemovalRequired)
         XCTAssertEqual(changedState.lifecycleState, .expiredBlocked)
         XCTAssertEqual(changedState.lastExpiryOutcome, .identityMismatch)
         XCTAssertEqual(unlinkCount.value, 0)
@@ -368,7 +391,8 @@ final class PortableArchiveTests: XCTestCase {
         let unavailable = try seedExpiryArchive(
             in: fixture,
             named: "scope-unavailable.rekonarchive",
-            createdAt: createdAt
+            createdAt: createdAt,
+            storageClass: "external"
         )
         fixture.bookmarks.makeUnavailable(unavailable.bookmark)
         fixture.clock.set(missing.row.expiresAt)
@@ -379,8 +403,8 @@ final class PortableArchiveTests: XCTestCase {
 
         XCTAssertEqual(missingState.lifecycleState, .expiredMissing)
         XCTAssertEqual(missingState.lastExpiryOutcome, .targetMissing)
-        XCTAssertEqual(unavailableState.lifecycleState, .expiredRetryable)
-        XCTAssertEqual(unavailableState.lastExpiryOutcome, .scopeUnavailable)
+        XCTAssertEqual(unavailableState.lifecycleState, .expiredManualRemovalRequired)
+        XCTAssertEqual(unavailableState.lastExpiryOutcome, .manualRemovalRequired)
         XCTAssertTrue(FileManager.default.fileExists(atPath: unavailable.url.path))
         XCTAssertTrue(try fixture.store.activityEvents().allSatisfy {
             $0.kind != "portable_backup_expired_removed"
@@ -467,7 +491,8 @@ final class PortableArchiveTests: XCTestCase {
             in: fixture,
             named: "redacted-retained.rekonarchive",
             createdAt: createdAt,
-            bookmark: Data("opaque-bookmark-sensitive-bytes".utf8)
+            bookmark: Data("opaque-bookmark-sensitive-bytes".utf8),
+            storageClass: "external"
         )
         fixture.bookmarks.makeUnavailable(retained.bookmark)
         fixture.clock.set(removed.row.expiresAt)
@@ -490,8 +515,8 @@ final class PortableArchiveTests: XCTestCase {
             archivePayload
         ]
 
-        XCTAssertEqual(retainedRow.lifecycleState, .expiredRetryable)
-        XCTAssertEqual(retainedRow.lastExpiryOutcome, .scopeUnavailable)
+        XCTAssertEqual(retainedRow.lifecycleState, .expiredManualRemovalRequired)
+        XCTAssertEqual(retainedRow.lastExpiryOutcome, .manualRemovalRequired)
         XCTAssertEqual(activities.filter { $0.kind == "portable_backup_expired_removed" }.count, 1)
         XCTAssertEqual(
             activities.first { $0.kind == "portable_backup_expired_removed" }?.correlationID,
@@ -1878,9 +1903,16 @@ final class PortableArchiveTests: XCTestCase {
         catalogueFingerprint: Data? = nil,
         catalogueChecksum: Data? = nil,
         catalogueExpiresAt: Date? = nil,
-        bookmark: Data? = nil
+        bookmark: Data? = nil,
+        storageClass: String = "managed"
     ) throws -> ExpirySeededArchive {
-        let url = fixture.root.appendingPathComponent(filename)
+        let managedRoot = fixture.root.appendingPathComponent("portable-archives", isDirectory: true)
+        if storageClass == "managed" {
+            try FileManager.default.createDirectory(at: managedRoot, withIntermediateDirectories: true)
+        }
+        let url = storageClass == "managed"
+            ? managedRoot.appendingPathComponent(filename)
+            : fixture.root.appendingPathComponent(filename)
         let verified = try PortableArchiveService.writeAndVerify(
             snapshot: emptyCanonicalSnapshot(),
             recoveryKey: RecoveryKey.generate(),
@@ -1902,7 +1934,7 @@ final class PortableArchiveTests: XCTestCase {
         let bookmarkData = bookmark ?? Data("bookmark-\(row.archiveID.uuidString)".utf8)
         fixture.bookmarks.register(bookmarkData, url: bookmarkTargetURL ?? url)
         try fixture.database.execute(
-            "INSERT INTO portable_archive_catalogue (archive_id, destination_bookmark, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint, lifecycle_state, last_expiry_outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO portable_archive_catalogue (archive_id, destination_bookmark, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint, lifecycle_state, last_expiry_outcome, storage_class, managed_relative_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             values: [
                 .text(row.archiveID.uuidString),
                 .blob(bookmarkData),
@@ -1914,7 +1946,9 @@ final class PortableArchiveTests: XCTestCase {
                 .blob(row.ciphertextChecksum),
                 .blob(row.signingKeyFingerprint),
                 .text(row.lifecycleState.rawValue),
-                .text(row.lastExpiryOutcome.rawValue)
+                .text(row.lastExpiryOutcome.rawValue),
+                .text(storageClass),
+                storageClass == "managed" ? .text(filename) : .null
             ]
         )
         return ExpirySeededArchive(row: row, url: bookmarkTargetURL ?? url, bookmark: bookmarkData)
