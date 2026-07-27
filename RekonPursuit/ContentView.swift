@@ -431,7 +431,7 @@ private struct OpportunityOverviewView: View {
                                 if model.selectedActionType == .other { TextField("Other action", text: $model.selectedActionCustomText) }
                                 Toggle("Add a due date", isOn: $model.selectedHasDueDate)
                                 if model.selectedHasDueDate { DatePicker("Due", selection: $model.selectedDueAt, displayedComponents: [.date, .hourAndMinute]) }
-                                HStack { Button("Save changes locally") { _ = model.selectRouteOpportunity(id: opportunityID); model.saveSelectedOpportunity() }.accessibilityIdentifier("save-opportunity-changes"); Button("Reschedule action") { _ = model.selectRouteOpportunity(id: opportunityID); model.rescheduleSelectedTask() }.disabled(model.selectedNextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
+                                HStack { Button("Save changes locally") { model.saveRouteOpportunity(id: opportunityID) }.accessibilityIdentifier("save-opportunity-changes"); Button("Reschedule action") { model.rescheduleRouteTask(id: opportunityID) }.disabled(model.selectedNextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
                             }
                         }
                         CompactDocumentsView(model: model, opportunityID: opportunityID, chooseDocument: chooseDocument)

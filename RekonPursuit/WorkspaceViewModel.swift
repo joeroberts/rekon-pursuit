@@ -638,6 +638,17 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
+    /// Saves the draft already loaded for an opportunity route. Route actions
+    /// must not reselect the record first because selection reloads the stored
+    /// values and would discard the user's unsaved edits.
+    func saveRouteOpportunity(id: String) {
+        guard selectedOpportunityID == id else {
+            statusMessage = "Open the opportunity again before saving changes."
+            return
+        }
+        saveSelectedOpportunity()
+    }
+
     func rescheduleSelectedTask() {
         guard let store = readyStore() else { return }
         guard let task = needsAttention.first(where: { $0.opportunityID == selectedOpportunityID }) else {
@@ -651,6 +662,16 @@ final class WorkspaceViewModel: ObservableObject {
         } catch {
             statusMessage = "The action could not be rescheduled."
         }
+    }
+
+    /// Reschedules the task for the draft already loaded by an opportunity
+    /// route without reloading that route's unsaved fields.
+    func rescheduleRouteTask(id: String) {
+        guard selectedOpportunityID == id else {
+            statusMessage = "Open the opportunity again before rescheduling its action."
+            return
+        }
+        rescheduleSelectedTask()
     }
 
     func createContact() {

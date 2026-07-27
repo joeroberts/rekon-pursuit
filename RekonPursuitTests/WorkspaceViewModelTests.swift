@@ -774,6 +774,21 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.activityEvents.last?.kind, "opportunity_updated")
     }
 
+    func testSavingAnOverviewDraftPersistsTheEditedValue() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
+
+        model.start()
+        XCTAssertTrue(model.selectRouteOpportunity(id: opportunity.id))
+        model.selectedTitle = "Senior Product Manager"
+
+        model.saveRouteOpportunity(id: opportunity.id)
+
+        let saved = try XCTUnwrap(store.opportunities().first)
+        XCTAssertEqual(saved.title, "Senior Product Manager")
+    }
+
     func testSavingOverviewWithoutEditingStructuredCompensationPreservesLegacyText() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(
