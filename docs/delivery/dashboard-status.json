@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "UX-R2-B",
-  "nextEligibleTaskId": null,
+  "activeTaskId": "UX-R2",
+  "nextEligibleTaskId": "UX-R2-C",
   "tasks": [
     {
       "id": "RP-R0",
@@ -112,8 +112,8 @@
       "title": "Core workflow forms",
       "workType": "UX",
       "status": "in_progress",
-      "releaseCondition": "UX-R2-A is accepted. UX-R2-B is the only eligible successor; UX-R2-C and RP-R6 remain unreleased.",
-      "latestTransition": "Product owner accepted UX-R2-A; the parent remains in progress pending B and C.",
+      "releaseCondition": "UX-R2-A and UX-R2-B are accepted. UX-R2-C is the only eligible successor; RP-R6 remains unreleased.",
+      "latestTransition": "Product owner accepted UX-R2-B; the parent remains in progress pending CSV completion and final workflow verification.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
@@ -137,9 +137,22 @@
       "id": "UX-R2-B",
       "title": "Contacts and employer relationship flow",
       "workType": "Workflow",
-      "status": "in_progress",
-      "releaseCondition": "Implement only the approved Contacts and employer relationship flow. UX-R2-C and RP-R6 remain unreleased.",
-      "latestTransition": "Released after UX-R2-A acceptance under the already-approved serial brief.",
+      "status": "accepted",
+      "releaseCondition": "Accepted Contacts and employer relationship workflow.",
+      "latestTransition": "Accepted by the product owner after the relationship-management sheet verified linked opportunities appear once.",
+      "evidence": {
+        "label": "UX-R2 task brief",
+        "href": "../task-briefs/UX-R2-core-workflow-forms.md"
+      },
+      "needsUserAction": false
+    },
+    {
+      "id": "UX-R2-C",
+      "title": "CSV completion and report redesign",
+      "workType": "Workflow",
+      "status": "next_up",
+      "releaseCondition": "UX-R2-B is accepted. Release only this approved CSV presentation slice; RP-R6 remains unreleased.",
+      "latestTransition": "Eligible after UX-R2-B product-owner acceptance; not yet started.",
       "evidence": {
         "label": "UX-R2 task brief",
         "href": "../task-briefs/UX-R2-core-workflow-forms.md"
