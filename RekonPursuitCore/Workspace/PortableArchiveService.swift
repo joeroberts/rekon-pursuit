@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 import Security
 
-struct PortableArchiveService {
+nonisolated struct PortableArchiveService {
     static let formatVersion: UInt16 = 1
     private static let magic = Data("RPARCH01".utf8)
     private static let payloadMagic = Data("RPPAYLD1".utf8)
@@ -12,18 +12,20 @@ struct PortableArchiveService {
     private static let signatureDomain = Data("RekonPursuit/portable-archive/signature/v1\0".utf8)
     private static let payloadDomain = Data("RekonPursuit/portable-archive/payload/v1\0".utf8)
 
-    static func writeAndVerify(snapshot: Data, recoveryKey: RecoveryKey, signingKey: Curve25519.Signing.PrivateKey, archiveID: UUID, createdAt: Date, to temporaryURL: URL) throws -> (checksum: Data, fingerprint: Data, expiresAt: Date) {
+    static func writeAndVerify(snapshot: Data, recoveryKey: RecoveryKey, signingKey: Curve25519.Signing.PrivateKey, archiveID: UUID, createdAt: Date, to temporaryURL: URL) throws -> VerifiedPortableArchive {
         guard snapshot.count <= 480 * 1024 * 1024 else { throw PortableArchiveError.archiveInvalid }
-        let manifest = manifestBytes(archiveID: archiveID, createdAt: createdAt, snapshot: snapshot)
+        let createdAtMilliseconds = milliseconds(createdAt)
+        let canonicalCreatedAt = Date(timeIntervalSince1970: Double(createdAtMilliseconds) / 1_000)
+        let expiration = canonicalCreatedAt.addingTimeInterval(30 * 24 * 60 * 60)
+        let manifest = manifestBytes(archiveID: archiveID, createdAt: canonicalCreatedAt, snapshot: snapshot)
         let manifestHash = Data(SHA256.hash(data: manifest))
         let contentKey = try randomBytes(32)
         let salt = try randomBytes(32)
-        let expiration = createdAt.addingTimeInterval(30 * 24 * 60 * 60)
         let payload = try sealPayload(manifest: manifest, snapshot: snapshot, key: contentKey, archiveID: archiveID, manifestHash: manifestHash)
         let checksum = Data(SHA256.hash(data: payload))
         let publicKey = signingKey.publicKey.rawRepresentation
         let fingerprint = Data(SHA256.hash(data: publicKey))
-        let commitment = headerCommitment(archiveID: archiveID, createdAt: createdAt, expiresAt: expiration, salt: salt, manifestHash: manifestHash, payloadChecksum: checksum, publicKey: publicKey, fingerprint: fingerprint)
+        let commitment = headerCommitment(archiveID: archiveID, createdAt: canonicalCreatedAt, expiresAt: expiration, salt: salt, manifestHash: manifestHash, payloadChecksum: checksum, publicKey: publicKey, fingerprint: fingerprint)
         let wrappingKey = HKDF<SHA256>.deriveKey(inputKeyMaterial: SymmetricKey(data: recoveryKey.operationBytes), salt: salt, info: wrappingInfo, outputByteCount: 32)
         guard let envelope = try AES.GCM.seal(contentKey, using: wrappingKey, authenticating: commitment).combined else { throw PortableArchiveError.archiveInvalid }
         guard envelope.count == 60 else { throw PortableArchiveError.archiveInvalid }
@@ -32,7 +34,7 @@ struct PortableArchiveService {
         var file = magic
         file.appendUInt16(formatVersion); file.appendUInt32(headerLength)
         file.append(archiveID.rawBytes)
-        file.appendInt64(milliseconds(createdAt))
+        file.appendInt64(createdAtMilliseconds)
         file.appendInt64(milliseconds(expiration))
         file.append(1)
         file.append(salt)
@@ -46,11 +48,19 @@ struct PortableArchiveService {
         guard file.count == expectedHeaderFileLength else { throw PortableArchiveError.archiveInvalid }
         file.appendUInt64(UInt64(payload.count)); file.append(payload)
         try file.write(to: temporaryURL, options: [.withoutOverwriting])
-        try verify(data: Data(contentsOf: temporaryURL), recoveryKey: recoveryKey)
-        return (checksum, fingerprint, expiration)
+        let verified = try verify(data: Data(contentsOf: temporaryURL), recoveryKey: recoveryKey)
+        guard verified.archiveID == archiveID,
+              milliseconds(verified.createdAt) == createdAtMilliseconds,
+              milliseconds(verified.expiresAt) == milliseconds(expiration),
+              verified.ciphertextChecksum == checksum,
+              verified.signingKeyFingerprint == fingerprint else {
+            throw PortableArchiveError.verificationFailed
+        }
+        return verified
     }
 
-    static func verify(data: Data, recoveryKey: RecoveryKey) throws {
+    @discardableResult
+    static func verify(data: Data, recoveryKey: RecoveryKey) throws -> VerifiedPortableArchive {
         var reader = ArchiveReader(data)
         guard try reader.take(8) == magic, try reader.uint16() == formatVersion, try reader.uint32() == headerLength else { throw PortableArchiveError.archiveInvalid }
         let header = try reader.take(Int(headerLength))
@@ -74,6 +84,13 @@ struct PortableArchiveService {
         let declaredSnapshotHash = try validateManifest(manifest, archiveID: archiveID, createdAtMilliseconds: createdAt)
         guard declaredSnapshotHash == Data(SHA256.hash(data: snapshot)) else { throw PortableArchiveError.verificationFailed }
         try validateSnapshot(snapshot)
+        return VerifiedPortableArchive(
+            archiveID: archiveID,
+            createdAt: Date(timeIntervalSince1970: Double(createdAt) / 1_000),
+            expiresAt: Date(timeIntervalSince1970: Double(expiresAt) / 1_000),
+            ciphertextChecksum: checksum,
+            signingKeyFingerprint: fingerprint
+        )
     }
 
     private static func sealPayload(manifest: Data, snapshot: Data, key: Data, archiveID: UUID, manifestHash: Data) throws -> Data {
@@ -82,7 +99,7 @@ struct PortableArchiveService {
         return combined
     }
 
-    private static func manifestBytes(archiveID: UUID, createdAt: Date, snapshot: Data) -> Data {
+    static func manifestBytes(archiveID: UUID, createdAt: Date, snapshot: Data) -> Data {
         var data = Data("RPMAN01".utf8); data.append(archiveID.rawBytes); data.appendInt64(milliseconds(createdAt)); data.append(Data(SHA256.hash(data: snapshot))); return data
     }
 
@@ -95,14 +112,15 @@ struct PortableArchiveService {
     }
 
     private static func validateSnapshot(_ snapshot: Data) throws {
-        let expectedTables = ["opportunities", "task_reminders", "opportunity_stage_history", "opportunity_response_history", "contacts", "contact_opportunities", "interactions", "import_reports", "import_report_rows", "posting_checks", "reconciliation_reviews", "reconciliation_results", "reconciliation_check_operations", "document_references", "activity_events", "deletion_tombstones"]
+        let expectedTables = PortableArchiveSnapshotRegistry.tables
         var reader = ArchiveReader(snapshot)
         guard try reader.take(8) == Data("RPSNAP01".utf8), try reader.uint32() == UInt32(expectedTables.count) else { throw PortableArchiveError.archiveInvalid }
         for table in expectedTables {
-            guard try reader.archiveText() == table else { throw PortableArchiveError.archiveInvalid }
+            guard try reader.archiveText() == table.name else { throw PortableArchiveError.archiveInvalid }
             let rowCount = try reader.uint32()
             for _ in 0..<rowCount {
                 let valueCount = try reader.uint32()
+                guard valueCount == UInt32(table.columns.count) else { throw PortableArchiveError.archiveInvalid }
                 for _ in 0..<valueCount { try reader.archiveValue() }
             }
         }
@@ -117,7 +135,7 @@ struct PortableArchiveService {
     private static func milliseconds(_ date: Date) -> Int64 { Int64((date.timeIntervalSince1970 * 1000).rounded(.towardZero)) }
 }
 
-private struct ArchiveReader { var data: Data; var offset = 0; init(_ data: Data) { self.data = data }; var remaining: Int { data.count - offset }; var isAtEnd: Bool { offset == data.count }; mutating func take(_ count: Int) throws -> Data { guard count >= 0, remaining >= count else { throw PortableArchiveError.archiveInvalid }; defer { offset += count }; return data.subdata(in: offset..<(offset + count)) }; mutating func byte() throws -> UInt8 { try take(1)[0] }; mutating func uint16() throws -> UInt16 { let bytes = try take(2); return UInt16(bytes[0]) << 8 | UInt16(bytes[1]) }; mutating func uint32() throws -> UInt32 { let bytes = try take(4); return bytes.reduce(0) { ($0 << 8) | UInt32($1) } }; mutating func uint64() throws -> UInt64 { let bytes = try take(8); return bytes.reduce(0) { ($0 << 8) | UInt64($1) } }; mutating func int64() throws -> Int64 { Int64(bitPattern: try uint64()) }; mutating func uuid() throws -> UUID { let bytes = try take(16); return UUID(uuid: (bytes[0],bytes[1],bytes[2],bytes[3],bytes[4],bytes[5],bytes[6],bytes[7],bytes[8],bytes[9],bytes[10],bytes[11],bytes[12],bytes[13],bytes[14],bytes[15])) }; mutating func archiveText() throws -> String { guard try byte() == 3 else { throw PortableArchiveError.archiveInvalid }; let length = try uint32(); guard let value = String(data: try take(Int(length)), encoding: .utf8) else { throw PortableArchiveError.archiveInvalid }; return value }; mutating func archiveValue() throws { let tag = try byte(); let length = try uint32(); guard tag <= 4 else { throw PortableArchiveError.archiveInvalid }; switch tag { case 0: guard length == 0 else { throw PortableArchiveError.archiveInvalid }; case 1, 2: guard length == 8 else { throw PortableArchiveError.archiveInvalid }; default: break }; _ = try take(Int(length)) } }
-private extension Data { mutating func appendUInt16(_ value: UInt16) { append(contentsOf: Swift.withUnsafeBytes(of: value.bigEndian, Array.init)) }; mutating func appendUInt32(_ value: UInt32) { append(contentsOf: Swift.withUnsafeBytes(of: value.bigEndian, Array.init)) }; mutating func appendUInt64(_ value: UInt64) { append(contentsOf: Swift.withUnsafeBytes(of: value.bigEndian, Array.init)) }; mutating func appendInt64(_ value: Int64) { appendUInt64(UInt64(bitPattern: value)) } }
-private extension UUID { var rawBytes: Data { Swift.withUnsafeBytes(of: uuid) { Data($0) } } }
-private func uint16Data(_ value: UInt16) -> Data { var data = Data(); data.appendUInt16(value); return data }
+nonisolated private struct ArchiveReader { var data: Data; var offset = 0; init(_ data: Data) { self.data = data }; var remaining: Int { data.count - offset }; var isAtEnd: Bool { offset == data.count }; mutating func take(_ count: Int) throws -> Data { guard count >= 0, remaining >= count else { throw PortableArchiveError.archiveInvalid }; defer { offset += count }; return data.subdata(in: offset..<(offset + count)) }; mutating func byte() throws -> UInt8 { try take(1)[0] }; mutating func uint16() throws -> UInt16 { let bytes = try take(2); return UInt16(bytes[0]) << 8 | UInt16(bytes[1]) }; mutating func uint32() throws -> UInt32 { let bytes = try take(4); return bytes.reduce(0) { ($0 << 8) | UInt32($1) } }; mutating func uint64() throws -> UInt64 { let bytes = try take(8); return bytes.reduce(0) { ($0 << 8) | UInt64($1) } }; mutating func int64() throws -> Int64 { Int64(bitPattern: try uint64()) }; mutating func uuid() throws -> UUID { let bytes = try take(16); return UUID(uuid: (bytes[0],bytes[1],bytes[2],bytes[3],bytes[4],bytes[5],bytes[6],bytes[7],bytes[8],bytes[9],bytes[10],bytes[11],bytes[12],bytes[13],bytes[14],bytes[15])) }; mutating func archiveText() throws -> String { guard try byte() == 3 else { throw PortableArchiveError.archiveInvalid }; let length = try uint32(); guard let value = String(data: try take(Int(length)), encoding: .utf8) else { throw PortableArchiveError.archiveInvalid }; return value }; mutating func archiveValue() throws { let tag = try byte(); let length = try uint32(); guard tag <= 4 else { throw PortableArchiveError.archiveInvalid }; switch tag { case 0: guard length == 0 else { throw PortableArchiveError.archiveInvalid }; case 1, 2: guard length == 8 else { throw PortableArchiveError.archiveInvalid }; case 3: guard String(data: try take(Int(length)), encoding: .utf8) != nil else { throw PortableArchiveError.archiveInvalid }; return; default: break }; _ = try take(Int(length)) } }
+nonisolated private extension Data { mutating func appendUInt16(_ value: UInt16) { append(contentsOf: Swift.withUnsafeBytes(of: value.bigEndian, Array.init)) }; mutating func appendUInt32(_ value: UInt32) { append(contentsOf: Swift.withUnsafeBytes(of: value.bigEndian, Array.init)) }; mutating func appendUInt64(_ value: UInt64) { append(contentsOf: Swift.withUnsafeBytes(of: value.bigEndian, Array.init)) }; mutating func appendInt64(_ value: Int64) { appendUInt64(UInt64(bitPattern: value)) } }
+nonisolated private extension UUID { var rawBytes: Data { Swift.withUnsafeBytes(of: uuid) { Data($0) } } }
+nonisolated private func uint16Data(_ value: UInt16) -> Data { var data = Data(); data.appendUInt16(value); return data }

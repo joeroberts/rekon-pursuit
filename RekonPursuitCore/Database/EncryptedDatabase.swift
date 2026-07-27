@@ -68,6 +68,10 @@ nonisolated final class EncryptedDatabase {
         }
     }
 
+    func portableArchiveConnectionConfiguration() -> PortableArchiveDatabaseConfiguration {
+        PortableArchiveDatabaseConfiguration(url: url, key: key)
+    }
+
     /// Verifies only encrypted schema access through immutable read-only mode.
     /// It is intentionally not a replacement for normal workspace opening.
     static func verifyReadOnly(url: URL, key: Data) throws {
@@ -276,7 +280,7 @@ nonisolated final class EncryptedDatabase {
     }
 }
 
-enum DatabaseValue: Equatable {
+enum DatabaseValue: Equatable, Sendable {
     case null
     case integer(Int64)
     case real(Double)

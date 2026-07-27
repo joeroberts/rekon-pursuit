@@ -1000,6 +1000,12 @@ private struct SettingsView: View {
                         } else {
                             Button("Create recovery archive") { isPresentingArchiveCreation = true }
                                 .accessibilityIdentifier("create-portable-archive")
+                                .disabled(model.isCreatingPortableArchive)
+                            if model.isCreatingPortableArchive {
+                                ProgressView("Creating and verifying archive…")
+                                    .controlSize(.small)
+                                    .accessibilityIdentifier("portable-archive-progress")
+                            }
                             if model.portableArchiveCatalogue.isEmpty {
                                 Text("No portable archive exists yet.").font(.footnote).foregroundStyle(.secondary)
                             } else {
@@ -1052,7 +1058,9 @@ private struct SettingsView: View {
                 HStack {
                     Button("Cancel", role: .cancel) { isPresentingArchiveCreation = false; archiveRecoveryReentry = "" }
                     Spacer()
-                    Button("Choose destination and create") { model.createPortableArchive(reentry: archiveRecoveryReentry); isPresentingArchiveCreation = false; archiveRecoveryReentry = "" }.keyboardShortcut(.defaultAction)
+                    Button("Choose destination and create") { model.createPortableArchive(reentry: archiveRecoveryReentry); isPresentingArchiveCreation = false; archiveRecoveryReentry = "" }
+                        .disabled(model.isCreatingPortableArchive)
+                        .keyboardShortcut(.defaultAction)
                 }
             }.padding(24).frame(width: 520)
         }

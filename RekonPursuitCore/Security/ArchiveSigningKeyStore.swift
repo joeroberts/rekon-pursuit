@@ -2,14 +2,14 @@ import CryptoKit
 import Foundation
 import Security
 
-protocol ArchiveSigningKeyStoring {
-    func privateKey(for workspaceID: String, catalogueExists: Bool) throws -> Curve25519.Signing.PrivateKey
+protocol ArchiveSigningKeyStoring: Actor {
+    func privateKeyRawRepresentation(for workspaceID: String, catalogueExists: Bool) async throws -> Data
 }
 
-final class ArchiveSigningKeyStore: ArchiveSigningKeyStoring {
+actor ArchiveSigningKeyStore: ArchiveSigningKeyStoring {
     private let service = "com.rekonlabs.RekonPursuit.portable-archive-signing.v1"
 
-    func privateKey(for workspaceID: String, catalogueExists: Bool) throws -> Curve25519.Signing.PrivateKey {
+    func privateKeyRawRepresentation(for workspaceID: String, catalogueExists: Bool) async throws -> Data {
         let account = Self.account(for: workspaceID)
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
@@ -22,7 +22,7 @@ final class ArchiveSigningKeyStore: ArchiveSigningKeyStoring {
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         if status == errSecSuccess, let data = result as? Data, let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: data) {
-            return key
+            return key.rawRepresentation
         }
         guard status == errSecItemNotFound, !catalogueExists else { throw PortableArchiveError.signingKeyUnavailable }
         let key = Curve25519.Signing.PrivateKey()
@@ -35,7 +35,7 @@ final class ArchiveSigningKeyStore: ArchiveSigningKeyStoring {
             kSecUseDataProtectionKeychain: true
         ]
         guard SecItemAdd(add as CFDictionary, nil) == errSecSuccess else { throw PortableArchiveError.signingKeyUnavailable }
-        return key
+        return key.rawRepresentation
     }
 
     static func account(for workspaceID: String) -> String {
@@ -44,13 +44,13 @@ final class ArchiveSigningKeyStore: ArchiveSigningKeyStoring {
     }
 }
 
-final class InMemoryArchiveSigningKeyStore: ArchiveSigningKeyStoring {
+actor InMemoryArchiveSigningKeyStore: ArchiveSigningKeyStoring {
     private var keys: [String: Curve25519.Signing.PrivateKey] = [:]
-    func privateKey(for workspaceID: String, catalogueExists: Bool) throws -> Curve25519.Signing.PrivateKey {
-        if let key = keys[workspaceID] { return key }
+    func privateKeyRawRepresentation(for workspaceID: String, catalogueExists: Bool) async throws -> Data {
+        if let key = keys[workspaceID] { return key.rawRepresentation }
         guard !catalogueExists else { throw PortableArchiveError.signingKeyUnavailable }
         let key = Curve25519.Signing.PrivateKey()
         keys[workspaceID] = key
-        return key
+        return key.rawRepresentation
     }
 }

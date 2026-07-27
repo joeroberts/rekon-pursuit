@@ -5,6 +5,52 @@ import XCTest
 
 @MainActor
 final class WorkspaceViewModelTests: XCTestCase {
+    func testPortableArchiveBusyStateRejectsDuplicateAndWorkspaceSwitch() async throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rekon-view-model-archive-\(UUID().uuidString).sqlite")
+        defer {
+            try? FileManager.default.removeItem(at: databaseURL)
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: databaseURL.path + "-wal"))
+            try? FileManager.default.removeItem(at: URL(fileURLWithPath: databaseURL.path + "-shm"))
+        }
+        let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 4, count: 32))
+        let worker = GatedPortableArchiveWorker()
+        let store = try WorkspaceStore(
+            database: database,
+            actorID: "test",
+            correlationID: "test",
+            portableArchiveWorker: worker
+        )
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-\(UUID().uuidString).rekonarchive")
+        let model = WorkspaceViewModel(
+            openWorkspace: { .ready(store) },
+            createWorkspace: { store },
+            portableArchiveDestination: { destination },
+            separateLocalWorkspace: .disabledForTesting
+        )
+        model.start()
+        let recoveryKey = try RecoveryKey.generate()
+
+        model.createPortableArchive(reentry: recoveryKey.displayValue)
+        while !(await worker.hasStarted) {
+            await Task.yield()
+        }
+
+        XCTAssertTrue(model.isCreatingPortableArchive)
+        model.createPortableArchive(reentry: recoveryKey.displayValue)
+        XCTAssertEqual(model.statusMessage, "A portable recovery archive is already being created.")
+        model.closeWorkspace()
+        XCTAssertTrue(model.workspaceReady)
+        XCTAssertEqual(model.statusMessage, "Wait for portable archive creation to finish before switching workspaces.")
+
+        await worker.release()
+        while model.isCreatingPortableArchive {
+            await Task.yield()
+        }
+        XCTAssertEqual(model.statusMessage, "Portable recovery archive verified and saved.")
+    }
+
     func testExternalFolderLeaseIsRetainedForTheOpenedStoreThenReleasedOnClose() throws {
         let store = try makeStore()
         let bookmarkFixture = ViewModelBookmarkFixture()
@@ -1339,6 +1385,32 @@ final class WorkspaceViewModelTests: XCTestCase {
         let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent("rekon-view-model-\(UUID().uuidString).sqlite")
         let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 5, count: 32))
         return try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
+    }
+}
+
+private actor GatedPortableArchiveWorker: PortableArchiveWorking {
+    private(set) var hasStarted = false
+    private var isReleased = false
+
+    func createArchive(_ request: PortableArchiveRequest) async throws -> PortableArchiveCatalogueRow {
+        hasStarted = true
+        while !isReleased {
+            await Task.yield()
+        }
+        return PortableArchiveCatalogueRow(
+            archiveID: request.archiveID,
+            displayFilename: request.destinationURL.lastPathComponent,
+            formatVersion: 1,
+            createdAt: request.createdAt,
+            expiresAt: request.createdAt.addingTimeInterval(30 * 24 * 60 * 60),
+            verificationState: "Verified",
+            ciphertextChecksum: Data(repeating: 1, count: 32),
+            signingKeyFingerprint: Data(repeating: 2, count: 32)
+        )
+    }
+
+    func release() {
+        isReleased = true
     }
 }
 

@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 import Security
 
-struct RecoveryKey: Equatable {
+nonisolated struct RecoveryKey: Equatable, Sendable {
     private static let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
     private static let keyCharacterCount = 52
     private static let checksumCharacterCount = 6
@@ -90,7 +90,7 @@ enum RecoveryKeyError: Error { case randomnessUnavailable, invalidLength }
 struct RecoveryEnrollmentState: Equatable { let isEnabled: Bool }
 struct RecoveryEnrollmentRecord: Equatable { let fingerprint: String, enrolledAt: Date }
 
-struct PortableArchiveCatalogueRow: Equatable {
+nonisolated struct PortableArchiveCatalogueRow: Equatable, Sendable {
     let archiveID: UUID
     let displayFilename: String
     let formatVersion: Int
@@ -101,7 +101,15 @@ struct PortableArchiveCatalogueRow: Equatable {
     let signingKeyFingerprint: Data
 }
 
-enum PortableArchiveError: Error, LocalizedError {
+nonisolated struct VerifiedPortableArchive: Equatable, Sendable {
+    let archiveID: UUID
+    let createdAt: Date
+    let expiresAt: Date
+    let ciphertextChecksum: Data
+    let signingKeyFingerprint: Data
+}
+
+nonisolated enum PortableArchiveError: Error, LocalizedError, Sendable {
     case enrollmentRequired, invalidRecoveryKey, destinationExists, invalidDestination, archiveInvalid, verificationFailed, signingKeyUnavailable, catalogueUnavailable
 
     var errorDescription: String? {

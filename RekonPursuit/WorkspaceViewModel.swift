@@ -199,6 +199,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var usingSeparateLocalWorkspace = false
     @Published private(set) var recoveryEnrollmentEnabled = false
     @Published private(set) var portableArchiveCatalogue: [PortableArchiveCatalogueRow] = []
+    @Published private(set) var isCreatingPortableArchive = false
 
     private let openWorkspace: () throws -> WorkspaceOpenState
     private let openExternalWorkspace: (URL) throws -> WorkspaceOpenState
@@ -208,6 +209,7 @@ final class WorkspaceViewModel: ObservableObject {
     private let workspaceLocationBookmarks: WorkspaceLocationBookmarkStore
     private let documentReferenceBookmarks: DocumentReferenceBookmarkStore
     private let openDocumentURL: (URL) -> Bool
+    private let portableArchiveDestination: () -> URL?
     private let separateLocalWorkspace: SeparateLocalWorkspaceDependencies
     private let publicURLChecker: PublicURLChecking
     private var store: WorkspaceStore?
@@ -224,6 +226,13 @@ final class WorkspaceViewModel: ObservableObject {
         workspaceLocationBookmarks: WorkspaceLocationBookmarkStore = WorkspaceLocationBookmarkStore(),
         documentReferenceBookmarks: DocumentReferenceBookmarkStore = DocumentReferenceBookmarkStore(),
         openDocumentURL: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
+        portableArchiveDestination: @escaping () -> URL? = {
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.init(filenameExtension: "rekonarchive")!]
+            panel.nameFieldStringValue = "Recovery Archive.rekonarchive"
+            panel.canCreateDirectories = true
+            return panel.runModal() == .OK ? panel.url : nil
+        },
         openExternalWorkspace: @escaping (URL) throws -> WorkspaceOpenState = { _ in .recoveryRequired },
         closeWorkspaceStore: @escaping (WorkspaceStore) throws -> Void = { try $0.close() },
         publicURLChecker: PublicURLChecking = PublicURLChecker(),
@@ -237,6 +246,7 @@ final class WorkspaceViewModel: ObservableObject {
         self.workspaceLocationBookmarks = workspaceLocationBookmarks
         self.documentReferenceBookmarks = documentReferenceBookmarks
         self.openDocumentURL = openDocumentURL
+        self.portableArchiveDestination = portableArchiveDestination
         self.publicURLChecker = publicURLChecker
         self.separateLocalWorkspace = separateLocalWorkspace
     }
@@ -252,6 +262,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func start() {
+        guard archiveAllowsWorkspaceTransition() else { return }
         if externalWorkspaceLease != nil || (usingSeparateLocalWorkspace && store != nil) {
             do {
                 try closeCurrentWorkspace()
@@ -288,6 +299,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func createWorkspaceIfNeeded() {
+        guard archiveAllowsWorkspaceTransition() else { return }
         if usingSeparateLocalWorkspace {
             createSeparateLocalWorkspace()
             return
@@ -308,6 +320,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func createSeparateLocalWorkspace() {
+        guard archiveAllowsWorkspaceTransition() else { return }
         do {
             let identity: UUID
             if let activeSeparateLocalWorkspaceIdentity {
@@ -340,6 +353,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func returnToPreservedWorkspaceRecovery() {
+        guard archiveAllowsWorkspaceTransition() else { return }
         guard usingSeparateLocalWorkspace else { return }
         do {
             try closeCurrentWorkspace()
@@ -366,6 +380,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func chooseExistingWorkspaceFolder(_ url: URL?) {
+        guard archiveAllowsWorkspaceTransition() else { return }
         guard !usingSeparateLocalWorkspace else {
             statusMessage = "Return to the preserved workspace recovery state before choosing its folder."
             return
@@ -395,6 +410,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func closeWorkspace() {
+        guard archiveAllowsWorkspaceTransition() else { return }
         do {
             try closeCurrentWorkspace()
         } catch {
@@ -409,6 +425,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func teardown() {
+        guard !isCreatingPortableArchive else { return }
         guard (try? closeCurrentWorkspace()) != nil else { return }
         clearWorkspaceDerivedState()
     }
@@ -1062,28 +1079,47 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func createPortableArchive(reentry: String) {
+        guard !isCreatingPortableArchive else {
+            statusMessage = "A portable recovery archive is already being created."
+            return
+        }
         guard let key = RecoveryKey.parse(reentry) else {
             statusMessage = "Enter the complete recovery key, including its checksum."
             return
         }
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.init(filenameExtension: "rekonarchive")!]
-        panel.nameFieldStringValue = "Recovery Archive.rekonarchive"
-        panel.canCreateDirectories = true
-        guard panel.runModal() == .OK, let url = panel.url else {
+        guard let url = portableArchiveDestination() else {
             statusMessage = "Portable archive creation was cancelled."
             return
         }
         guard let store = readyStore() else { return }
-        do {
-            _ = try store.createPortableArchive(recoveryKey: key, at: url)
-            refreshCounts()
-            statusMessage = "Portable recovery archive verified and saved."
-        } catch let error as LocalizedError {
-            statusMessage = error.errorDescription ?? "The portable archive could not be created."
-        } catch {
-            statusMessage = "The portable archive could not be created."
+        isCreatingPortableArchive = true
+        statusMessage = "Creating and verifying the portable recovery archive…"
+        Task { @MainActor [weak self, store] in
+            guard let self else { return }
+            defer { self.isCreatingPortableArchive = false }
+            do {
+                _ = try await store.createPortableArchive(recoveryKey: key, at: url)
+                guard self.store === store, self.workspaceReady else { return }
+                self.refreshCounts()
+                self.statusMessage = "Portable recovery archive verified and saved."
+            } catch let error as LocalizedError {
+                guard self.store === store, self.workspaceReady else { return }
+                self.refreshCounts()
+                self.statusMessage = error.errorDescription ?? "The portable archive could not be created."
+            } catch {
+                guard self.store === store, self.workspaceReady else { return }
+                self.refreshCounts()
+                self.statusMessage = "The portable archive could not be created."
+            }
         }
+    }
+
+    private func archiveAllowsWorkspaceTransition() -> Bool {
+        guard !isCreatingPortableArchive else {
+            statusMessage = "Wait for portable archive creation to finish before switching workspaces."
+            return false
+        }
+        return true
     }
 
     func restoreEncryptedBackup(from url: URL) {

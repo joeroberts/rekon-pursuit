@@ -60,7 +60,7 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.recoveryEnrollmentRecordForTesting(), original)
     }
 
-    func testPortableArchiveCreatesOneVerifiedCatalogueRowWithFixedThirtyDayExpiry() throws {
+    func testPortableArchiveCreatesOneVerifiedCatalogueRowWithFixedThirtyDayExpiry() async throws {
         let database = try EncryptedDatabase.open(url: databaseURL, key: key)
         let store = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test", archiveSigningKeyStore: InMemoryArchiveSigningKeyStore())
         let recoveryKey = try RecoveryKey.generate()
@@ -69,7 +69,7 @@ final class WorkspaceStoreTests: XCTestCase {
         let destination = FileManager.default.temporaryDirectory.appendingPathComponent("archive-\(UUID().uuidString).rekonarchive")
         defer { try? FileManager.default.removeItem(at: destination) }
 
-        let archive = try store.createPortableArchive(recoveryKey: recoveryKey, at: destination)
+        let archive = try await store.createPortableArchive(recoveryKey: recoveryKey, at: destination)
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
         XCTAssertEqual(archive.verificationState, "Verified")
@@ -78,24 +78,28 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents().last?.kind, "portable_backup_created")
     }
 
-    func testPortableArchiveWithoutEnrollmentOrWithWrongKeyLeavesNoFileOrCatalogueRow() throws {
+    func testPortableArchiveWithoutEnrollmentOrWithWrongKeyLeavesNoFileOrCatalogueRow() async throws {
         let database = try EncryptedDatabase.open(url: databaseURL, key: key)
         let store = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test", archiveSigningKeyStore: InMemoryArchiveSigningKeyStore())
         let destination = FileManager.default.temporaryDirectory.appendingPathComponent("archive-\(UUID().uuidString).rekonarchive")
         defer { try? FileManager.default.removeItem(at: destination) }
 
-        XCTAssertThrowsError(try store.createPortableArchive(recoveryKey: try RecoveryKey.generate(), at: destination))
+        await assertPortableArchiveThrows {
+            try await store.createPortableArchive(recoveryKey: try RecoveryKey.generate(), at: destination)
+        }
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
         XCTAssertEqual(try store.portableArchiveCatalogue(), [])
 
         let enrolled = try RecoveryKey.generate()
         try store.enroll(recoveryKey: enrolled)
-        XCTAssertThrowsError(try store.createPortableArchive(recoveryKey: try RecoveryKey.generate(), at: destination))
+        await assertPortableArchiveThrows {
+            try await store.createPortableArchive(recoveryKey: try RecoveryKey.generate(), at: destination)
+        }
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
         XCTAssertEqual(try store.portableArchiveCatalogue(), [])
     }
 
-    func testPortableArchiveRejectsExistingDestinationWithoutChangingCatalogue() throws {
+    func testPortableArchiveRejectsExistingDestinationWithoutChangingCatalogue() async throws {
         let store = try makeStore()
         let enrolled = try RecoveryKey.generate()
         try store.enroll(recoveryKey: enrolled)
@@ -103,26 +107,28 @@ final class WorkspaceStoreTests: XCTestCase {
         try Data("existing".utf8).write(to: destination)
         defer { try? FileManager.default.removeItem(at: destination) }
 
-        XCTAssertThrowsError(try store.createPortableArchive(recoveryKey: enrolled, at: destination))
+        await assertPortableArchiveThrows {
+            try await store.createPortableArchive(recoveryKey: enrolled, at: destination)
+        }
         XCTAssertEqual(try Data(contentsOf: destination), Data("existing".utf8))
         XCTAssertEqual(try store.portableArchiveCatalogue(), [])
     }
 
-    func testPortableArchiveRejectsTamperedCiphertextBeforeCataloguePromotion() throws {
+    func testPortableArchiveRejectsTamperedCiphertextBeforeCataloguePromotion() async throws {
         let database = try EncryptedDatabase.open(url: databaseURL, key: key)
         let store = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test", archiveSigningKeyStore: InMemoryArchiveSigningKeyStore())
         let recoveryKey = try RecoveryKey.generate()
         try store.enroll(recoveryKey: recoveryKey)
         let destination = FileManager.default.temporaryDirectory.appendingPathComponent("archive-\(UUID().uuidString).rekonarchive")
         defer { try? FileManager.default.removeItem(at: destination) }
-        _ = try store.createPortableArchive(recoveryKey: recoveryKey, at: destination)
+        _ = try await store.createPortableArchive(recoveryKey: recoveryKey, at: destination)
         var tampered = try Data(contentsOf: destination)
         tampered[tampered.index(before: tampered.endIndex)] ^= 0x01
 
         XCTAssertThrowsError(try PortableArchiveService.verify(data: tampered, recoveryKey: recoveryKey))
     }
 
-    func testPortableArchiveReadableMetadataDoesNotContainOpportunityContentOrRecoveryKey() throws {
+    func testPortableArchiveReadableMetadataDoesNotContainOpportunityContentOrRecoveryKey() async throws {
         let database = try EncryptedDatabase.open(url: databaseURL, key: key)
         let store = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test", archiveSigningKeyStore: InMemoryArchiveSigningKeyStore())
         let recoveryKey = try RecoveryKey.generate()
@@ -132,11 +138,24 @@ final class WorkspaceStoreTests: XCTestCase {
         let destination = FileManager.default.temporaryDirectory.appendingPathComponent("archive-\(UUID().uuidString).rekonarchive")
         defer { try? FileManager.default.removeItem(at: destination) }
 
-        let archive = try store.createPortableArchive(recoveryKey: recoveryKey, at: destination)
+        let archive = try await store.createPortableArchive(recoveryKey: recoveryKey, at: destination)
 
         XCTAssertNil(try Data(contentsOf: destination).range(of: Data(secretTitle.utf8)))
         XCTAssertNil(archive.displayFilename.range(of: secretTitle))
         XCTAssertFalse(try store.activityEvents().contains { $0.kind.contains(recoveryKey.displayValue) || $0.kind.contains(secretTitle) })
+    }
+
+    private func assertPortableArchiveThrows(
+        _ operation: () async throws -> PortableArchiveCatalogueRow,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        do {
+            _ = try await operation()
+            XCTFail("Expected portable archive creation to fail.", file: file, line: line)
+        } catch {
+            // Expected.
+        }
     }
 
     override func setUpWithError() throws {
