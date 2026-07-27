@@ -971,6 +971,7 @@ private struct SettingsView: View {
     @ObservedObject var model: WorkspaceViewModel
     @State private var generatedRecoveryKey: RecoveryKey?
     @State private var reentry = ""
+    @State private var recoveryKeyCopied = false
 
     var body: some View {
         ScrollView {
@@ -989,7 +990,10 @@ private struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(model.recoveryEnrollmentEnabled ? "Portable recovery is set up. No portable backup exists yet." : "Portable recovery is not set up. No portable backup exists.").foregroundStyle(.secondary)
                         if !model.recoveryEnrollmentEnabled {
-                            Button("Set up recovery key") { generatedRecoveryKey = try? RecoveryKey.generate() }
+                            Button("Set up recovery key") {
+                                generatedRecoveryKey = try? RecoveryKey.generate()
+                                recoveryKeyCopied = false
+                            }
                                 .accessibilityIdentifier("set-up-recovery-key")
                         }
                     }
@@ -997,18 +1001,31 @@ private struct SettingsView: View {
                 GroupBox("AI and connections") { Text("Cloud AI, local-model execution, Gmail, and Google Calendar are disabled in this MVP. No network connections are configured.").foregroundStyle(.secondary) }
             }.padding(28).frame(maxWidth: 920, alignment: .leading)
         }
-        .sheet(isPresented: Binding(get: { generatedRecoveryKey != nil }, set: { if !$0 { generatedRecoveryKey = nil; reentry = "" } })) {
+        .sheet(isPresented: Binding(get: { generatedRecoveryKey != nil }, set: { if !$0 { generatedRecoveryKey = nil; reentry = ""; recoveryKeyCopied = false } })) {
             if let generatedRecoveryKey {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Record your recovery key").font(.title2.bold())
                     Text("Rekon Pursuit cannot reset or recover this key. Record it outside the app; it will not be shown again.").foregroundStyle(.secondary)
                     Text(generatedRecoveryKey.displayValue).font(.system(.body, design: .monospaced)).textSelection(.disabled)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Button("Copy recovery key") {
+                            let pasteboard = NSPasteboard.general
+                            pasteboard.clearContents()
+                            recoveryKeyCopied = pasteboard.setString(generatedRecoveryKey.displayValue, forType: .string)
+                        }
+                        .accessibilityIdentifier("copy-recovery-key")
+                        Text("Clipboard history and other apps may retain this recovery key.").font(.footnote).foregroundStyle(.secondary)
+                        if recoveryKeyCopied {
+                            Text("Recovery key copied to the clipboard.").font(.footnote).foregroundStyle(.secondary)
+                                .accessibilityIdentifier("recovery-key-copied-confirmation")
+                        }
+                    }
                     TextField("Re-enter the complete recovery key", text: $reentry).textFieldStyle(.roundedBorder)
                     HStack {
-                        Button("Cancel", role: .cancel) { self.generatedRecoveryKey = nil; reentry = "" }
+                        Button("Cancel", role: .cancel) { self.generatedRecoveryKey = nil; reentry = ""; recoveryKeyCopied = false }
                         Spacer()
                         Button("Confirm setup") {
-                            if model.enrollRecoveryKey(reentry: reentry, expected: generatedRecoveryKey) { self.generatedRecoveryKey = nil; reentry = "" }
+                            if model.enrollRecoveryKey(reentry: reentry, expected: generatedRecoveryKey) { self.generatedRecoveryKey = nil; reentry = ""; recoveryKeyCopied = false }
                         }.keyboardShortcut(.defaultAction)
                     }
                 }.padding(24).frame(width: 520)
