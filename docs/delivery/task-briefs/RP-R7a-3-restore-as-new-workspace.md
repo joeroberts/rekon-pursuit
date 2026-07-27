@@ -1,6 +1,6 @@
 # RP-R7a-3 — Restore authenticated archive as a new workspace
 
-**State:** Next up — release planning approved; implementation is not released  
+**State:** Accepted — restore-as-new-workspace completed; activation/switch and export remain separate unreleased work.
 **Depends on:** `RP-R7a-1` and `RP-R7a-2` accepted; [ADR-001](../../architecture/adr/ADR-001-local-data-lifecycle.md), the [lifecycle contract](../../architecture/local-data-lifecycle-contract.md), and [ADR-004](../../architecture/adr/ADR-004-durable-document-reference-bookmarks.md)  
 **Blocks:** Any workspace activation/switch and both export flows
 

@@ -1,6 +1,6 @@
 # RP-R7a-3b — Restore UI and owner smoke
 
-**State:** Planning complete — not released for implementation.  
+**State:** Accepted — verified restore UI and owner smoke completed.
 **Depends on:** `RP-R7a-3a` accepted; the in-progress `RP-R7a-3` parent;
 [ADR-001](../../architecture/adr/ADR-001-local-data-lifecycle.md); and the
 [local-data lifecycle contract](../../architecture/local-data-lifecycle-contract.md).  
