@@ -64,7 +64,8 @@ archive.
 - Recovery setup succeeds only after generated-key re-entry and remains enabled
   after relaunch without retaining the raw key.
 - Cancellation, mismatch, malformed/checksum-invalid re-entry, and injected
-  persistence failure leave no enabled state or partial record.
+  persistence failure create no newly enabled or partial/replacement record;
+  an existing enrollment remains enabled and unchanged.
 - The encrypted workspace store may retain only the opaque versioned
   enrollment fingerprint. Activity, diagnostics, fixtures, UI copy,
   clipboard/files, manifests, and exports contain neither that fingerprint nor
