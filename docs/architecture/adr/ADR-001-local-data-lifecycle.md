@@ -14,8 +14,10 @@ Recoverable backups are opt-in. They require a user-held recovery key and have n
 **Implementation refinement (2026-07-27):** The recovery key is an
 app-generated 256-bit secret, displayed once as grouped Base32 text with a
 checksum and verified by re-entry. It is never copied to the clipboard or
-written to a file by the app. This does not change the no-reset, no-escrow, or
-user-held recovery decision above.
+written to a file by the app. The app retains only a one-way enrollment
+fingerprint, so every portable-backup creation requires the user to re-enter
+the recovery key; the key itself is never retained. This does not change the
+no-reset, no-escrow, or user-held recovery decision above.
 
 The app permits unencrypted exports only after an explicit warning and a final filename/location review. Encrypted export remains available as the safer default. OAuth tokens, database keys, and recovery secrets are never exported.
 

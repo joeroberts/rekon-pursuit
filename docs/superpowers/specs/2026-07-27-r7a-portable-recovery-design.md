@@ -11,7 +11,9 @@ R7a uses an app-generated, user-held 256-bit recovery key. Rekon Pursuit shows
 the key once as grouped Base32 text plus a checksum, and requires the user to
 re-enter it before enrollment completes. The app never writes the key to a
 file, clipboard, database, manifest, activity event, diagnostics, or backup;
-there is no reset, escrow, support override, or cloud recovery path.
+there is no reset, escrow, support override, or cloud recovery path. A
+verified enrollment stores only a versioned, one-way key fingerprint so the
+app can reject a different key later; it does not retain the key itself.
 
 This implements the accepted ADR-001 and lifecycle contract without changing
 their retention, deletion, or export rules.
@@ -24,9 +26,10 @@ their retention, deletion, or export rules.
    record it outside the app.
 3. The user re-enters the complete key. A mismatch or cancellation leaves
    enrollment disabled and creates neither an archive nor a secret record.
-4. Once verified, **Create encrypted recovery backup** becomes available. It
-   writes a temporary archive/envelope/manifest, verifies all artifacts, then
-   atomically promotes the backup catalogue entry.
+4. **Create encrypted recovery backup** asks for the enrolled recovery key
+   again. The key is held only for that operation, then discarded. After a
+   matching re-entry, the app writes a temporary archive/envelope/manifest,
+   verifies all artifacts, then atomically promotes the backup catalogue entry.
 5. **Restore encrypted backup** always opens a restore wizard. It asks for the
    recovery key, validates the archive, and creates a new workspace directory
    with fresh database and signing keys. It never replaces the current
@@ -61,7 +64,8 @@ their retention, deletion, or export rules.
 
 ## Failure and safety behavior
 
-- The app creates archives only after enrollment is verified. Temporary files
+- The app creates archives only after the recovery key is re-entered and
+  matched to the enrollment fingerprint for that operation. Temporary files
   are removed on cancellation/failure; a failure never replaces an existing
   backup catalogue entry.
 - Restore rejects a wrong key, stale/tampered envelope, substituted archive,
@@ -80,8 +84,8 @@ their retention, deletion, or export rules.
 
 ## Focused acceptance evidence
 
-- Enrollment success, cancellation, malformed/checksum-invalid re-entry, and
-  no-reset behavior.
+- Enrollment success, cancellation, malformed/checksum-invalid re-entry,
+  per-backup re-entry, and no-reset behavior.
 - Encrypted archive round trip into a distinct workspace with fresh keys;
   active workspace unchanged until an explicit switch.
 - Wrong recovery key, tampered envelope, archive swap, manifest mutation,
