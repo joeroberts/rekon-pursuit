@@ -110,7 +110,7 @@ nonisolated struct VerifiedPortableArchive: Equatable, Sendable {
 }
 
 nonisolated enum PortableArchiveError: Error, LocalizedError, Sendable {
-    case enrollmentRequired, invalidRecoveryKey, destinationExists, invalidDestination, archiveInvalid, verificationFailed, signingKeyUnavailable, catalogueUnavailable
+    case enrollmentRequired, invalidRecoveryKey, destinationExists, invalidDestination, archiveInvalid, verificationFailed, signingKeyUnavailable, catalogueUnavailable, archiveRemovedAfterCatalogueFailure
 
     var errorDescription: String? {
         switch self {
@@ -120,7 +120,8 @@ nonisolated enum PortableArchiveError: Error, LocalizedError, Sendable {
         case .invalidDestination: return "Choose a new .rekonarchive destination."
         case .archiveInvalid, .verificationFailed: return "The archive could not be verified, so it was not saved."
         case .signingKeyUnavailable: return "The archive signing identity is unavailable; no archive was created."
-        case .catalogueUnavailable: return "The archive was verified but its local catalogue could not be saved."
+        case .catalogueUnavailable: return "The archive was verified but could not be recorded locally. It may still exist at the chosen destination."
+        case .archiveRemovedAfterCatalogueFailure: return "The archive was removed because its local catalogue could not be saved; no archive was kept."
         }
     }
 }

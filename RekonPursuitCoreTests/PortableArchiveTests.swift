@@ -212,6 +212,78 @@ final class PortableArchiveTests: XCTestCase {
         XCTAssertEqual(try snapshotRows(snapshot, named: "activity_events").count, 1)
     }
 
+    func testSnapshotExcludesMixedActiveAndDeletedInteractionAndActivitySubjects() throws {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-mixed-subjects-\(UUID().uuidString).sqlite")
+        defer { removeDatabase(at: databaseURL) }
+        let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 5, count: 32))
+        let store = try WorkspaceStore(
+            database: database,
+            now: Date(timeIntervalSince1970: 4),
+            actorID: "test",
+            correlationID: "test"
+        )
+        let activeOpportunity = try store.create(CreateOpportunity(title: "Active role", company: "Example"))
+        let deletedOpportunity = try store.create(CreateOpportunity(title: "Deleted role", company: "Example"))
+        let activeContact = try store.createContact(CreateContact(name: "Active person"))
+        let deletedContact = try store.createContact(CreateContact(name: "Deleted person"))
+        try store.deleteOpportunity(id: deletedOpportunity.id)
+        try store.deleteContact(id: deletedContact.id)
+
+        try database.execute(
+            "INSERT INTO interactions (id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at) VALUES ('keep-interaction', ?, ?, 'Note', 'keep', 4, NULL)",
+            values: [.text(activeContact.id), .text(activeOpportunity.id)]
+        )
+        try database.execute(
+            "INSERT INTO interactions (id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at) VALUES ('drop-deleted-opportunity', ?, ?, 'Note', 'drop', 4, NULL)",
+            values: [.text(activeContact.id), .text(deletedOpportunity.id)]
+        )
+        try database.execute(
+            "INSERT INTO interactions (id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at) VALUES ('drop-deleted-contact', ?, ?, 'Note', 'drop', 4, NULL)",
+            values: [.text(deletedContact.id), .text(activeOpportunity.id)]
+        )
+        try database.execute(
+            "INSERT INTO activity_events (id, kind, opportunity_id, contact_id, actor_id, correlation_id, occurred_at) VALUES ('keep-activity', 'keep', ?, ?, 'test', 'test', 4)",
+            values: [.text(activeOpportunity.id), .text(activeContact.id)]
+        )
+        try database.execute(
+            "INSERT INTO activity_events (id, kind, opportunity_id, contact_id, actor_id, correlation_id, occurred_at) VALUES ('drop-deleted-opportunity-activity', 'drop', ?, ?, 'test', 'test', 4)",
+            values: [.text(deletedOpportunity.id), .text(activeContact.id)]
+        )
+        try database.execute(
+            "INSERT INTO activity_events (id, kind, opportunity_id, contact_id, actor_id, correlation_id, occurred_at) VALUES ('drop-deleted-contact-activity', 'drop', ?, ?, 'test', 'test', 4)",
+            values: [.text(activeOpportunity.id), .text(deletedContact.id)]
+        )
+
+        let snapshot = try PortableArchiveSnapshotCodec.encode(from: database)
+        let interactionIDs = try snapshotRows(snapshot, named: "interactions").compactMap { $0.values.first?.text }
+        let activityIDs = try snapshotRows(snapshot, named: "activity_events").compactMap { $0.values.first?.text }
+
+        XCTAssertTrue(interactionIDs.contains("keep-interaction"))
+        XCTAssertFalse(interactionIDs.contains("drop-deleted-opportunity"))
+        XCTAssertFalse(interactionIDs.contains("drop-deleted-contact"))
+        XCTAssertTrue(activityIDs.contains("keep-activity"))
+        XCTAssertFalse(activityIDs.contains("drop-deleted-opportunity-activity"))
+        XCTAssertFalse(activityIDs.contains("drop-deleted-contact-activity"))
+    }
+
+    func testReadBackRejectsRealTimestampInSnapshotRegistryColumn() throws {
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-\(UUID().uuidString).tmp")
+        defer { try? FileManager.default.removeItem(at: destination) }
+
+        XCTAssertThrowsError(
+            try PortableArchiveService.writeAndVerify(
+                snapshot: canonicalSnapshotWithRealOpportunityTimestamp(),
+                recoveryKey: RecoveryKey.generate(),
+                signingKey: Curve25519.Signing.PrivateKey(),
+                archiveID: UUID(),
+                createdAt: Date(timeIntervalSince1970: 1_704_067_200),
+                to: destination
+            )
+        )
+    }
+
     func testSnapshotExcludesDeletedContentAndStripsDocumentBookmarks() throws {
         let databaseURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("archive-privacy-projection-\(UUID().uuidString).sqlite")
@@ -266,6 +338,32 @@ final class PortableArchiveTests: XCTestCase {
         for table in PortableArchiveSnapshotRegistry.tables {
             appendText(table.name, to: &snapshot)
             appendUInt32(0, to: &snapshot)
+        }
+        return snapshot
+    }
+
+    private func canonicalSnapshotWithRealOpportunityTimestamp() -> Data {
+        var snapshot = Data("RPSNAP01".utf8)
+        appendUInt32(UInt32(PortableArchiveSnapshotRegistry.tables.count), to: &snapshot)
+        for table in PortableArchiveSnapshotRegistry.tables {
+            appendText(table.name, to: &snapshot)
+            if table.name != "opportunities" {
+                appendUInt32(0, to: &snapshot)
+                continue
+            }
+
+            appendUInt32(1, to: &snapshot)
+            appendUInt32(UInt32(table.columns.count), to: &snapshot)
+            for index in table.columns.indices {
+                if index == 3 {
+                    snapshot.append(2)
+                    appendUInt32(8, to: &snapshot)
+                    snapshot.append(contentsOf: withUnsafeBytes(of: Double(1.25).bitPattern.bigEndian, Array.init))
+                } else {
+                    snapshot.append(0)
+                    appendUInt32(0, to: &snapshot)
+                }
+            }
         }
         return snapshot
     }

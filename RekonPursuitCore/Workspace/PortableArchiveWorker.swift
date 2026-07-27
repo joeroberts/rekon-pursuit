@@ -127,8 +127,7 @@ actor PortableArchiveWorker: PortableArchiveWorking {
                     relativeTo: nil
                 )
             } catch {
-                try? FileManager.default.removeItem(at: request.destinationURL)
-                throw PortableArchiveError.catalogueUnavailable
+                throw catalogueFailure(afterRemoving: request.destinationURL)
             }
 
             let catalogue = PortableArchiveCatalogueRow(
@@ -169,8 +168,7 @@ actor PortableArchiveWorker: PortableArchiveWorking {
                     throw error
                 }
             } catch {
-                try? FileManager.default.removeItem(at: request.destinationURL)
-                throw PortableArchiveError.catalogueUnavailable
+                throw catalogueFailure(afterRemoving: request.destinationURL)
             }
             return catalogue
         } catch {
@@ -196,6 +194,15 @@ actor PortableArchiveWorker: PortableArchiveWorking {
         } catch {
             try? database.execute("ROLLBACK")
             throw error
+        }
+    }
+
+    private func catalogueFailure(afterRemoving destinationURL: URL) -> PortableArchiveError {
+        do {
+            try FileManager.default.removeItem(at: destinationURL)
+            return .archiveRemovedAfterCatalogueFailure
+        } catch {
+            return .catalogueUnavailable
         }
     }
 
@@ -231,6 +238,8 @@ actor PortableArchiveWorker: PortableArchiveWorking {
             return "signing_key_unavailable"
         case PortableArchiveError.catalogueUnavailable:
             return "catalogue_unavailable"
+        case PortableArchiveError.archiveRemovedAfterCatalogueFailure:
+            return "catalogue_removed"
         default:
             return "verification_failed"
         }
@@ -264,7 +273,7 @@ nonisolated enum PortableArchiveSnapshotRegistry {
         .init(name: "opportunity_response_history", columns: ["id", "opportunity_id", "from_state", "to_state", "occurred_at"], timestampColumnIndexes: [4], query: "SELECT opportunity_response_history.id, opportunity_response_history.opportunity_id, opportunity_response_history.from_state, opportunity_response_history.to_state, opportunity_response_history.occurred_at FROM opportunity_response_history JOIN opportunities ON opportunities.id = opportunity_response_history.opportunity_id WHERE opportunities.deleted_at IS NULL ORDER BY opportunity_response_history.id"),
         .init(name: "contacts", columns: ["id", "name", "employer", "title", "email", "profile_url", "relationship_context", "notes"], timestampColumnIndexes: [], query: "SELECT id, name, employer, title, email, profile_url, relationship_context, notes FROM contacts WHERE deleted_at IS NULL ORDER BY id"),
         .init(name: "contact_opportunities", columns: ["contact_id", "opportunity_id"], timestampColumnIndexes: [], query: "SELECT contact_opportunities.contact_id, contact_opportunities.opportunity_id FROM contact_opportunities JOIN contacts ON contacts.id = contact_opportunities.contact_id JOIN opportunities ON opportunities.id = contact_opportunities.opportunity_id WHERE contacts.deleted_at IS NULL AND opportunities.deleted_at IS NULL ORDER BY contact_opportunities.contact_id, contact_opportunities.opportunity_id"),
-        .init(name: "interactions", columns: ["id", "contact_id", "opportunity_id", "kind", "summary", "occurred_at", "next_touch_at"], timestampColumnIndexes: [5, 6], query: "SELECT interactions.id, interactions.contact_id, interactions.opportunity_id, interactions.kind, interactions.summary, interactions.occurred_at, interactions.next_touch_at FROM interactions LEFT JOIN contacts ON contacts.id = interactions.contact_id LEFT JOIN opportunities ON opportunities.id = interactions.opportunity_id WHERE (interactions.contact_id IS NOT NULL AND contacts.deleted_at IS NULL) OR (interactions.opportunity_id IS NOT NULL AND opportunities.deleted_at IS NULL) ORDER BY interactions.id"),
+        .init(name: "interactions", columns: ["id", "contact_id", "opportunity_id", "kind", "summary", "occurred_at", "next_touch_at"], timestampColumnIndexes: [5, 6], query: "SELECT interactions.id, interactions.contact_id, interactions.opportunity_id, interactions.kind, interactions.summary, interactions.occurred_at, interactions.next_touch_at FROM interactions LEFT JOIN contacts ON contacts.id = interactions.contact_id LEFT JOIN opportunities ON opportunities.id = interactions.opportunity_id WHERE (interactions.contact_id IS NOT NULL OR interactions.opportunity_id IS NOT NULL) AND (interactions.contact_id IS NULL OR (contacts.id IS NOT NULL AND contacts.deleted_at IS NULL)) AND (interactions.opportunity_id IS NULL OR (opportunities.id IS NOT NULL AND opportunities.deleted_at IS NULL)) ORDER BY interactions.id"),
         .init(name: "import_reports", columns: ["id", "imported_count", "skipped_count", "duplicate_kept_count", "invalid_count", "created_at", "updated_count", "source_basename", "mapping_summary", "failed_count"], timestampColumnIndexes: [5], query: "SELECT import_reports.id, import_reports.imported_count, import_reports.skipped_count, import_reports.duplicate_kept_count, import_reports.invalid_count, import_reports.created_at, import_reports.updated_count, import_reports.source_basename, import_reports.mapping_summary, import_reports.failed_count FROM import_reports WHERE EXISTS (SELECT 1 FROM import_report_rows JOIN opportunities ON opportunities.id = import_report_rows.opportunity_id WHERE import_report_rows.report_id = import_reports.id AND opportunities.deleted_at IS NULL) ORDER BY import_reports.id"),
         .init(name: "import_report_rows", columns: ["id", "report_id", "source_row", "outcome", "reason", "duplicate_rationale", "opportunity_id", "display_title", "display_company"], timestampColumnIndexes: [], query: "SELECT import_report_rows.id, import_report_rows.report_id, import_report_rows.source_row, import_report_rows.outcome, import_report_rows.reason, import_report_rows.duplicate_rationale, import_report_rows.opportunity_id, import_report_rows.display_title, import_report_rows.display_company FROM import_report_rows JOIN opportunities ON opportunities.id = import_report_rows.opportunity_id WHERE opportunities.deleted_at IS NULL ORDER BY import_report_rows.id"),
         .init(name: "posting_checks", columns: ["id", "opportunity_id", "url", "status", "evidence", "checked_at"], timestampColumnIndexes: [5], query: "SELECT posting_checks.id, posting_checks.opportunity_id, posting_checks.url, posting_checks.status, posting_checks.evidence, posting_checks.checked_at FROM posting_checks JOIN opportunities ON opportunities.id = posting_checks.opportunity_id WHERE opportunities.deleted_at IS NULL ORDER BY posting_checks.id"),
@@ -272,7 +281,7 @@ nonisolated enum PortableArchiveSnapshotRegistry {
         .init(name: "reconciliation_results", columns: ["id", "opportunity_id", "url", "recorded_at", "outcome", "classification", "reason", "confidence", "evidence", "error", "review_task_reminder_id", "closure_confirmed_at", "legacy_posting_check_id", "legacy_status", "check_operation_id", "method", "checker_version", "http_status", "mime_type", "declared_bytes", "received_bytes", "content_sha256", "response_date", "last_modified", "etag", "retry_after", "redirect_target_redacted", "evidence_excerpt", "redacted_error_code"], timestampColumnIndexes: [3, 11], query: "SELECT reconciliation_results.id, reconciliation_results.opportunity_id, reconciliation_results.url, reconciliation_results.recorded_at, reconciliation_results.outcome, reconciliation_results.classification, reconciliation_results.reason, reconciliation_results.confidence, reconciliation_results.evidence, reconciliation_results.error, reconciliation_results.review_task_reminder_id, reconciliation_results.closure_confirmed_at, reconciliation_results.legacy_posting_check_id, reconciliation_results.legacy_status, reconciliation_results.check_operation_id, reconciliation_results.method, reconciliation_results.checker_version, reconciliation_results.http_status, reconciliation_results.mime_type, reconciliation_results.declared_bytes, reconciliation_results.received_bytes, reconciliation_results.content_sha256, reconciliation_results.response_date, reconciliation_results.last_modified, reconciliation_results.etag, reconciliation_results.retry_after, reconciliation_results.redirect_target_redacted, reconciliation_results.evidence_excerpt, reconciliation_results.redacted_error_code FROM reconciliation_results JOIN opportunities ON opportunities.id = reconciliation_results.opportunity_id WHERE opportunities.deleted_at IS NULL ORDER BY reconciliation_results.id"),
         .init(name: "reconciliation_check_operations", columns: ["id", "opportunity_id", "correlation_id", "url_snapshot", "state", "started_at", "terminal_at"], timestampColumnIndexes: [5, 6], query: "SELECT reconciliation_check_operations.id, reconciliation_check_operations.opportunity_id, reconciliation_check_operations.correlation_id, reconciliation_check_operations.url_snapshot, reconciliation_check_operations.state, reconciliation_check_operations.started_at, reconciliation_check_operations.terminal_at FROM reconciliation_check_operations JOIN opportunities ON opportunities.id = reconciliation_check_operations.opportunity_id WHERE opportunities.deleted_at IS NULL ORDER BY reconciliation_check_operations.id"),
         .init(name: "document_references", columns: ["id", "opportunity_id", "kind", "filename", "content_type", "source_hash", "byte_count", "bookmark_data", "availability", "attached_at", "final_sent_at"], timestampColumnIndexes: [9, 10], query: "SELECT document_references.id, document_references.opportunity_id, document_references.kind, document_references.filename, document_references.content_type, document_references.source_hash, document_references.byte_count, NULL, 'relink_required', document_references.attached_at, document_references.final_sent_at FROM document_references JOIN opportunities ON opportunities.id = document_references.opportunity_id WHERE opportunities.deleted_at IS NULL ORDER BY document_references.id"),
-        .init(name: "activity_events", columns: ["id", "kind", "opportunity_id", "contact_id", "actor_id", "correlation_id", "occurred_at"], timestampColumnIndexes: [6], query: "SELECT activity_events.id, activity_events.kind, activity_events.opportunity_id, activity_events.contact_id, activity_events.actor_id, activity_events.correlation_id, activity_events.occurred_at FROM activity_events LEFT JOIN opportunities ON opportunities.id = activity_events.opportunity_id LEFT JOIN contacts ON contacts.id = activity_events.contact_id WHERE (activity_events.opportunity_id IS NOT NULL AND opportunities.deleted_at IS NULL) OR (activity_events.contact_id IS NOT NULL AND contacts.deleted_at IS NULL) ORDER BY activity_events.id"),
+        .init(name: "activity_events", columns: ["id", "kind", "opportunity_id", "contact_id", "actor_id", "correlation_id", "occurred_at"], timestampColumnIndexes: [6], query: "SELECT activity_events.id, activity_events.kind, activity_events.opportunity_id, activity_events.contact_id, activity_events.actor_id, activity_events.correlation_id, activity_events.occurred_at FROM activity_events LEFT JOIN opportunities ON opportunities.id = activity_events.opportunity_id LEFT JOIN contacts ON contacts.id = activity_events.contact_id WHERE (activity_events.opportunity_id IS NOT NULL OR activity_events.contact_id IS NOT NULL) AND (activity_events.opportunity_id IS NULL OR (opportunities.id IS NOT NULL AND opportunities.deleted_at IS NULL)) AND (activity_events.contact_id IS NULL OR (contacts.id IS NOT NULL AND contacts.deleted_at IS NULL)) ORDER BY activity_events.id"),
         .init(name: "deletion_tombstones", columns: ["subject_id", "subject_type", "deleted_at", "display_value"], timestampColumnIndexes: [2], query: "SELECT subject_id, subject_type, deleted_at, display_value FROM deletion_tombstones ORDER BY subject_id, subject_type")
     ]
 }
