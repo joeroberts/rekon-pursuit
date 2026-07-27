@@ -1268,6 +1268,40 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.statusMessage, "This document needs to be relinked before it can be opened.")
     }
 
+    func testRelinkRequiredDocumentNeverUsesItsRetainedBookmarkUntilExplicitlyRelinked() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let data = Data("%PDF-1.7".utf8)
+        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let reference = try store.recordDocumentReference(RecordDocumentReference(
+            opportunityID: opportunity.id,
+            kind: .resume,
+            filename: "resume.pdf",
+            contentType: "application/pdf",
+            sourceHash: hash,
+            byteCount: data.count,
+            bookmarkData: Data("retained-but-disabled".utf8)
+        ))
+        try store.markDocumentReferenceRelinkRequired(id: reference.id)
+        let relinkRequired = try XCTUnwrap(store.documentReferences(forOpportunityID: opportunity.id).first)
+        let fixture = DocumentOpenFixture(data: data)
+        var didOpen = false
+        let model = WorkspaceViewModel(
+            openWorkspace: { .ready(store) },
+            createWorkspace: { store },
+            documentReferenceBookmarks: fixture.makeStore(),
+            openDocumentURL: { _ in didOpen = true; return true },
+            separateLocalWorkspace: .disabledForTesting
+        )
+        model.start()
+
+        model.openDocumentReference(relinkRequired)
+
+        XCTAssertFalse(didOpen)
+        XCTAssertEqual(fixture.startAccessCount, 0)
+        XCTAssertEqual(model.statusMessage, "This document needs to be relinked before it can be opened.")
+    }
+
     func testOpeningVerifiedDocumentHoldsThenReleasesItsLease() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
@@ -1468,6 +1502,7 @@ private final class DocumentOpenFixture {
     let url = URL(fileURLWithPath: "/fixture/resume.pdf")
     let resolveError: DocumentReferenceBookmarkError?
     private(set) var isAccessing = false
+    private(set) var startAccessCount = 0
     private(set) var stopAccessCount = 0
 
     init(data: Data, resolveError: DocumentReferenceBookmarkError? = nil) {
@@ -1483,7 +1518,7 @@ private final class DocumentOpenFixture {
                 if let resolveError { throw resolveError }
                 return (url, false)
             },
-            startAccessing: { [weak self] _ in self?.isAccessing = true; return true },
+            startAccessing: { [weak self] _ in self?.startAccessCount += 1; self?.isAccessing = true; return true },
             stopAccessing: { [weak self] _ in self?.isAccessing = false; self?.stopAccessCount += 1 },
             inspectFile: { [weak self] _ in
                 guard let self else { return nil }

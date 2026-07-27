@@ -1092,6 +1092,10 @@ final class WorkspaceViewModel: ObservableObject {
 
     func openDocumentReference(_ reference: DocumentReference) {
         guard let store = readyStore() else { return }
+        guard reference.availability == .available else {
+            statusMessage = "This document needs to be relinked before it can be opened."
+            return
+        }
         do {
             let url = try documentReferenceBookmarks.resolveAndVerify(reference)
             defer { documentReferenceBookmarks.release(url) }
