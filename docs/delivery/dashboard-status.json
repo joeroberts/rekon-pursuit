@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "RP-R7a-3",
-  "nextEligibleTaskId": "RP-R7a-3b",
+  "activeTaskId": "RP-R7a-3b",
+  "nextEligibleTaskId": null,
   "tasks": [
     {
       "id": "RP-R0",
@@ -204,7 +204,7 @@
       "workType": "Data lifecycle",
       "status": "in_progress",
       "releaseCondition": "The parent remains in progress while its serial corrective sub-slices are gated; no activation, export, purge, or expiry work is included.",
-      "latestTransition": "R7a-3a is accepted; its restore UI and owner-smoke successor is Next up for its own planning and approval gates.",
+      "latestTransition": "R7a-3a is accepted; the bounded R7a-3b restore UI and owner-smoke sub-slice is released and in progress.",
       "evidence": {
         "label": "R7a-3 task brief",
         "href": "../task-briefs/RP-R7a-3-restore-as-new-workspace.md"
@@ -228,12 +228,12 @@
       "id": "RP-R7a-3b",
       "title": "Restore UI and owner smoke",
       "workType": "Workflow",
-      "status": "next_up",
-      "releaseCondition": "Release only after R7a-3a is accepted and after its own plan and Architecture/Security, QA, TPM, and Delivery gates approve the UI scope.",
-      "latestTransition": "R7a-3a accepted; Next up for its own planning and Architecture/Security, QA, TPM, and Delivery gates. It is not released.",
+      "status": "in_progress",
+      "releaseCondition": "R7a-3a is accepted and Planning, Architecture/Security, QA, TPM, and Delivery approved this bounded UI scope. Acceptance still requires independent implementation review and product-owner smoke.",
+      "latestTransition": "Released after all required gates approved the direct scoped-file, all-restores confirmation, inactive-candidate restore UI scope.",
       "evidence": {
-        "label": "R7a-3 parent brief",
-        "href": "../task-briefs/RP-R7a-3-restore-as-new-workspace.md"
+        "label": "R7a-3b task brief",
+        "href": "../task-briefs/RP-R7a-3b-restore-ui-owner-smoke.md"
       },
       "needsUserAction": false
     },

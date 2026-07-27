@@ -20,8 +20,8 @@
   <main>
     <header><div class="eyebrow">Rekon Pursuit</div><h1>Delivery dashboard</h1><p class="subhead">Local operational view. This page refreshes every 30 seconds.</p></header>
     <section class="summary" aria-label="Delivery summary">
-      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">RP-R7a-3 — Restore authenticated archive as new workspace</span></div>
-      <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">RP-R7a-3b — Restore UI and owner smoke</span></div>
+      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">RP-R7a-3b — Restore UI and owner smoke</span></div>
+      <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">No successor eligible</span></div>
       <div class="summary-item"><span class="summary-label">Accepted</span><span class="summary-value">16</span></div>
       <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">4</span></div>
       <div class="summary-item"><span class="summary-label">Blocked</span><span class="summary-value">0</span></div>
@@ -70,26 +70,27 @@
         </dl>
         <p class="action">No action needed</p>
         <a class="details-link" href="remediation.html#RP-R10">View task details</a>
-      </article></section><section class="lane lane-next_up"><header><h2>Next up</h2><span class="lane-count">1</span></header>
-      <article class="task-card status-next_up">
-        <div class="card-heading"><span class="task-id">RP-R7a-3b</span><span class="work-type">Workflow</span></div>
-        <h3>Restore UI and owner smoke</h3>
-        <dl>
-          <div><dt>Release condition</dt><dd>Release only after R7a-3a is accepted and after its own plan and Architecture/Security, QA, TPM, and Delivery gates approve the UI scope.</dd></div>
-          <div><dt>Latest transition</dt><dd>R7a-3a accepted; Next up for its own planning and Architecture/Security, QA, TPM, and Delivery gates. It is not released.</dd></div>
-        </dl>
-        <p class="action">No action needed</p>
-        <a class="details-link" href="remediation.html#RP-R7a-3b">View task details</a>
-      </article></section><section class="lane lane-in_progress"><header><h2>In progress</h2><span class="lane-count">1</span></header>
+      </article></section><section class="lane lane-next_up"><header><h2>Next up</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section><section class="lane lane-in_progress"><header><h2>In progress</h2><span class="lane-count">2</span></header>
       <article class="task-card status-in_progress">
         <div class="card-heading"><span class="task-id">RP-R7a-3</span><span class="work-type">Data lifecycle</span></div>
         <h3>Restore authenticated archive as new workspace</h3>
         <dl>
           <div><dt>Release condition</dt><dd>The parent remains in progress while its serial corrective sub-slices are gated; no activation, export, purge, or expiry work is included.</dd></div>
-          <div><dt>Latest transition</dt><dd>R7a-3a is accepted; its restore UI and owner-smoke successor is Next up for its own planning and approval gates.</dd></div>
+          <div><dt>Latest transition</dt><dd>R7a-3a is accepted; the bounded R7a-3b restore UI and owner-smoke sub-slice is released and in progress.</dd></div>
         </dl>
         <p class="action">No action needed</p>
         <a class="details-link" href="remediation.html#RP-R7a-3">View task details</a>
+      </article>
+
+      <article class="task-card status-in_progress">
+        <div class="card-heading"><span class="task-id">RP-R7a-3b</span><span class="work-type">Workflow</span></div>
+        <h3>Restore UI and owner smoke</h3>
+        <dl>
+          <div><dt>Release condition</dt><dd>R7a-3a is accepted and Planning, Architecture/Security, QA, TPM, and Delivery approved this bounded UI scope. Acceptance still requires independent implementation review and product-owner smoke.</dd></div>
+          <div><dt>Latest transition</dt><dd>Released after all required gates approved the direct scoped-file, all-restores confirmation, inactive-candidate restore UI scope.</dd></div>
+        </dl>
+        <p class="action">No action needed</p>
+        <a class="details-link" href="remediation.html#RP-R7a-3b">View task details</a>
       </article></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">16</span></header>
       <article class="task-card status-accepted">
         <div class="card-heading"><span class="task-id">RP-R0</span><span class="work-type">Foundation</span></div>
