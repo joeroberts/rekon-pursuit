@@ -87,12 +87,17 @@ switch to, export from, purge, rewrite, or remove an archive.
 | `RekonPursuitCore/Workspace/Migrations.swift` | Additive catalogue migration and rollback-safe checksum/history entry. |
 | `RekonPursuitCore/Workspace/WorkspaceStore.swift` | Consistent logical snapshot capture, catalogue transaction, safe activity, and catalogue read API. |
 | `RekonPursuit/WorkspaceViewModel.swift`, `RekonPursuit/ContentView.swift` | Explicit create action, recovery-key re-entry, native destination choice, and read-only catalogue display. No restore/export UI. |
-| `RekonPursuitCoreTests/PortableArchiveTests.swift` (new) and focused store/view-model tests | Deterministic crypto/filesystem seams and release evidence below. |
+| `RekonPursuitTests/PortableArchiveTests.swift` (new) and focused store/view-model tests | Deterministic crypto/filesystem seams and release evidence below. |
 
 The Architecture gate must approve the exact canonical encoding, signing-key
 namespace, snapshot field list/order, and catalogue locator representation
 before code is released. An implementer may not substitute an ad-hoc JSON,
 database copy, or unbound Keychain account.
+
+The same gate must name the exact byte sequence covered by `archiveChecksum`
+and its encoding/version. It must exclude any self-referential checksum field.
+The archive tests must compute and mutate those canonical bytes directly; a
+passing round trip alone is not evidence that the binding is correct.
 
 ## Focused acceptance evidence
 
@@ -117,6 +122,21 @@ database copy, or unbound Keychain account.
 - A Debug macOS build plus product-owner smoke proves: Settings → create
   recovery archive → re-enter key → choose fresh destination → see a verified
   catalogue row. The smoke must not attempt opening/restoring/exporting it.
+
+### Deterministic QA case set
+
+These are focused in-process test scenarios, not additions to the historical
+M0 fixture manifest. They use a fixed clock, deterministic IDs, an injected
+archive/crypto/file seam, and synthetic workspace records. No valid recovery
+key or raw key bytes are committed to a fixture, package, activity, or log.
+
+| Case | Required proof |
+| --- | --- |
+| `ARCHIVE-VALID-001` | A verified enrolled operation writes one package and one safe catalogue row; the logical snapshot is canonical, excludes pre-existing logical deletions, strips bookmark bytes, and preserves the active source workspace. |
+| `ARCHIVE-RETENTION-001` | `expiresAt` is exactly `createdAt + 30 × 24 hours`; a relaunch retains only safe catalogue facts. |
+| `ARCHIVE-FAIL-001` | No enrollment, wrong/malformed key, cancel, existing destination, each temporary-write failure, read-back failure, and catalogue-transaction failure leave no promoted package/row and preserve all prior rows/source state. |
+| `ARCHIVE-BINDING-001` | Mutation of each bound component—canonical header field, ciphertext, envelope, manifest/hash, checksum-covered bytes, signing public key, signature, or archive/envelope pairing—rejects before catalogue promotion. |
+| `ARCHIVE-REDACTION-001` | Searches of readable header/catalogue/activity/error output/test fixture artifacts find no raw recovery key, database key, OAuth token, full path, bookmark bytes, or known plaintext opportunity content. |
 
 ## Explicit exclusions
 
