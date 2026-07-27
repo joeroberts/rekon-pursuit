@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": null,
-  "nextEligibleTaskId": "RP-R7a-4",
+  "activeTaskId": "RP-R7a-4",
+  "nextEligibleTaskId": null,
   "tasks": [
     {
       "id": "RP-R0",
@@ -241,9 +241,9 @@
       "id": "RP-R7a-4",
       "title": "Encrypted-default logical export",
       "workType": "Data lifecycle",
-      "status": "next_up",
-      "releaseCondition": "Planning, Architecture/Security, and TPM are approved. QA and Delivery approval, plus frozen container framing/review binding, are required before implementation.",
-      "latestTransition": "TPM approved the planning/release-gate stage; R7a-4 remains Next up while QA and Delivery review the fixed encrypted-only boundary.",
+      "status": "in_progress",
+      "releaseCondition": "Released for one protected logical export only. Acceptance requires independent code/QA/Architecture-Security review and product-owner smoke; no successor is released.",
+      "latestTransition": "Planning, Architecture/Security, TPM, QA, and Delivery approved the frozen encrypted-only contract; implementation is released.",
       "evidence": {
         "label": "R7a-4 task brief",
         "href": "../task-briefs/RP-R7a-4-encrypted-default-logical-export.md"

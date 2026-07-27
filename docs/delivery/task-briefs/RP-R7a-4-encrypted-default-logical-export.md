@@ -1,6 +1,6 @@
 # RP-R7a-4 — Encrypted-default logical export
 
-**State:** Planning — implementation is not released.
+**State:** Released for implementation — no successor is released.
 **Depends on:** `RP-R7a-1`, `RP-R7a-2`, `RP-R7a-3`, `RP-R7a-3a`, and
 `RP-R7a-3b` accepted; [ADR-001](../../architecture/adr/ADR-001-local-data-lifecycle.md);
 and the [local-data lifecycle contract](../../architecture/local-data-lifecycle-contract.md).
@@ -31,8 +31,18 @@ success.
   catalogue data, bookmarks, raw paths, cache/FTS, and source files.
 - Implement `StartExport → ReviewExport → ConfirmExport → Write/Verify →
   RecordOutcome`. The review fingerprint covers type, the fixed category,
-  exact filename, canonical destination, and source revision. Any mutation
-  invalidates confirmation.
+  exact filename, canonical destination identity, and source revision. A
+  migration-owned SQLite revision is incremented by triggers on exported
+  source tables; confirm captures an immutable snapshot in one deferred read
+  transaction and rejects before writing if the revision differs from review.
+  Any source mutation before capture invalidates confirmation.
+- Freeze the v1 container before implementation: a separate non-restorable
+  `.rekonexport` binary container, HKDF-SHA256 recovery-key wrapping with
+  `RekonPursuit/export/wrapping-key/v1`, per-export random salt/content key,
+  AES-GCM authenticated header/payload, manifest commitment to source revision
+  and snapshot hash, and separately named export-snapshot framing. The
+  [design](../../superpowers/specs/2026-07-27-r7a-encrypted-export-design.md)
+  controls the exact contract; do not reuse the portable archive format.
 - Use an `NSSavePanel` destination. Stage only in app-owned temporary storage;
   create a new final regular file exclusively/no-follow with identity checks;
   read-back decrypt/authenticate/validate/decode before success. Never silently
@@ -60,6 +70,9 @@ success.
   never reports success and preserves the source workspace.
 - Redaction fixtures prove container, event, and diagnostics omit secrets,
   full paths, bookmarks, and raw content.
+- Byte-level framing fixtures mutate authenticated header/manifest/payload
+  fields; trigger fixtures mutate source tables during review; parent
+  replacement/symlink/existing-target races never report success.
 - Signed Debug product-owner smoke: select protected export, re-enter recovery
   key, select fresh destination, review/confirm, and observe verified success.
 

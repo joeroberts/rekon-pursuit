@@ -59,6 +59,66 @@ The confirmation fingerprint is SHA-256 over canonical export type, category,
 exact final filename, canonical destination identity, and captured source
 revision. Any change invalidates review and requires a new confirmation.
 
+## Frozen v1 implementation contract
+
+- Migration 26 adds `tracker_export_revision (id INTEGER PRIMARY KEY CHECK
+  (id = 1), revision INTEGER NOT NULL CHECK (revision >= 0))`, seeded with
+  `(1, 0)`. SQLite `AFTER INSERT`, `UPDATE`, and `DELETE` triggers increment
+  it once per statement on: `opportunities`, `task_reminders`,
+  `opportunity_stage_history`, `opportunity_response_history`, `contacts`,
+  `contact_opportunities`, `interactions`, `import_reports`,
+  `import_report_rows`, `posting_checks`, `reconciliation_reviews`,
+  `reconciliation_results`, `reconciliation_check_operations`,
+  `document_references`, `activity_events`, and `deletion_tombstones`.
+  Recovery enrollment, archive catalogue, migration history, and export
+  outcomes are excluded. Reject revision overflow; the store must not rely on
+  manually remembered revision bumps.
+- Review captures that revision. Confirm obtains an immutable logical snapshot
+  in one deferred read transaction, rejecting before final writing if its
+  current revision differs from review. Mutations before confirm return the
+  user to review without a final file or completion event; mutations after
+  capture cannot alter the immutable staged snapshot.
+- Framing is exactly `RPEXPT01` (8 ASCII bytes), `UInt16BE(1)`,
+  `UInt32BE(182)`, the 182-byte header, `UInt64BE(payloadLength)`, payload,
+  then EOF. Reject unknown version/suite/category/header length, trailing
+  bytes, length mismatch, payload under 28 bytes, or payload over 512 MiB.
+  Header order is: raw RFC-4122 export UUID (16), Unix milliseconds
+  `Int64BE` (8), suite `UInt8(1)`, category `UInt8(1)`, salt (32), SHA-256
+  manifest hash (32), SHA-256 payload checksum (32), and AES-GCM combined
+  recovery envelope (60).
+- Generate a fresh 32-byte content key and 32-byte salt with
+  `SecRandomCopyBytes`. HKDF-SHA256 derives a 32-byte wrapping key from the
+  operation-memory recovery key, salt, and exact UTF-8 info
+  `RekonPursuit/export/wrapping-key/v1`. The envelope is AES-GCM combined
+  bytes (12-byte nonce + 32-byte ciphertext + 16-byte tag) over the content
+  key with AAD equal to UTF-8 `RekonPursuit/export/header-commitment/v1\0`
+  followed by magic, version, header length, export ID, creation time, suite,
+  category, salt, manifest hash, and payload checksum. Payload AAD is UTF-8
+  `RekonPursuit/export/payload/v1\0`, export ID, version, and manifest hash.
+  This format has no signing identity and does not reuse portable-archive
+  crypto/framing.
+- Payload plaintext is `RPEPAY01` (8 ASCII bytes), `UInt32BE(manifestLength)`,
+  `UInt64BE(snapshotLength)`, manifest, and snapshot. The manifest is exactly
+  `RPEMAN01` (8 ASCII bytes), raw export UUID (16), `Int64BE(createdAt)`,
+  category `UInt8(1)`, `UInt64BE(sourceRevision)`, and SHA-256(snapshot) (32):
+  73 bytes total. SHA-256 covers those exact manifest bytes; its fields must
+  match the header and immutable capture. The snapshot uses separately named
+  `RPEXSNP1` framing, not the archive codec; it excludes deleted material,
+  bookmarks/raw local paths, credentials/keys, catalogue data, cache/FTS, and
+  source files. Document references have bookmarks stripped and availability
+  `relink_required`.
+- Destination identity is SHA-256 of UTF-8
+  `RekonPursuit/export/destination/v1\0`, parent `st_dev UInt64BE`, parent
+  `st_ino UInt64BE`, NFC filename `UInt32BE(length)`, and filename bytes.
+  The review fingerprint is SHA-256 of UTF-8
+  `RekonPursuit/export/review/v1\0`, version, protected type, category,
+  NFC filename length/value, destination identity, and source revision.
+  Confirm opens the parent using `O_DIRECTORY|O_NOFOLLOW`, requires matching
+  `fstat` device/inode, and creates only with
+  `openat(parentFD, filename, O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW, 0600)`.
+  It verifies final identity during read-back. User-visible output is never
+  silently deleted after a later failure.
+
 ## Explicit exclusions
 
 - Portable archive creation, catalogue, restore, activation, or workspace
