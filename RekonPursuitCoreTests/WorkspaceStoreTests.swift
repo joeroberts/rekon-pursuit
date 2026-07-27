@@ -804,6 +804,9 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertThrowsError(try store.createContact(CreateContact(name: "Alex Morgan", email: "alex@")))
         XCTAssertThrowsError(try store.createContact(CreateContact(name: "Alex Morgan", profileURL: "linkedin.com/in/alex")))
         XCTAssertThrowsError(try store.createContact(CreateContact(name: "Alex Morgan", profileURL: "https:///in/alex")))
+        for profileURL in ["https://microsoft", "https://.", "https://.com", "https://example.", "https://foo..bar"] {
+            XCTAssertThrowsError(try store.createContact(CreateContact(name: "Alex Morgan", profileURL: profileURL)))
+        }
 
         XCTAssertEqual(try store.contacts(), [])
         XCTAssertEqual(try store.activityEvents(), [])

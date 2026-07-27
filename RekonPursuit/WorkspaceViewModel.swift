@@ -1546,10 +1546,15 @@ final class WorkspaceViewModel: ObservableObject {
     private func profileURLWarning(for value: String) -> String? {
         let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return nil }
-        guard let components = URLComponents(string: value), let scheme = components.scheme?.lowercased(), let host = components.host, host.contains("."), ["http", "https"].contains(scheme) else {
+        guard let components = URLComponents(string: value), let scheme = components.scheme?.lowercased(), let host = components.host, isPublicHostname(host), ["http", "https"].contains(scheme) else {
             return "Use an absolute http or https profile URL with a public hostname."
         }
         return scheme == "http" ? "This profile URL uses HTTP rather than HTTPS." : nil
+    }
+
+    private func isPublicHostname(_ host: String) -> Bool {
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        return labels.count > 1 && labels.allSatisfy { !$0.isEmpty }
     }
 
     private func refreshStageHistory() {

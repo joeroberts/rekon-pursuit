@@ -931,10 +931,15 @@ final class WorkspaceStore {
               let scheme = components.scheme?.lowercased(),
               ["http", "https"].contains(scheme),
               let host = components.host,
-              host.contains(".") else {
+              isPublicHostname(host) else {
             return false
         }
         return true
+    }
+
+    private func isPublicHostname(_ host: String) -> Bool {
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        return labels.count > 1 && labels.allSatisfy { !$0.isEmpty }
     }
 
     private func isHostfulAbsoluteURL(_ value: String) -> Bool {
