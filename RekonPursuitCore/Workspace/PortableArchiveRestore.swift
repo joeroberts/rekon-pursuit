@@ -620,7 +620,13 @@ nonisolated enum PortableArchiveSnapshotImporter {
     static func `import`(snapshot: Data, into database: EncryptedDatabase) throws {
         let decoded = try decode(snapshot)
         try database.transaction {
-            for table in PortableArchiveSnapshotRegistry.tables {
+            // Archive v1 records reconciliation results before their public-URL
+            // check operations.  The current schema enforces the reverse
+            // foreign-key dependency, so restore the referenced operations
+            // first without changing the archive wire format.
+            let tables = PortableArchiveSnapshotRegistry.tables.filter { $0.name != "reconciliation_results" }
+                + PortableArchiveSnapshotRegistry.tables.filter { $0.name == "reconciliation_results" }
+            for table in tables {
                 guard let rows = decoded[table.name] else { throw PortableArchiveRestoreError.restoreFailed }
                 let columns = table.columns.joined(separator: ", ")
                 let placeholders = Array(repeating: "?", count: table.columns.count).joined(separator: ", ")

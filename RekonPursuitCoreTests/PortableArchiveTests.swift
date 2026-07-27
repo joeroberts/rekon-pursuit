@@ -597,6 +597,62 @@ final class PortableArchiveTests: XCTestCase {
         XCTAssertFalse(try restoredStore.recoveryEnrollmentState().isEnabled)
         XCTAssertTrue(try restoredStore.portableArchiveCatalogue().isEmpty)
     }
+
+    func testVerifiedArchiveRestoresPublicURLCheckResultAfterItsOperation() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-restore-public-url-check-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let sourceURL = root.appendingPathComponent("source.sqlite")
+        let sourceDatabase = try EncryptedDatabase.open(url: sourceURL, key: Data(repeating: 6, count: 32))
+        defer { try? sourceDatabase.close() }
+        let source = try WorkspaceStore(database: sourceDatabase, actorID: "test", correlationID: "source")
+        let opportunity = try source.create(CreateOpportunity(title: "Public URL check role", company: "Rekon"))
+        try sourceDatabase.execute(
+            "INSERT INTO reconciliation_check_operations (id, opportunity_id, correlation_id, url_snapshot, state, started_at, terminal_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            values: [.text("operation-1"), .text(opportunity.id), .text("correlation-1"), .text("https://example.com/jobs/1"), .text("completed"), .real(1_704_067_200), .real(1_704_067_201)]
+        )
+        try sourceDatabase.execute(
+            "INSERT INTO reconciliation_results (id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, check_operation_id) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)",
+            values: [.text("result-1"), .text(opportunity.id), .text("https://example.com/jobs/1"), .real(1_704_067_201), .text("Still open"), .text("Confirmed"), .text("HTTP response"), .text("200 OK"), .text(""), .text("operation-1")]
+        )
+
+        let snapshot = try PortableArchiveSnapshotCodec.encode(from: sourceDatabase)
+        let recoveryKey = try RecoveryKey.generate()
+        let archiveURL = root.appendingPathComponent("source.rekonarchive")
+        let verified = try PortableArchiveService.writeAndVerify(
+            snapshot: snapshot,
+            recoveryKey: recoveryKey,
+            signingKey: .init(),
+            archiveID: UUID(),
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200),
+            to: archiveURL
+        )
+        let workspaceKeys = InMemoryRestoreWorkspaceKeys()
+        let candidatesRoot = root.appendingPathComponent("candidates", isDirectory: true)
+        let worker = PortableArchiveRestoreWorker(restoreService: PortableArchiveRestoreService(
+            candidatesRoot: candidatesRoot,
+            candidateKeyStore: InMemoryRestoreCandidateKeyStore(),
+            workspaceKeyStoreForCandidate: workspaceKeys.store,
+            signingIdentityStore: InMemoryRestoreCandidateSigningIdentityStore()
+        ))
+
+        let restored = try await worker.restore(.init(
+            archiveURL: archiveURL,
+            recoveryKey: recoveryKey,
+            confirmation: .init(archiveID: verified.archiveID, createdAt: verified.createdAt, signingKeyFingerprint: verified.signingKeyFingerprint)
+        ))
+        let restoredRoot = candidatesRoot.appendingPathComponent(restored.candidateID.uuidString.lowercased(), isDirectory: true)
+        let restoredDatabase = try EncryptedDatabase.open(
+            url: restoredRoot.appendingPathComponent("workspace.sqlite"),
+            key: try XCTUnwrap(workspaceKeys.key(for: restored.candidateID)),
+            createIfMissing: false
+        )
+        defer { try? restoredDatabase.close() }
+        XCTAssertEqual(try restoredDatabase.scalarInt("SELECT count(*) FROM reconciliation_check_operations"), 1)
+        XCTAssertEqual(try restoredDatabase.scalarInt("SELECT count(*) FROM reconciliation_results WHERE check_operation_id = 'operation-1'"), 1)
+    }
     func testArchiveStagingUsesAppTemporaryDirectoryInsteadOfUserSelectedDirectory() {
         let selectedDestination = URL(fileURLWithPath: "/Users/example/Desktop/Recovery Archive.rekonarchive")
         let appTemporaryDirectory = URL(fileURLWithPath: "/private/var/folders/example/RekonPursuit/")
