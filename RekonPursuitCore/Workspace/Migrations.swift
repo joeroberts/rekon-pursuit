@@ -1,7 +1,7 @@
 import Foundation
 import CryptoKit
 
-enum WorkspaceMigrations {
+nonisolated enum WorkspaceMigrations {
     static let currentVersion = 25
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")

@@ -37,6 +37,7 @@
 		100000000000000000000030 /* ArchiveSigningKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000035 /* ArchiveSigningKeyStore.swift */; };
 		100000000000000000000031 /* PortableArchiveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000036 /* PortableArchiveTests.swift */; };
 		100000000000000000000032 /* PortableArchiveWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000037 /* PortableArchiveWorker.swift */; };
+		100000000000000000000033 /* PortableArchiveRestore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000038 /* PortableArchiveRestore.swift */; };
 			100000000000000000000022 /* PublicURLCheckTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000027 /* PublicURLCheckTests.swift */; };
 			100000000000000000000023 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000028 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -93,7 +94,8 @@
 			200000000000000000000034 /* PortableArchiveService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/PortableArchiveService.swift; sourceTree = "<group>"; };
 			200000000000000000000035 /* ArchiveSigningKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Security/ArchiveSigningKeyStore.swift; sourceTree = "<group>"; };
 			200000000000000000000036 /* PortableArchiveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortableArchiveTests.swift; sourceTree = "<group>"; };
-			200000000000000000000037 /* PortableArchiveWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/PortableArchiveWorker.swift; sourceTree = "<group>"; };
+		200000000000000000000037 /* PortableArchiveWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/PortableArchiveWorker.swift; sourceTree = "<group>"; };
+		200000000000000000000038 /* PortableArchiveRestore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/PortableArchiveRestore.swift; sourceTree = "<group>"; };
 			200000000000000000000027 /* PublicURLCheckTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicURLCheckTests.swift; sourceTree = "<group>"; };
 			200000000000000000000028 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -147,6 +149,7 @@
 				200000000000000000000034 /* PortableArchiveService.swift */,
 				200000000000000000000035 /* ArchiveSigningKeyStore.swift */,
 				200000000000000000000037 /* PortableArchiveWorker.swift */,
+				200000000000000000000038 /* PortableArchiveRestore.swift */,
 				700000000000000000000005 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -378,6 +381,7 @@
 				100000000000000000000029 /* PortableArchiveService.swift in Sources */,
 				100000000000000000000030 /* ArchiveSigningKeyStore.swift in Sources */,
 				100000000000000000000032 /* PortableArchiveWorker.swift in Sources */,
+				100000000000000000000033 /* PortableArchiveRestore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

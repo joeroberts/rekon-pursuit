@@ -5,6 +5,548 @@ import XCTest
 
 @MainActor
 final class PortableArchiveTests: XCTestCase {
+    func testRestoreOutcomeDoesNotExposeCandidateFilesystemRoot() {
+        let outcome = RestoredWorkspaceCandidate(candidateID: UUID(), archiveID: UUID())
+
+        let labels = Mirror(reflecting: outcome).children.compactMap(\.label)
+
+        XCTAssertFalse(labels.contains("root"), "The worker result must not expose a candidate filesystem path.")
+    }
+
+    func testRestoreWorkerVerifiesArchiveWithoutCreatingCandidateMaterial() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-worker-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let key = try RecoveryKey.generate()
+        let archiveURL = root.appendingPathComponent("archive.rekonarchive")
+        let verified = try PortableArchiveService.writeAndVerify(
+            snapshot: emptyCanonicalSnapshot(), recoveryKey: key, signingKey: .init(), archiveID: UUID(), createdAt: Date(timeIntervalSince1970: 1_704_067_200), to: archiveURL
+        )
+
+        let worker = PortableArchiveRestoreWorker()
+        let identity = try await worker.verifyArchive(at: archiveURL, recoveryKey: key)
+
+        XCTAssertEqual(identity.archiveID, verified.archiveID)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("RestoredWorkspaces").path))
+    }
+
+    func testRestoreWorkerDoesNotExecuteRestoreOnMainActorCaller() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-worker-executor-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let recoveryKey = try RecoveryKey.generate()
+        let archiveURL = root.appendingPathComponent("archive.rekonarchive")
+        let verified = try PortableArchiveService.writeAndVerify(snapshot: emptyCanonicalSnapshot(), recoveryKey: recoveryKey, signingKey: .init(), archiveID: UUID(), createdAt: Date(timeIntervalSince1970: 1_704_067_200), to: archiveURL)
+        let observation = RestoreWorkerThreadObservation()
+        let worker = PortableArchiveRestoreWorker(
+            restoreService: PortableArchiveRestoreService(candidatesRoot: root.appendingPathComponent("candidates"), candidateKeyStore: InMemoryRestoreCandidateKeyStore(), workspaceKeyStoreForCandidate: InMemoryRestoreWorkspaceKeys().store, signingIdentityStore: InMemoryRestoreCandidateSigningIdentityStore()),
+            executionObserver: { observation.record(isMainThread: $0) }
+        )
+        let request = PortableArchiveRestoreRequest(archiveURL: archiveURL, recoveryKey: recoveryKey, confirmation: .init(archiveID: verified.archiveID, createdAt: verified.createdAt, signingKeyFingerprint: verified.signingKeyFingerprint))
+        _ = try await Task.detached { try await worker.restore(request) }.value
+        XCTAssertEqual(observation.mainThreadValue, false)
+    }
+
+    func testWrongRecoveryKeyCreatesNoRestoreCandidateMaterial() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-wrong-key-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let correctKey = try RecoveryKey.generate()
+        let archiveURL = root.appendingPathComponent("archive.rekonarchive")
+        _ = try PortableArchiveService.writeAndVerify(snapshot: emptyCanonicalSnapshot(), recoveryKey: correctKey, signingKey: .init(), archiveID: UUID(), createdAt: Date(timeIntervalSince1970: 1_704_067_200), to: archiveURL)
+        let candidates = root.appendingPathComponent("candidates", isDirectory: true)
+        let restorer = PortableArchiveRestoreWorker(restoreService: PortableArchiveRestoreService(candidatesRoot: candidates, candidateKeyStore: InMemoryRestoreCandidateKeyStore(), workspaceKeyStoreForCandidate: { _ in InMemoryRestoreWorkspaceKeys().store(for: UUID()) }, signingIdentityStore: InMemoryRestoreCandidateSigningIdentityStore()))
+
+        do {
+            _ = try await restorer.restore(.init(archiveURL: archiveURL, recoveryKey: try RecoveryKey.generate(), confirmation: nil))
+            XCTFail("A wrong recovery key must fail before candidate material is created.")
+        } catch {
+            // Expected.
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: candidates.path))
+    }
+
+    func testMissingConfirmationAndCatalogueMismatchCreateNoCandidateMaterial() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-no-confirmation-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let recoveryKey = try RecoveryKey.generate()
+        let archiveID = UUID()
+        let archiveURL = root.appendingPathComponent("archive.rekonarchive")
+        let verified = try PortableArchiveService.writeAndVerify(
+            snapshot: emptyCanonicalSnapshot(), recoveryKey: recoveryKey, signingKey: .init(), archiveID: archiveID,
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200), to: archiveURL
+        )
+        let candidates = root.appendingPathComponent("candidates", isDirectory: true)
+        let workspaceKeys = InMemoryRestoreWorkspaceKeys()
+        let worker = PortableArchiveRestoreWorker(restoreService: PortableArchiveRestoreService(
+            candidatesRoot: candidates,
+            candidateKeyStore: InMemoryRestoreCandidateKeyStore(),
+            workspaceKeyStoreForCandidate: workspaceKeys.store,
+            signingIdentityStore: InMemoryRestoreCandidateSigningIdentityStore()
+        ))
+
+        do {
+            _ = try await worker.restore(.init(archiveURL: archiveURL, recoveryKey: recoveryKey, confirmation: nil))
+            XCTFail("A clean-Mac archive requires explicit identity confirmation.")
+        } catch let error as PortableArchiveRestoreError {
+            guard case .confirmationRequired = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: candidates.path))
+
+        let mismatchedCatalogue = PortableArchiveCatalogueRow(
+            archiveID: archiveID,
+            displayFilename: "archive.rekonarchive",
+            formatVersion: 1,
+            createdAt: verified.createdAt,
+            expiresAt: verified.createdAt.addingTimeInterval(1),
+            verificationState: "verified",
+            ciphertextChecksum: Data(),
+            signingKeyFingerprint: Data(repeating: 0, count: verified.signingKeyFingerprint.count)
+        )
+        let confirmation = PortableArchiveRestoreConfirmation(
+            archiveID: verified.archiveID,
+            createdAt: verified.createdAt,
+            signingKeyFingerprint: verified.signingKeyFingerprint
+        )
+        do {
+            _ = try await worker.restore(.init(archiveURL: archiveURL, recoveryKey: recoveryKey, localCatalogue: [mismatchedCatalogue], confirmation: confirmation))
+            XCTFail("A same-Mac catalogue fingerprint mismatch must fail before reservation.")
+        } catch let error as PortableArchiveRestoreError {
+            guard case .catalogueMismatch = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: candidates.path))
+    }
+
+    func testMatchingLocalCatalogueRestoresWithoutCleanMacConfirmation() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-same-mac-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let recoveryKey = try RecoveryKey.generate()
+        let archiveURL = root.appendingPathComponent("archive.rekonarchive")
+        let verified = try PortableArchiveService.writeAndVerify(
+            snapshot: emptyCanonicalSnapshot(), recoveryKey: recoveryKey, signingKey: .init(), archiveID: UUID(),
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200), to: archiveURL
+        )
+        let catalogue = PortableArchiveCatalogueRow(
+            archiveID: verified.archiveID,
+            displayFilename: "archive.rekonarchive",
+            formatVersion: 1,
+            createdAt: verified.createdAt,
+            expiresAt: verified.expiresAt,
+            verificationState: "verified",
+            ciphertextChecksum: verified.ciphertextChecksum,
+            signingKeyFingerprint: verified.signingKeyFingerprint
+        )
+        let keys = InMemoryRestoreWorkspaceKeys()
+        let worker = PortableArchiveRestoreWorker(restoreService: PortableArchiveRestoreService(
+            candidatesRoot: root.appendingPathComponent("candidates"),
+            candidateKeyStore: InMemoryRestoreCandidateKeyStore(),
+            workspaceKeyStoreForCandidate: keys.store,
+            signingIdentityStore: InMemoryRestoreCandidateSigningIdentityStore()
+        ))
+
+        _ = try await worker.restore(.init(archiveURL: archiveURL, recoveryKey: recoveryKey, localCatalogue: [catalogue], confirmation: nil))
+    }
+
+    func testUnrelatedCatalogueRowUsesCleanMacConfirmationFlow() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-catalogue-exact-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let recoveryKey = try RecoveryKey.generate()
+        let archiveURL = root.appendingPathComponent("archive.rekonarchive")
+        let verified = try PortableArchiveService.writeAndVerify(snapshot: emptyCanonicalSnapshot(), recoveryKey: recoveryKey, signingKey: .init(), archiveID: UUID(), createdAt: Date(timeIntervalSince1970: 1_704_067_200), to: archiveURL)
+        let wrongID = PortableArchiveCatalogueRow(archiveID: UUID(), displayFilename: "other", formatVersion: 1, createdAt: verified.createdAt, expiresAt: verified.expiresAt, verificationState: "verified", ciphertextChecksum: verified.ciphertextChecksum, signingKeyFingerprint: verified.signingKeyFingerprint)
+        let worker = PortableArchiveRestoreWorker(restoreService: PortableArchiveRestoreService(candidatesRoot: root.appendingPathComponent("candidates"), candidateKeyStore: InMemoryRestoreCandidateKeyStore(), workspaceKeyStoreForCandidate: InMemoryRestoreWorkspaceKeys().store, signingIdentityStore: InMemoryRestoreCandidateSigningIdentityStore()))
+
+        do {
+            _ = try await worker.restore(.init(archiveURL: archiveURL, recoveryKey: recoveryKey, localCatalogue: [wrongID], confirmation: nil))
+            XCTFail("An unrelated catalogue row must require clean-Mac confirmation.")
+        } catch let error as PortableArchiveRestoreError {
+            guard case .confirmationRequired = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+
+        _ = try await worker.restore(.init(
+            archiveURL: archiveURL,
+            recoveryKey: recoveryKey,
+            localCatalogue: [wrongID],
+            confirmation: .init(archiveID: verified.archiveID, createdAt: verified.createdAt, signingKeyFingerprint: verified.signingKeyFingerprint)
+        ))
+    }
+
+    func testEveryRestoreLifecycleFailureCleansCandidateMaterialAndAllowsARetry() async throws {
+        let recoveryKey = try RecoveryKey.generate()
+        for point in [
+            PortableArchiveRestoreFaultPoint.afterReservation,
+            .afterKeyCreation, .afterRootCreation, .afterImport, .afterCheckpoint,
+            .afterReopen, .afterPromotion, .beforeReady
+        ] {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-fault-\(point)-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let archiveURL = root.appendingPathComponent("archive.rekonarchive")
+            let verified = try PortableArchiveService.writeAndVerify(snapshot: emptyCanonicalSnapshot(), recoveryKey: recoveryKey, signingKey: .init(), archiveID: UUID(), createdAt: Date(timeIntervalSince1970: 1_704_067_200), to: archiveURL)
+            let request = PortableArchiveRestoreRequest(archiveURL: archiveURL, recoveryKey: recoveryKey, confirmation: .init(archiveID: verified.archiveID, createdAt: verified.createdAt, signingKeyFingerprint: verified.signingKeyFingerprint))
+            let candidates = root.appendingPathComponent("candidates")
+            let registryKey = InMemoryRestoreCandidateKeyStore()
+            let keys = InMemoryRestoreWorkspaceKeys()
+            let signing = InMemoryRestoreCandidateSigningIdentityStore()
+            let failing = PortableArchiveRestoreWorker(restoreService: PortableArchiveRestoreService(candidatesRoot: candidates, candidateKeyStore: registryKey, workspaceKeyStoreForCandidate: keys.store, signingIdentityStore: signing, injectedFault: point))
+
+            await assertRestoreFails { _ = try await failing.restore(request) }
+            XCTAssertTrue(candidateDirectoryNames(in: candidates).isEmpty, "\(point) must remove any candidate material.")
+
+            let retry = PortableArchiveRestoreWorker(restoreService: PortableArchiveRestoreService(candidatesRoot: candidates, candidateKeyStore: registryKey, workspaceKeyStoreForCandidate: keys.store, signingIdentityStore: signing))
+            let restored = try await retry.restore(request)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: candidates.appendingPathComponent(restored.candidateID.uuidString.lowercased()).path))
+        }
+    }
+
+    func testCleanupDoesNotMarkCandidateUnavailableUntilSigningIdentityReadbackIsAbsent() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-signing-readback-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let recoveryKey = try RecoveryKey.generate()
+        let archiveURL = root.appendingPathComponent("archive.rekonarchive")
+        let verified = try PortableArchiveService.writeAndVerify(snapshot: emptyCanonicalSnapshot(), recoveryKey: recoveryKey, signingKey: .init(), archiveID: UUID(), createdAt: Date(timeIntervalSince1970: 1_704_067_200), to: archiveURL)
+        let request = PortableArchiveRestoreRequest(archiveURL: archiveURL, recoveryKey: recoveryKey, confirmation: .init(archiveID: verified.archiveID, createdAt: verified.createdAt, signingKeyFingerprint: verified.signingKeyFingerprint))
+        let candidates = root.appendingPathComponent("candidates")
+        let registryKey = InMemoryRestoreCandidateKeyStore()
+        let worker = PortableArchiveRestoreWorker(restoreService: PortableArchiveRestoreService(
+            candidatesRoot: candidates,
+            candidateKeyStore: registryKey,
+            workspaceKeyStoreForCandidate: InMemoryRestoreWorkspaceKeys().store,
+            signingIdentityStore: ReadbackFailingSigningIdentityStore(),
+            injectedFault: .afterImport
+        ))
+
+        do {
+            _ = try await worker.restore(request)
+            XCTFail("A signing identity that remains present must keep cleanup pending.")
+        } catch let error as PortableArchiveRestoreError {
+            guard case .candidateCleanupPending = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+    }
+
+    func testRestoreRejectsMutatedAndUnsupportedArchivesBeforeCandidateReservation() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-untrusted-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let recoveryKey = try RecoveryKey.generate()
+        let archiveURL = root.appendingPathComponent("archive.rekonarchive")
+        _ = try PortableArchiveService.writeAndVerify(snapshot: emptyCanonicalSnapshot(), recoveryKey: recoveryKey, signingKey: .init(), archiveID: UUID(), createdAt: Date(timeIntervalSince1970: 1_704_067_200), to: archiveURL)
+        let package = try Data(contentsOf: archiveURL)
+
+        for (index, offset) in [(0, package.index(before: package.endIndex)), (1, 8)] {
+            var tampered = package
+            tampered[offset] ^= 0x01
+            let candidateURL = root.appendingPathComponent("tampered-\(index).rekonarchive")
+            try tampered.write(to: candidateURL)
+            let candidates = root.appendingPathComponent("candidates-\(index)")
+            let worker = PortableArchiveRestoreWorker(restoreService: PortableArchiveRestoreService(candidatesRoot: candidates, candidateKeyStore: InMemoryRestoreCandidateKeyStore(), workspaceKeyStoreForCandidate: InMemoryRestoreWorkspaceKeys().store, signingIdentityStore: InMemoryRestoreCandidateSigningIdentityStore()))
+            await assertRestoreFails { _ = try await worker.restore(.init(archiveURL: candidateURL, recoveryKey: recoveryKey, confirmation: nil)) }
+            XCTAssertFalse(FileManager.default.fileExists(atPath: candidates.path))
+        }
+    }
+
+    func testRegistryPersistenceFailureAndInterruptedReservationFailClosedUntilCleanupOnlyPass() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-registry-failure-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let recoveryKey = try RecoveryKey.generate()
+        let archiveURL = root.appendingPathComponent("archive.rekonarchive")
+        let verified = try PortableArchiveService.writeAndVerify(
+            snapshot: emptyCanonicalSnapshot(), recoveryKey: recoveryKey, signingKey: .init(), archiveID: UUID(),
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200), to: archiveURL
+        )
+        let request = PortableArchiveRestoreRequest(
+            archiveURL: archiveURL,
+            recoveryKey: recoveryKey,
+            confirmation: .init(archiveID: verified.archiveID, createdAt: verified.createdAt, signingKeyFingerprint: verified.signingKeyFingerprint)
+        )
+        let candidates = root.appendingPathComponent("candidates", isDirectory: true)
+
+        let initialFailureWorker = PortableArchiveRestoreWorker(restoreService: PortableArchiveRestoreService(
+            candidatesRoot: candidates,
+            candidateKeyStore: FailingRestoreRegistryKeyStore(),
+            workspaceKeyStoreForCandidate: { _ in CleanupFailingWorkspaceKeyStore() },
+            signingIdentityStore: InMemoryRestoreCandidateSigningIdentityStore()
+        ))
+        await assertRestoreFails { _ = try await initialFailureWorker.restore(request) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: candidates.path), "A failed initial registry persistence must precede every candidate root or key.")
+
+        let durableRegistryKey = InMemoryRestoreCandidateKeyStore()
+        let interruptedWorker = PortableArchiveRestoreWorker(restoreService: PortableArchiveRestoreService(
+            candidatesRoot: candidates,
+            candidateKeyStore: durableRegistryKey,
+            workspaceKeyStoreForCandidate: { _ in CleanupFailingWorkspaceKeyStore() },
+            signingIdentityStore: InMemoryRestoreCandidateSigningIdentityStore(),
+            injectedFault: .afterReservation
+        ))
+        await assertRestoreFails { _ = try await interruptedWorker.restore(request) }
+
+        let workspaceKeys = InMemoryRestoreWorkspaceKeys()
+        let relaunchedWorker = PortableArchiveRestoreWorker(restoreService: PortableArchiveRestoreService(
+            candidatesRoot: candidates,
+            candidateKeyStore: durableRegistryKey,
+            workspaceKeyStoreForCandidate: workspaceKeys.store,
+            signingIdentityStore: InMemoryRestoreCandidateSigningIdentityStore()
+        ))
+        // The relaunch performs cleanup only and deliberately does not create
+        // a second candidate in the same request.
+        await assertRestoreFails { _ = try await relaunchedWorker.restore(request) }
+        let restored = try await relaunchedWorker.restore(request)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: candidates.appendingPathComponent(restored.candidateID.uuidString.lowercased()).path))
+    }
+
+    func testLifecycleFailurePersistsOnlyRedactedRegistryCategory() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-registry-redaction-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let recoveryKey = try RecoveryKey.generate()
+        let archiveURL = root.appendingPathComponent("archive.rekonarchive")
+        let verified = try PortableArchiveService.writeAndVerify(
+            snapshot: emptyCanonicalSnapshot(), recoveryKey: recoveryKey, signingKey: .init(), archiveID: UUID(),
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200), to: archiveURL
+        )
+        let registryKey = InMemoryRestoreCandidateKeyStore()
+        let service = PortableArchiveRestoreService(
+            candidatesRoot: root.appendingPathComponent("candidates"),
+            candidateKeyStore: registryKey,
+            workspaceKeyStoreForCandidate: InMemoryRestoreWorkspaceKeys().store,
+            signingIdentityStore: InMemoryRestoreCandidateSigningIdentityStore(),
+            injectedFault: .afterImport
+        )
+        let worker = PortableArchiveRestoreWorker(restoreService: service)
+
+        await assertRestoreFails {
+            _ = try await worker.restore(.init(
+                archiveURL: archiveURL,
+                recoveryKey: recoveryKey,
+                confirmation: .init(
+                    archiveID: verified.archiveID,
+                    createdAt: verified.createdAt,
+                    signingKeyFingerprint: verified.signingKeyFingerprint
+                )
+            ))
+        }
+
+        let records = try service.restoreCandidateRecordsForTesting()
+        XCTAssertEqual(records.count, 1)
+        let record = try XCTUnwrap(records.first)
+        XCTAssertEqual(record.state, .unavailable)
+        XCTAssertEqual(record.failureCategory, .bootstrap)
+        XCTAssertEqual(record.cleanupAttempts, 0)
+        let labels = Mirror(reflecting: record).children.compactMap(\.label)
+        XCTAssertFalse(labels.contains("error"))
+        XCTAssertFalse(labels.contains("message"))
+        XCTAssertFalse(labels.contains("path"))
+        XCTAssertFalse(labels.contains("root"))
+    }
+
+    func testReadyPersistenceFailureIsNeverMarkedReadyAndRelaunchCleansBeforeRetry() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-ready-persistence-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let recoveryKey = try RecoveryKey.generate()
+        let archiveURL = root.appendingPathComponent("archive.rekonarchive")
+        let verified = try PortableArchiveService.writeAndVerify(
+            snapshot: emptyCanonicalSnapshot(), recoveryKey: recoveryKey, signingKey: .init(), archiveID: UUID(),
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200), to: archiveURL
+        )
+        let request = PortableArchiveRestoreRequest(
+            archiveURL: archiveURL,
+            recoveryKey: recoveryKey,
+            confirmation: .init(
+                archiveID: verified.archiveID,
+                createdAt: verified.createdAt,
+                signingKeyFingerprint: verified.signingKeyFingerprint
+            )
+        )
+        let candidates = root.appendingPathComponent("candidates")
+        let registryKey = InMemoryRestoreCandidateKeyStore()
+        let workspaceKeys = ToggleCleanupWorkspaceKeyStore()
+        let signingIdentities = InMemoryRestoreCandidateSigningIdentityStore()
+        let failingService = PortableArchiveRestoreService(
+            candidatesRoot: candidates,
+            candidateKeyStore: registryKey,
+            workspaceKeyStoreForCandidate: { _ in workspaceKeys },
+            signingIdentityStore: signingIdentities,
+            injectedFault: .markReadyPersistence
+        )
+        let failingWorker = PortableArchiveRestoreWorker(restoreService: failingService)
+
+        do {
+            _ = try await failingWorker.restore(request)
+            XCTFail("A failed ready-state persistence must not return a candidate.")
+        } catch let error as PortableArchiveRestoreError {
+            guard case .candidateCleanupPending = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+
+        let pendingRecords = try failingService.restoreCandidateRecordsForTesting()
+        XCTAssertEqual(pendingRecords.count, 1)
+        let pending = try XCTUnwrap(pendingRecords.first)
+        XCTAssertEqual(pending.state, .cleanupRetry)
+        XCTAssertNotEqual(pending.state, .ready)
+        XCTAssertEqual(pending.failureCategory, .cleanup)
+
+        workspaceKeys.allowCleanup()
+        let relaunchedService = PortableArchiveRestoreService(
+            candidatesRoot: candidates,
+            candidateKeyStore: registryKey,
+            workspaceKeyStoreForCandidate: { _ in workspaceKeys },
+            signingIdentityStore: signingIdentities
+        )
+        let relaunchedWorker = PortableArchiveRestoreWorker(restoreService: relaunchedService)
+        do {
+            _ = try await relaunchedWorker.restore(request)
+            XCTFail("The first relaunch must perform cleanup only, not restore another candidate.")
+        } catch let error as PortableArchiveRestoreError {
+            guard case .candidateCleanupPending = error else { return XCTFail("Unexpected error: \(error)") }
+        }
+        let cleaned = try XCTUnwrap(relaunchedService.restoreCandidateRecordsForTesting().first)
+        XCTAssertEqual(cleaned.state, .unavailable)
+        XCTAssertNotEqual(cleaned.state, .ready)
+        XCTAssertTrue(candidateDirectoryNames(in: candidates).isEmpty)
+
+        let restored = try await relaunchedWorker.restore(request)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: candidates.appendingPathComponent(restored.candidateID.uuidString.lowercased()).path))
+    }
+
+    func testAuthenticatedDuplicatePrimaryKeySnapshotLeavesNoCandidateMaterial() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-duplicate-primary-key-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var snapshot = try snapshotWithOpportunities(count: 2)
+        var mutable = try MutablePortableArchiveSnapshot(snapshot)
+        let opportunityRows = try XCTUnwrap(mutable.rows(named: "opportunities"))
+        XCTAssertEqual(opportunityRows.count, 2)
+        mutable.setValue(opportunityRows[0][0], table: "opportunities", row: 1, column: 0)
+        snapshot = mutable.encoded()
+
+        let outcome = try await restoreAuthenticatedInvalidSnapshot(snapshot, in: root)
+
+        XCTAssertTrue(candidateDirectoryNames(in: outcome.candidatesRoot).isEmpty)
+        let records = try outcome.service.restoreCandidateRecordsForTesting()
+        XCTAssertEqual(records.count, 1)
+        let record = try XCTUnwrap(records.first)
+        XCTAssertEqual(record.state, .unavailable)
+        XCTAssertEqual(record.failureCategory, .bootstrap)
+        XCTAssertNil(outcome.workspaceKeys.key(for: record.candidateID))
+        XCTAssertNil(outcome.signingIdentities.identity(for: record.candidateID))
+    }
+
+    func testAuthenticatedInvalidForeignKeySnapshotLeavesNoCandidateMaterial() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-invalid-foreign-key-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var snapshot = try snapshotWithTaskReminder()
+        var mutable = try MutablePortableArchiveSnapshot(snapshot)
+        let taskRows = try XCTUnwrap(mutable.rows(named: "task_reminders"))
+        XCTAssertEqual(taskRows.count, 1)
+        mutable.setText("missing-opportunity-id", table: "task_reminders", row: 0, column: 1)
+        snapshot = mutable.encoded()
+
+        let outcome = try await restoreAuthenticatedInvalidSnapshot(snapshot, in: root)
+
+        XCTAssertTrue(candidateDirectoryNames(in: outcome.candidatesRoot).isEmpty)
+        let records = try outcome.service.restoreCandidateRecordsForTesting()
+        XCTAssertEqual(records.count, 1)
+        let record = try XCTUnwrap(records.first)
+        XCTAssertEqual(record.state, .unavailable)
+        XCTAssertEqual(record.failureCategory, .bootstrap)
+        XCTAssertNil(outcome.workspaceKeys.key(for: record.candidateID))
+        XCTAssertNil(outcome.signingIdentities.identity(for: record.candidateID))
+    }
+
+    func testVerifiedArchiveRestoresIntoANewInactiveWorkspaceWithoutChangingSource() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-restore-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let sourceURL = root.appendingPathComponent("source.sqlite")
+        let sourceKey = Data(repeating: 1, count: 32)
+        let sourceDatabase = try EncryptedDatabase.open(url: sourceURL, key: sourceKey)
+        let source = try WorkspaceStore(
+            database: sourceDatabase,
+            now: Date(timeIntervalSince1970: 1_704_067_200),
+            actorID: "test",
+            correlationID: "source"
+        )
+        let sourceOpportunity = try source.create(CreateOpportunity(title: "Source role", company: "Rekon"))
+        _ = try source.recordDocumentReference(RecordDocumentReference(
+            opportunityID: sourceOpportunity.id,
+            kind: .resume,
+            filename: "resume.pdf",
+            contentType: "application/pdf",
+            sourceHash: String(repeating: "b", count: 64),
+            byteCount: 42,
+            bookmarkData: Data("source-bookmark".utf8)
+        ))
+        let deletedSourceOpportunity = try source.create(CreateOpportunity(title: "Deleted role", company: "Rekon"))
+        try source.deleteOpportunity(id: deletedSourceOpportunity.id)
+        let snapshot = try PortableArchiveSnapshotCodec.encode(from: sourceDatabase)
+        let recoveryKey = try RecoveryKey.generate()
+        let archiveURL = root.appendingPathComponent("source.rekonarchive")
+        let sourceSigningKey = Curve25519.Signing.PrivateKey()
+        let verified = try PortableArchiveService.writeAndVerify(
+            snapshot: snapshot,
+            recoveryKey: recoveryKey,
+            signingKey: sourceSigningKey,
+            archiveID: UUID(),
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200),
+            to: archiveURL
+        )
+
+        let workspaceKeys = InMemoryRestoreWorkspaceKeys()
+        let candidatesRoot = root.appendingPathComponent("candidates", isDirectory: true)
+        let candidateSigningIdentities = InMemoryRestoreCandidateSigningIdentityStore()
+        let restorer = PortableArchiveRestoreWorker(restoreService: PortableArchiveRestoreService(
+            candidatesRoot: candidatesRoot,
+            candidateKeyStore: InMemoryRestoreCandidateKeyStore(),
+            workspaceKeyStoreForCandidate: workspaceKeys.store,
+            signingIdentityStore: candidateSigningIdentities
+        ))
+        let restored = try await restorer.restore(
+            .init(
+                archiveURL: archiveURL,
+                recoveryKey: recoveryKey,
+                confirmation: .init(
+                archiveID: verified.archiveID,
+                createdAt: verified.createdAt,
+                signingKeyFingerprint: verified.signingKeyFingerprint
+            )
+            )
+        )
+
+        XCTAssertNotEqual(restored.candidateID.uuidString, "")
+        XCTAssertEqual(try source.opportunities(), [sourceOpportunity])
+
+        let restoredRoot = candidatesRoot.appendingPathComponent(restored.candidateID.uuidString.lowercased(), isDirectory: true)
+        XCTAssertNotEqual(try XCTUnwrap(workspaceKeys.key(for: restored.candidateID)), sourceKey)
+        XCTAssertNotEqual(try XCTUnwrap(candidateSigningIdentities.identity(for: restored.candidateID)), sourceSigningKey.rawRepresentation)
+
+        let restoredDatabase = try EncryptedDatabase.open(
+            url: restoredRoot.appendingPathComponent("workspace.sqlite"),
+            key: try XCTUnwrap(workspaceKeys.key(for: restored.candidateID)),
+            createIfMissing: false
+        )
+        let restoredStore = try WorkspaceStore(database: restoredDatabase, actorID: "test", correlationID: "restored")
+        XCTAssertEqual(try restoredStore.opportunities().map(\.title), ["Source role"])
+        let restoredDocument = try XCTUnwrap(try restoredStore.documentReferences(forOpportunityID: sourceOpportunity.id).first)
+        XCTAssertNil(restoredDocument.bookmarkData)
+        XCTAssertEqual(restoredDocument.availability, .relinkRequired)
+        XCTAssertFalse(try restoredStore.recoveryEnrollmentState().isEnabled)
+        XCTAssertTrue(try restoredStore.portableArchiveCatalogue().isEmpty)
+    }
     func testArchiveStagingUsesAppTemporaryDirectoryInsteadOfUserSelectedDirectory() {
         let selectedDestination = URL(fileURLWithPath: "/Users/example/Desktop/Recovery Archive.rekonarchive")
         let appTemporaryDirectory = URL(fileURLWithPath: "/private/var/folders/example/RekonPursuit/")
@@ -515,11 +1057,26 @@ final class PortableArchiveTests: XCTestCase {
         XCTAssertFalse(snapshot.contains(Data("opaque-bookmark-bytes".utf8)))
     }
 
+    private func assertRestoreFails(_ operation: () async throws -> Void) async {
+        do {
+            try await operation()
+            XCTFail("The restore operation was expected to fail.")
+        } catch {
+            // The exact redacted error varies by failure phase; the invariant
+            // under test is that no candidate is returned or activated.
+        }
+    }
+
     private func appendText(_ value: String, to data: inout Data) {
         let bytes = Data(value.utf8)
         data.append(3)
         appendUInt32(UInt32(bytes.count), to: &data)
         data.append(bytes)
+    }
+
+    private func candidateDirectoryNames(in root: URL) -> [String] {
+        (try? FileManager.default.contentsOfDirectory(atPath: root.path))?
+            .filter { $0 != ".staging" } ?? []
     }
 
     private func appendUInt32(_ value: UInt32, to data: inout Data) {
@@ -534,6 +1091,67 @@ final class PortableArchiveTests: XCTestCase {
             appendUInt32(0, to: &snapshot)
         }
         return snapshot
+    }
+
+    private func snapshotWithOpportunities(count: Int) throws -> Data {
+        let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent("restore-snapshot-opportunities-\(UUID().uuidString).sqlite")
+        defer { removeDatabase(at: databaseURL) }
+        let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 7, count: 32))
+        defer { try? database.close() }
+        let store = try WorkspaceStore(database: database, actorID: "restore-fixture", correlationID: "fixture")
+        for index in 0..<count {
+            _ = try store.create(CreateOpportunity(title: "Role \(index)", company: "Rekon"))
+        }
+        return try PortableArchiveSnapshotCodec.encode(from: database)
+    }
+
+    private func snapshotWithTaskReminder() throws -> Data {
+        let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent("restore-snapshot-task-\(UUID().uuidString).sqlite")
+        defer { removeDatabase(at: databaseURL) }
+        let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 8, count: 32))
+        defer { try? database.close() }
+        let store = try WorkspaceStore(database: database, actorID: "restore-fixture", correlationID: "fixture")
+        let opportunity = try store.create(CreateOpportunity(title: "Role", company: "Rekon"))
+        try database.execute(
+            "INSERT INTO task_reminders (id, opportunity_id, title, due_at, is_complete) VALUES (?, ?, ?, ?, ?)",
+            values: [.text("task-reminder-id"), .text(opportunity.id), .text("Follow up"), .real(1_704_067_200), .integer(0)]
+        )
+        return try PortableArchiveSnapshotCodec.encode(from: database)
+    }
+
+    private func restoreAuthenticatedInvalidSnapshot(_ snapshot: Data, in root: URL) async throws -> InvalidRestoreOutcome {
+        let recoveryKey = try RecoveryKey.generate()
+        let archiveURL = root.appendingPathComponent("invalid.rekonarchive")
+        let verified = try PortableArchiveService.writeAndVerify(
+            snapshot: snapshot,
+            recoveryKey: recoveryKey,
+            signingKey: .init(),
+            archiveID: UUID(),
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200),
+            to: archiveURL
+        )
+        let candidatesRoot = root.appendingPathComponent("candidates")
+        let workspaceKeys = InMemoryRestoreWorkspaceKeys()
+        let signingIdentities = InMemoryRestoreCandidateSigningIdentityStore()
+        let service = PortableArchiveRestoreService(
+            candidatesRoot: candidatesRoot,
+            candidateKeyStore: InMemoryRestoreCandidateKeyStore(),
+            workspaceKeyStoreForCandidate: workspaceKeys.store,
+            signingIdentityStore: signingIdentities
+        )
+        let worker = PortableArchiveRestoreWorker(restoreService: service)
+        await assertRestoreFails {
+            _ = try await worker.restore(.init(
+                archiveURL: archiveURL,
+                recoveryKey: recoveryKey,
+                confirmation: .init(
+                    archiveID: verified.archiveID,
+                    createdAt: verified.createdAt,
+                    signingKeyFingerprint: verified.signingKeyFingerprint
+                )
+            ))
+        }
+        return .init(candidatesRoot: candidatesRoot, service: service, workspaceKeys: workspaceKeys, signingIdentities: signingIdentities)
     }
 
     private func canonicalSnapshotWithRealOpportunityTimestamp() -> Data {
@@ -584,6 +1202,86 @@ final class PortableArchiveTests: XCTestCase {
         }
         XCTFail("Missing table \(expectedName)")
         return []
+    }
+}
+
+private struct InvalidRestoreOutcome {
+    let candidatesRoot: URL
+    let service: PortableArchiveRestoreService
+    let workspaceKeys: InMemoryRestoreWorkspaceKeys
+    let signingIdentities: InMemoryRestoreCandidateSigningIdentityStore
+}
+
+private struct MutablePortableArchiveSnapshot {
+    private struct Table {
+        let name: String
+        var rows: [[SnapshotValue]]
+    }
+
+    private var tables: [Table]
+
+    init(_ data: Data) throws {
+        var reader = SnapshotReader(data)
+        guard try reader.data(count: 8) == Data("RPSNAP01".utf8) else {
+            throw PortableArchiveError.archiveInvalid
+        }
+        let count = try reader.uint32()
+        var decoded: [Table] = []
+        decoded.reserveCapacity(Int(count))
+        for _ in 0..<count {
+            let name = try reader.text()
+            let rowCount = try reader.uint32()
+            var rows: [[SnapshotValue]] = []
+            rows.reserveCapacity(Int(rowCount))
+            for _ in 0..<rowCount {
+                let valueCount = try reader.uint32()
+                rows.append(try (0..<valueCount).map { _ in try reader.value() })
+            }
+            decoded.append(.init(name: name, rows: rows))
+        }
+        tables = decoded
+    }
+
+    func rows(named name: String) -> [[SnapshotValue]]? {
+        tables.first(where: { $0.name == name })?.rows
+    }
+
+    mutating func setValue(_ value: SnapshotValue, table: String, row: Int, column: Int) {
+        guard let tableIndex = tables.firstIndex(where: { $0.name == table }) else { return }
+        tables[tableIndex].rows[row][column] = value
+    }
+
+    mutating func setText(_ value: String, table: String, row: Int, column: Int) {
+        setValue(.init(tag: 3, integer: nil, data: Data(value.utf8)), table: table, row: row, column: column)
+    }
+
+    func encoded() -> Data {
+        var data = Data("RPSNAP01".utf8)
+        appendUInt32(UInt32(tables.count), to: &data)
+        for table in tables {
+            appendText(table.name, to: &data)
+            appendUInt32(UInt32(table.rows.count), to: &data)
+            for row in table.rows {
+                appendUInt32(UInt32(row.count), to: &data)
+                for value in row {
+                    data.append(value.tag)
+                    appendUInt32(UInt32(value.data.count), to: &data)
+                    data.append(value.data)
+                }
+            }
+        }
+        return data
+    }
+
+    private func appendText(_ value: String, to data: inout Data) {
+        let bytes = Data(value.utf8)
+        data.append(3)
+        appendUInt32(UInt32(bytes.count), to: &data)
+        data.append(bytes)
+    }
+
+    private func appendUInt32(_ value: UInt32, to data: inout Data) {
+        data.append(contentsOf: withUnsafeBytes(of: value.bigEndian, Array.init))
     }
 }
 
@@ -673,4 +1371,55 @@ private actor StaticArchiveSigningKeyStore: ArchiveSigningKeyStoring {
     ) async throws -> Data {
         rawKey
     }
+}
+
+private enum RestoreTestFailure: Error {
+    case injected
+}
+
+private final class FailingRestoreRegistryKeyStore: RestoreCandidateKeyStoring {
+    func readOrCreateKey() throws -> Data {
+        throw RestoreTestFailure.injected
+    }
+}
+
+private final class CleanupFailingWorkspaceKeyStore: WorkspaceKeyStore {
+    func readWorkspaceKey() throws -> Data? { nil }
+    func writeWorkspaceKey(_: Data) throws {}
+    func deleteWorkspaceKey() throws { throw RestoreTestFailure.injected }
+    func readPendingWorkspaceKey() throws -> Data? { nil }
+    func writePendingWorkspaceKey(_: Data) throws {}
+    func promotePendingWorkspaceKey() throws {}
+    func deletePendingWorkspaceKey() throws {}
+}
+
+private final class ToggleCleanupWorkspaceKeyStore: WorkspaceKeyStore {
+    private var primaryKey: Data?
+    private var pendingKey: Data?
+    private var cleanupAllowed = false
+
+    func readWorkspaceKey() throws -> Data? { primaryKey }
+    func writeWorkspaceKey(_ key: Data) throws { primaryKey = key }
+    func deleteWorkspaceKey() throws {
+        guard cleanupAllowed else { throw RestoreTestFailure.injected }
+        primaryKey = nil
+    }
+    func readPendingWorkspaceKey() throws -> Data? { pendingKey }
+    func writePendingWorkspaceKey(_ key: Data) throws { pendingKey = key }
+    func promotePendingWorkspaceKey() throws { primaryKey = pendingKey; pendingKey = nil }
+    func deletePendingWorkspaceKey() throws { pendingKey = nil }
+    func allowCleanup() { cleanupAllowed = true }
+}
+
+private final class ReadbackFailingSigningIdentityStore: RestoreCandidateSigningIdentityStoring {
+    func createAndVerify(for _: UUID) throws {}
+    func delete(for _: UUID) throws {}
+    func isAbsent(for _: UUID) throws -> Bool { false }
+}
+
+private final class RestoreWorkerThreadObservation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var observed: Bool?
+    func record(isMainThread: Bool) { lock.lock(); observed = isMainThread; lock.unlock() }
+    var mainThreadValue: Bool? { lock.lock(); defer { lock.unlock() }; return observed }
 }

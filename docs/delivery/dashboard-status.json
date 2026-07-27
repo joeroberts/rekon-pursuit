@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "RP-R7a-3a",
-  "nextEligibleTaskId": null,
+  "activeTaskId": "RP-R7a-3",
+  "nextEligibleTaskId": "RP-R7a-3b",
   "tasks": [
     {
       "id": "RP-R0",
@@ -204,7 +204,7 @@
       "workType": "Data lifecycle",
       "status": "in_progress",
       "releaseCondition": "The parent remains in progress while its serial corrective sub-slices are gated; no activation, export, purge, or expiry work is included.",
-      "latestTransition": "R7a-3a restore-worker foundation is the sole active corrective sub-slice; the UI/owner-smoke sub-slice remains unreleased.",
+      "latestTransition": "R7a-3a is accepted; its restore UI and owner-smoke successor is Next up for its own planning and approval gates.",
       "evidence": {
         "label": "R7a-3 task brief",
         "href": "../task-briefs/RP-R7a-3-restore-as-new-workspace.md"
@@ -215,9 +215,9 @@
       "id": "RP-R7a-3a",
       "title": "Restore worker foundation",
       "workType": "Data lifecycle",
-      "status": "in_progress",
-      "releaseCondition": "R7a-2 is accepted and Planning, Architecture/Security, QA, TPM, and Delivery approved this worker-only sub-slice. It excludes all UI, activation, switching, export, purge, and expiry work.",
-      "latestTransition": "Released as the sole active corrective sub-slice under the in-progress R7a-3 parent.",
+      "status": "accepted",
+      "releaseCondition": "Accepted worker-only foundation; it excludes UI, activation, switching, export, purge, and expiry work.",
+      "latestTransition": "Accepted after independent Architecture/Security, QA, and Code Review approval of the focused restore-worker correction.",
       "evidence": {
         "label": "R7a-3a task brief",
         "href": "../task-briefs/RP-R7a-3a-restore-worker-foundation.md"
@@ -228,12 +228,12 @@
       "id": "RP-R7a-3b",
       "title": "Restore UI and owner smoke",
       "workType": "Workflow",
-      "status": "backlog",
+      "status": "next_up",
       "releaseCondition": "Release only after R7a-3a is accepted and after its own plan and Architecture/Security, QA, TPM, and Delivery gates approve the UI scope.",
-      "latestTransition": "Unreleased dependency-gated successor; no user intervention is required.",
+      "latestTransition": "R7a-3a accepted; Next up for its own planning and Architecture/Security, QA, TPM, and Delivery gates. It is not released.",
       "evidence": {
-        "label": "R7a-3a task brief",
-        "href": "../task-briefs/RP-R7a-3a-restore-worker-foundation.md"
+        "label": "R7a-3 parent brief",
+        "href": "../task-briefs/RP-R7a-3-restore-as-new-workspace.md"
       },
       "needsUserAction": false
     },

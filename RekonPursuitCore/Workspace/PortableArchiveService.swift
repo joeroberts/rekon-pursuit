@@ -61,6 +61,10 @@ nonisolated struct PortableArchiveService {
 
     @discardableResult
     static func verify(data: Data, recoveryKey: RecoveryKey) throws -> VerifiedPortableArchive {
+        try readVerifiedArchive(data: data, recoveryKey: recoveryKey).archive
+    }
+
+    static func readVerifiedArchive(data: Data, recoveryKey: RecoveryKey) throws -> PortableArchiveContents {
         var reader = ArchiveReader(data)
         guard try reader.take(8) == magic, try reader.uint16() == formatVersion, try reader.uint32() == headerLength else { throw PortableArchiveError.archiveInvalid }
         let header = try reader.take(Int(headerLength))
@@ -84,13 +88,14 @@ nonisolated struct PortableArchiveService {
         let declaredSnapshotHash = try validateManifest(manifest, archiveID: archiveID, createdAtMilliseconds: createdAt)
         guard declaredSnapshotHash == Data(SHA256.hash(data: snapshot)) else { throw PortableArchiveError.verificationFailed }
         try validateSnapshot(snapshot)
-        return VerifiedPortableArchive(
+        let archive = VerifiedPortableArchive(
             archiveID: archiveID,
             createdAt: Date(timeIntervalSince1970: Double(createdAt) / 1_000),
             expiresAt: Date(timeIntervalSince1970: Double(expiresAt) / 1_000),
             ciphertextChecksum: checksum,
             signingKeyFingerprint: fingerprint
         )
+        return PortableArchiveContents(archive: archive, snapshot: snapshot)
     }
 
     private static func sealPayload(manifest: Data, snapshot: Data, key: Data, archiveID: UUID, manifestHash: Data) throws -> Data {
@@ -140,6 +145,11 @@ nonisolated struct PortableArchiveService {
 
     private static func randomBytes(_ count: Int) throws -> Data { var data = Data(repeating: 0, count: count); guard data.withUnsafeMutableBytes({ SecRandomCopyBytes(kSecRandomDefault, count, $0.baseAddress!) }) == errSecSuccess else { throw PortableArchiveError.archiveInvalid }; return data }
     private static func milliseconds(_ date: Date) -> Int64 { Int64((date.timeIntervalSince1970 * 1000).rounded(.towardZero)) }
+}
+
+nonisolated struct PortableArchiveContents: Sendable {
+    let archive: VerifiedPortableArchive
+    let snapshot: Data
 }
 
 nonisolated private struct ArchiveSnapshotValue { let tag: UInt8; let length: UInt32; var isCanonicalTimestamp: Bool { (tag == 0 && length == 0) || (tag == 1 && length == 8) } }

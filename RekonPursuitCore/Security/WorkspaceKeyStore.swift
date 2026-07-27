@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-protocol WorkspaceKeyStore: AnyObject {
+nonisolated protocol WorkspaceKeyStore: AnyObject {
     func readWorkspaceKey() throws -> Data?
     func writeWorkspaceKey(_ key: Data) throws
     func deleteWorkspaceKey() throws
@@ -50,6 +50,15 @@ nonisolated final class KeychainWorkspaceKeyStore: WorkspaceKeyStore {
         service = WorkspaceKeychainConfiguration.separateLocalWorkspaceService(for: identity)
         account = "local-primary-workspace-key"
         pendingAccount = "local-pending-workspace-key"
+    }
+
+    /// Restore candidates are deliberately isolated from both the active
+    /// workspace and the temporary "separate local workspace" escape hatch.
+    /// The account names are part of the restore-candidate v1 contract.
+    init(restoreCandidate identity: UUID) {
+        service = "com.rekonlabs.RekonPursuit.restore-candidate.v1"
+        account = "\(identity.uuidString.lowercased()).database"
+        pendingAccount = "\(identity.uuidString.lowercased()).pending"
     }
 
     func readWorkspaceKey() throws -> Data? {
