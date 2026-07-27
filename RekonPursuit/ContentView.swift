@@ -657,7 +657,18 @@ private struct AddOpportunityView: View {
                     if model.actionType == .other { TextField("Other action", text: $model.actionCustomText).accessibilityIdentifier("opportunity-next-action") }
                     Toggle("Add a due date", isOn: $model.hasDueDate)
                     if model.hasDueDate { DatePicker("Due", selection: $model.dueAt, displayedComponents: [.date, .hourAndMinute]) }
-                    Button("Save opportunity locally") { model.createOpportunity() }.accessibilityIdentifier("save-opportunity").keyboardShortcut(.defaultAction).disabled(model.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.company.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    HStack {
+                        Button("Save opportunity locally") { model.createOpportunity() }
+                            .accessibilityIdentifier("save-opportunity")
+                            .keyboardShortcut(.defaultAction)
+                            .disabled(model.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.company.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        if let error = model.addOpportunitySaveError {
+                            Text(error)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .accessibilityIdentifier("add-opportunity-save-error")
+                        }
+                    }
                 }
             }.padding(28).frame(maxWidth: 860, alignment: .leading)
         }

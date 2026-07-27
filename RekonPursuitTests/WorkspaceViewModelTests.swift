@@ -162,6 +162,43 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.opportunityCount, 0)
     }
 
+    func testInvalidJobURLShowsAddOpportunitySaveErrorWithoutWriting() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
+
+        model.start()
+        model.title = "Product Manager"
+        model.company = "Rekon Labs"
+        model.jobURL = "jobs.example.com/product-manager"
+        model.createOpportunity()
+
+        XCTAssertEqual(model.addOpportunitySaveError, "Enter an absolute http or https job URL with a host.")
+        XCTAssertEqual(try store.opportunities(), [])
+        XCTAssertEqual(try store.activityEvents(), [])
+
+        model.jobURL = "https://jobs.example.com/product-manager"
+        model.createOpportunity()
+
+        XCTAssertNil(model.addOpportunitySaveError)
+        XCTAssertEqual(try store.opportunities().count, 1)
+    }
+
+    func testInvalidCompensationShowsAddOpportunitySaveErrorWithoutWriting() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
+
+        model.start()
+        model.title = "Product Manager"
+        model.company = "Rekon Labs"
+        model.compensationMinimum = "200000"
+        model.compensationMaximum = "150000"
+        model.createOpportunity()
+
+        XCTAssertEqual(model.addOpportunitySaveError, "Compensation amounts must be non-negative, and the minimum cannot exceed the maximum.")
+        XCTAssertEqual(try store.opportunities(), [])
+        XCTAssertEqual(try store.activityEvents(), [])
+    }
+
     func testSuccessfulCreateUpdatesVisibleLocalCount() throws {
         let store = try makeStore()
         let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)

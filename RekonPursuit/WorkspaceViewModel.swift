@@ -182,6 +182,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var csvImportPlan: [CSVImportPlanRow] = []
     @Published private(set) var csvImportReport: CSVImportReport?
     @Published private(set) var csvImportReportRows: [CSVImportReportRow] = []
+    @Published private(set) var addOpportunitySaveError: String?
     @Published private(set) var statusMessage = "Opening local workspace…"
     @Published private(set) var canCreateWorkspace = false
     @Published private(set) var workspaceReady = false
@@ -421,11 +422,16 @@ final class WorkspaceViewModel: ObservableObject {
             actionCustomText = ""
             hasDueDate = false
             refreshCounts()
+            addOpportunitySaveError = nil
             statusMessage = "Saved locally."
         } catch let error as LocalizedError {
-            statusMessage = error.errorDescription ?? "The opportunity could not be saved."
+            let message = error.errorDescription ?? "The opportunity could not be saved."
+            addOpportunitySaveError = message
+            statusMessage = message
         } catch {
-            statusMessage = "The opportunity could not be saved."
+            let message = "The opportunity could not be saved."
+            addOpportunitySaveError = message
+            statusMessage = message
         }
     }
 
