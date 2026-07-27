@@ -56,7 +56,10 @@ their retention, deletion, or export rules.
 
 - Use only Apple platform cryptography: `SecRandomCopyBytes`, CryptoKit
   HKDF-SHA256, AES-GCM, SHA-256, and Curve25519 signing. No custom cipher,
-  KDF, file format, or third-party crypto dependency is introduced.
+  KDF, or third-party crypto dependency is introduced. The portable archive
+  uses one versioned application-owned package framing; its exact
+  canonicalization is architecture-owned in the R7a-2 task brief, rather than
+  relying on an ad-hoc file encoding.
 - Each archive receives a random content key. The source workspace is read
   while open and serialized into a versioned logical snapshot; the raw
   SQLCipher database file and its database key are never archived. The archive

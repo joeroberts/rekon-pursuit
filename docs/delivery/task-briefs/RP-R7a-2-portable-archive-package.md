@@ -42,40 +42,126 @@ switch to, export from, purge, rewrite, or remove an archive.
 
 ## Package and catalogue contract
 
-1. Generate a random content key and per-archive salt. AES-GCM seals the
-   versioned snapshot. HKDF-SHA256 derives a wrapping key from the operation
-   recovery key and salt; AES-GCM seals the content key in the recovery
-   envelope.
-2. The readable outer header contains only archive ID, format version,
-   created/expiry timestamps, salt, manifest hash, archive checksum, recovery
-   envelope, signing public key/fingerprint, and signature. It contains no
-   user content, full local path, recovery key, database key, or plaintext
-   content key.
-3. Define one canonical header commitment before implementation. It includes
-   archive ID, format version, salt, manifest hash, signing-key fingerprint,
-   archive checksum, creation/expiry timestamps, and all other fixed header
-   fields; it excludes envelope and signature. It is the recovery-envelope
-   AAD. The signature preimage includes the finalized envelope and canonical
-   header fields but excludes only the signature.
+1. Generate a random 32-byte content key and a random 32-byte per-archive
+   salt with `SecRandomCopyBytes`. AES-GCM seals the versioned snapshot.
+   HKDF-SHA256 derives a 32-byte wrapping key from the operation recovery key,
+   salt, and the exact UTF-8 info value
+   `RekonPursuit/portable-archive/wrapping-key/v1`. AES-GCM seals the content
+   key in the recovery envelope. The content, wrapping, and supplied recovery
+   keys exist only for the operation and are discarded on every exit path.
+2. A portable archive is one new regular file with the `.rekonarchive`
+   extension. Its application-owned **v1 package framing** is specified below;
+   this is a versioned container boundary, not a new cipher, KDF, or ambiguous
+   serialization. The parser accepts exactly one v1 framing and rejects an
+   unknown suite/version, a noncanonical length, duplicate/trailing bytes, or
+   any field above its stated bound.
+3. The readable outer header contains only archive ID, format version,
+   created/expiry timestamps, salt, manifest hash, ciphertext checksum,
+   recovery envelope, signing public key/fingerprint, and signature. It
+   contains no user content, full local path, recovery key, database key, or
+   plaintext content key.
 4. The encrypted manifest contains only IDs, versions, timestamps, checksums,
    recovery-envelope hash, signing-key fingerprint, and privacy-minimized
    retained-deletion inventory summary. The signing key signs the manifest hash
    plus the defined signature preimage. The public key travels in the header.
 5. A workspace-scoped Curve25519 signing key is created on first archive and
    retained in the Data Protection Keychain. It is not a recovery key and is
-   never exported. If a catalogue exists and its signing key is missing, the
-   app fails closed rather than silently replacing that identity. The exact
-   Keychain account namespace and test seam require Architect/Security signoff.
+   never exported. Its service is
+   `com.rekonlabs.RekonPursuit.portable-archive-signing.v1`; its account is the
+   lowercase hex SHA-256 of the byte concatenation of the exact UTF-8 domain
+   `RekonPursuit/portable-archive/signing-account/v1\\0` and the UTF-8
+   workspace ID. It uses `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`.
+   If a catalogue exists and this signing key is missing, the app fails closed
+   rather than silently replacing that identity. The test double may be
+   injected only through the archive-key-store protocol, never a launch
+   argument or environment switch.
 6. Persist a catalogue migration with an opaque security-scoped destination
    bookmark (not a path), display filename, archive ID, format version,
-   created/expires timestamps, verification state, archive checksum, and
-   signing-key fingerprint. The archive is written to a new selected
-   destination only; no existing target is overwritten.
+   created/expires timestamps, verification state, ciphertext checksum, and
+   signing-key fingerprint. The archive is written to a newly selected,
+   non-existing target only; no existing target is overwritten.
 7. Write a temporary sibling package, read it back in the same operation, and
-   verify header structure, signature, checksum, recovery envelope unwrap, and
+   verify header structure, signature, checksum, recovery-envelope unwrap, and
    in-memory snapshot decode before atomically promoting the file and its
    catalogue row. Store only a redacted `portable_backup_created` or failure
    outcome activity event with archive ID and outcome category.
+
+## Frozen v1 archive encoding and snapshot projection
+
+All integers below are unsigned big-endian except the explicitly signed
+millisecond timestamps. `Data` fields are raw bytes; a fixed-size field must
+have exactly that size. The archive ID is a UUID's 16 raw RFC-4122 bytes. The
+format has no optional fields in v1.
+
+1. The outer file is exactly: `RPARCH01` (8 ASCII bytes), format version
+   `UInt16(1)`, header length `UInt32(317)`, the 317-byte header, payload
+   length `UInt64`, then the payload bytes and EOF. Payload length must be at
+   least 28 bytes (an AES-GCM combined nonce/tag) and no larger than 512 MiB.
+2. The fixed 317-byte header is, in order: archive ID (16), created-at Unix
+   milliseconds (`Int64`), expires-at Unix milliseconds (`Int64`), suite
+   `UInt8(1)`, salt (32), SHA-256(manifest bytes) (32),
+   SHA-256(payload combined bytes) (32), Curve25519 signing public key (32),
+   SHA-256(signing public key) (32), recovery-envelope AES-GCM combined bytes
+   (60), and Curve25519 signature (64). `expiresAt` must equal
+   `createdAt + 30 * 24 * 60 * 60 * 1000` exactly. The archive checksum means
+   SHA-256 of the payload's AES-GCM `combined` bytes only; it never includes
+   the outer header or archive file itself.
+3. The header commitment is exactly the concatenation of the UTF-8 domain
+   `RekonPursuit/portable-archive/header-commitment/v1\\0`, outer magic,
+   format version, fixed header length, then header fields through and
+   including signing-key fingerprint. It excludes the envelope and signature.
+   It is the AAD when sealing and opening the recovery envelope. The signature
+   preimage is exactly the UTF-8 domain
+   `RekonPursuit/portable-archive/signature/v1\\0`, then the header
+   commitment, then the 60-byte recovery-envelope combined value. The signing
+   public key verifies that signature; its SHA-256 must equal the header
+   fingerprint before the signature is trusted.
+4. The payload plaintext is exactly: `RPPAYLD1` (8 ASCII bytes), manifest
+   length `UInt32`, snapshot length `UInt64`, manifest bytes, snapshot bytes.
+   It is sealed with the content key using AES-GCM and payload AAD equal to
+   the UTF-8 domain `RekonPursuit/portable-archive/payload/v1\\0`, archive ID,
+   format version, and SHA-256(manifest bytes). The manifest/snapshot lengths
+   are bounded to 8 MiB and 480 MiB respectively and their sum must exactly
+   match the plaintext length.
+5. Manifest and snapshot use the same deterministic length-prefixed value
+   codec: tag (`UInt8`), byte length (`UInt32`), then raw bytes, with strings
+   encoded as unnormalised UTF-8 and absent optionals represented by tag zero
+   and zero length. Maps/tables are emitted in the fixed order below; rows are
+   ordered by their primary-key tuple using bytewise UTF-8 comparison. Dates
+   are signed Unix milliseconds. Floating compensation values are encoded as
+   IEEE-754 binary64 big-endian; no textual number representation is allowed.
+   This preserves entered text without locale-dependent transformation.
+6. Snapshot v1 contains, in this exact table order, only rows associated with
+   active opportunities or active contacts: `opportunities`,
+   `task_reminders`, `opportunity_stage_history`,
+   `opportunity_response_history`, `contacts`, `contact_opportunities`,
+   `interactions`, `import_reports`, `import_report_rows`, `posting_checks`,
+   `reconciliation_reviews`, `reconciliation_results`,
+   `reconciliation_check_operations`, `document_references`, and
+   `activity_events`. A linked row is omitted if any non-null opportunity or
+   contact subject is absent from the snapshot. `deletion_tombstones` follows
+   those tables and contains only its existing four privacy-minimized fields.
+   `schema_migrations`, `migration_history`, `workspace_metadata`,
+   `recovery_enrollment`, any future backup catalogue, and all
+   `document_references.bookmark_data` bytes are excluded. Included document
+   references encode the existing metadata with `bookmark_data` absent and
+   availability fixed to `relink_required`.
+7. `WorkspaceStore` captures this projection while holding its serialized
+   store lock and within a new SQLite deferred read transaction that spans all
+   projection queries. It must roll back/close that read transaction before
+   file writing begins. No raw database file, WAL, or mutable cursor may escape
+   that boundary. The implementation must add a table/column registry whose
+   ordered column list is covered by one deterministic snapshot fixture; use
+   of `SELECT *`, dictionary iteration, `JSONEncoder`, or locale-sensitive
+   formatting is prohibited.
+8. The selected destination must be accessed through a user-granted
+   read/write security scope only while creating/verifying the archive. The
+   temporary sibling has a generated name and is opened with exclusive-create
+   semantics. On cancellation or failure it is removed best effort; a final
+   archive and a catalogue/activity success record are created only after
+   read-back verification succeeds. If final rename or catalogue transaction
+   fails, no new catalogue row is committed and the app reports a truthful
+   recoverability failure; it must not overwrite or remove an earlier archive.
 
 ## Required implementation shape
 
