@@ -783,8 +783,11 @@ final class WorkspaceStore {
     func enroll(recoveryKey: RecoveryKey) throws {
         let commandNow = clock()
         try synchronized {
+            guard try database.rows("SELECT id FROM recovery_enrollment WHERE id = 1").isEmpty else {
+                throw WorkspaceStoreError.recoveryAlreadyEnrolled
+            }
             try database.transaction {
-                try database.execute("INSERT OR REPLACE INTO recovery_enrollment (id, fingerprint, enrolled_at) VALUES (1, ?, ?)", values: [.text(recoveryKey.fingerprint), .real(commandNow.timeIntervalSince1970)])
+                try database.execute("INSERT INTO recovery_enrollment (id, fingerprint, enrolled_at) VALUES (1, ?, ?)", values: [.text(recoveryKey.fingerprint), .real(commandNow.timeIntervalSince1970)])
                 if failBeforeActivityInsert { throw WorkspaceStoreError.injectedFailure }
                 try appendActivity(kind: "recovery_enrollment_enabled", opportunityID: nil, occurredAt: commandNow)
             }

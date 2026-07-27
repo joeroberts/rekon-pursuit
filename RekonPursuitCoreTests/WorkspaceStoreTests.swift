@@ -12,6 +12,8 @@ final class WorkspaceStoreTests: XCTestCase {
         let generated = try RecoveryKey.generate()
         XCTAssertEqual(RecoveryKey.parse(generated.displayValue), generated)
         XCTAssertNil(RecoveryKey.parse(String(generated.displayValue.dropLast())))
+        let wrongChecksum = String(generated.displayValue.dropLast()) + (generated.displayValue.last == "A" ? "B" : "A")
+        XCTAssertNil(RecoveryKey.parse(wrongChecksum))
 
         let store = try makeStore()
         try store.enroll(recoveryKey: generated)
@@ -21,6 +23,10 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertTrue(record.fingerprint.hasPrefix("v1:"))
         XCTAssertFalse(record.fingerprint.contains(generated.displayValue))
         XCTAssertEqual(try store.activityEvents().last?.kind, "recovery_enrollment_enabled")
+        try store.close()
+        let reopenedDatabase = try EncryptedDatabase.open(url: databaseURL, key: key, createIfMissing: false)
+        let reopened = try WorkspaceStore(database: reopenedDatabase, actorID: "test", correlationID: "test")
+        XCTAssertTrue(try reopened.recoveryEnrollmentState().isEnabled)
     }
 
     func testRecoveryEnrollmentPersistenceFailureDoesNotReplaceExistingEnrollment() throws {
@@ -32,6 +38,26 @@ final class WorkspaceStoreTests: XCTestCase {
 
         XCTAssertThrowsError(try failing.enroll(recoveryKey: try RecoveryKey.generate()))
         XCTAssertEqual(try failing.recoveryEnrollmentRecordForTesting(), original)
+    }
+
+    func testInitialRecoveryEnrollmentPersistenceFailureLeavesWorkspaceDisabled() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        let failing = try WorkspaceStore(database: database, actorID: "test", correlationID: "test", failBeforeActivityInsert: true)
+
+        XCTAssertThrowsError(try failing.enroll(recoveryKey: try RecoveryKey.generate()))
+
+        XCTAssertFalse(try failing.recoveryEnrollmentState().isEnabled)
+        XCTAssertNil(try failing.recoveryEnrollmentRecordForTesting())
+    }
+
+    func testSecondSuccessfulEnrollmentAttemptCannotReplaceExistingEnrollment() throws {
+        let store = try makeStore()
+        try store.enroll(recoveryKey: try RecoveryKey.generate())
+        let original = try XCTUnwrap(try store.recoveryEnrollmentRecordForTesting())
+
+        XCTAssertThrowsError(try store.enroll(recoveryKey: try RecoveryKey.generate()))
+
+        XCTAssertEqual(try store.recoveryEnrollmentRecordForTesting(), original)
     }
 
     override func setUpWithError() throws {

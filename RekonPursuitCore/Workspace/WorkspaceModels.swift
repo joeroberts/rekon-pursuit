@@ -674,6 +674,7 @@ enum WorkspaceStoreError: Error, LocalizedError {
     case reconciliationTaskRequiresClosure
     case invalidDocumentReference
     case invalidPublicURLCheck
+    case recoveryAlreadyEnrolled
 
     var errorDescription: String? {
         switch self {
@@ -683,6 +684,8 @@ enum WorkspaceStoreError: Error, LocalizedError {
             return "Enter an absolute http or https job URL with a host."
         case .invalidCompensation:
             return "Compensation amounts must be non-negative, and the minimum cannot exceed the maximum."
+        case .recoveryAlreadyEnrolled:
+            return "A recovery key is already enrolled and cannot be reset."
         case .injectedFailure:
             return "The opportunity could not be saved."
         case .unexpectedDatabaseValue:
