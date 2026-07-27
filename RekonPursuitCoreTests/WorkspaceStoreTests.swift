@@ -798,6 +798,32 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents().last?.contactID, contact.id)
     }
 
+    func testContactRejectsMalformedEmailOrProfileURLWithoutWriting() throws {
+        let store = try makeStore()
+
+        XCTAssertThrowsError(try store.createContact(CreateContact(name: "Alex Morgan", email: "alex@")))
+        XCTAssertThrowsError(try store.createContact(CreateContact(name: "Alex Morgan", profileURL: "linkedin.com/in/alex")))
+        XCTAssertThrowsError(try store.createContact(CreateContact(name: "Alex Morgan", profileURL: "https:///in/alex")))
+
+        XCTAssertEqual(try store.contacts(), [])
+        XCTAssertEqual(try store.activityEvents(), [])
+    }
+
+    func testEmployerOpportunitiesUseNormalizedExactMatchWithoutImplicitLinks() throws {
+        let store = try makeStore()
+        let matching = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let normalizedMatch = try store.create(CreateOpportunity(title: "Director", company: "rekon labs"))
+        _ = try store.create(CreateOpportunity(title: "Recruiter", company: "Rekon Labs International"))
+        let contact = try store.createContact(CreateContact(name: "Alex Morgan", employer: " REKON LABS "))
+
+        XCTAssertEqual(Set(try store.opportunities(forEmployer: contact.employer).map(\.id)), Set([matching.id, normalizedMatch.id]))
+        XCTAssertEqual(try store.opportunities(forContactID: contact.id), [])
+
+        try store.linkContact(contactID: contact.id, toOpportunityID: matching.id)
+
+        XCTAssertEqual(try store.opportunities(forContactID: contact.id).map(\.id), [matching.id])
+    }
+
     func testOpportunitiesForContactDecodeStructuredOpportunityFields() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(

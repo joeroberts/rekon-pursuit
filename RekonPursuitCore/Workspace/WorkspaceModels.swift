@@ -560,6 +560,8 @@ enum WorkspaceStoreError: Error, LocalizedError {
     case unexpectedDatabaseValue
     case unresolvedImportDecision
     case invalidContact
+    case invalidContactEmail
+    case invalidContactProfileURL
     case invalidInteraction
     case invalidReconciliationResult
     case closureNotConfirmed
@@ -583,6 +585,10 @@ enum WorkspaceStoreError: Error, LocalizedError {
             return "Choose Skip or Keep separate for each duplicate CSV row."
         case .invalidContact:
             return "Enter a contact name."
+        case .invalidContactEmail:
+            return "Enter an email address with a local part, @, and domain."
+        case .invalidContactProfileURL:
+            return "Enter an absolute http or https profile URL with a host."
         case .invalidInteraction:
             return "Enter an interaction summary and choose a valid linked opportunity."
         case .invalidReconciliationResult:

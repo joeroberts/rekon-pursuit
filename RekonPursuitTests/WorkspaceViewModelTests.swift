@@ -997,6 +997,45 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.opportunities.map(\.id), [first.id, second.id])
     }
 
+    func testContactEmployerPickerShowsMatchingOpportunitiesOnlyAfterExplicitLinks() throws {
+        let store = try makeStore()
+        let first = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let second = try store.create(CreateOpportunity(title: "Director", company: "rekon labs"))
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
+
+        model.start()
+        XCTAssertEqual(model.contactEmployerSuggestions, ["Rekon Labs"])
+        model.contactName = "Alex Morgan"
+        model.selectContactEmployer("Rekon Labs")
+        model.createContact()
+
+        XCTAssertEqual(Set(model.selectedContactEmployerOpportunities.map(\.id)), Set([first.id, second.id]))
+        XCTAssertEqual(model.selectedContactOpportunities, [])
+
+        model.linkSelectedContact(to: first)
+        XCTAssertEqual(model.selectedContactOpportunities.map(\.id), [first.id])
+
+        model.unlinkSelectedContact(from: first)
+        XCTAssertEqual(model.selectedContactOpportunities, [])
+    }
+
+    func testContactProfileURLShowsHTTPWarningAndRejectsMalformedInputWithoutWriting() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
+
+        model.start()
+        model.contactName = "Alex Morgan"
+        model.contactProfileURL = "http://profiles.example.com/alex"
+        XCTAssertEqual(model.contactProfileURLWarning, "This profile URL uses HTTP rather than HTTPS.")
+
+        model.contactProfileURL = "profiles.example.com/alex"
+        XCTAssertEqual(model.contactProfileURLWarning, "Use an absolute http or https profile URL with a host.")
+        model.createContact()
+
+        XCTAssertEqual(model.contacts, [])
+        XCTAssertEqual(model.statusMessage, "Enter an absolute http or https profile URL with a host.")
+    }
+
     func testSelectedContactCanLogAndDisplayALocalInteraction() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))

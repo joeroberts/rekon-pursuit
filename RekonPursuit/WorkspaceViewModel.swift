@@ -144,6 +144,8 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var selectedHasDueDate = false
     @Published var contactName = ""
     @Published var contactEmployer = ""
+    @Published var contactEmployerSearch = ""
+    @Published var isAddingNewContactEmployer = false
     @Published var contactTitle = ""
     @Published var contactEmail = ""
     @Published var contactProfileURL = ""
@@ -165,6 +167,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var selectedOpportunityInteractions: [OpportunityInteraction] = []
     @Published private(set) var selectedContactInteractions: [ContactInteraction] = []
     @Published private(set) var selectedContactOpportunities: [Opportunity] = []
+    @Published private(set) var selectedContactEmployerOpportunities: [Opportunity] = []
     @Published private(set) var selectedContactLastTouch: Date?
     @Published private(set) var selectedContactNextTouch: Date?
     @Published var reconciliationOutcome: ReconciliationOutcome = .stillOpen
@@ -536,6 +539,25 @@ final class WorkspaceViewModel: ObservableObject {
         Array(Set(contacts.map(\.employer).filter { !$0.isEmpty })).sorted()
     }
 
+    var contactEmployerSuggestions: [String] {
+        var canonicalEmployers: [String: String] = [:]
+        for opportunity in opportunities {
+            let employer = opportunity.company.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalized = employer.lowercased()
+            if !employer.isEmpty, canonicalEmployers[normalized] == nil {
+                canonicalEmployers[normalized] = employer
+            }
+        }
+        return canonicalEmployers.values.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    var filteredContactEmployerSuggestions: [String] {
+        let query = contactEmployerSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        return contactEmployerSuggestions.filter { query.isEmpty || $0.localizedCaseInsensitiveContains(query) }
+    }
+
+    var contactProfileURLWarning: String? { profileURLWarning(for: contactProfileURL) }
+
     var selectedContact: Contact? {
         contacts.first { $0.id == selectedContactID }
     }
@@ -677,9 +699,9 @@ final class WorkspaceViewModel: ObservableObject {
     func createContact() {
         guard let store = readyStore() else { return }
         do {
-            _ = try store.createContact(contactCommand())
-            clearContactDraft()
+            let contact = try store.createContact(contactCommand())
             refreshCounts()
+            selectContact(contact)
             statusMessage = "Contact saved locally."
         } catch let error as LocalizedError {
             statusMessage = error.errorDescription ?? "The contact could not be saved."
@@ -692,6 +714,10 @@ final class WorkspaceViewModel: ObservableObject {
         selectedContactID = contact.id
         contactName = contact.name
         contactEmployer = contact.employer
+        contactEmployerSearch = contact.employer
+        isAddingNewContactEmployer = !contact.employer.isEmpty && !contactEmployerSuggestions.contains {
+            $0.compare(contact.employer, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+        }
         contactTitle = contact.title
         contactEmail = contact.email
         contactProfileURL = contact.profileURL
@@ -704,11 +730,30 @@ final class WorkspaceViewModel: ObservableObject {
         clearContactDraft()
     }
 
+    func selectContactEmployer(_ employer: String) {
+        contactEmployer = employer.trimmingCharacters(in: .whitespacesAndNewlines)
+        contactEmployerSearch = contactEmployer
+        isAddingNewContactEmployer = false
+    }
+
+    func beginNewContactEmployer() {
+        contactEmployer = ""
+        contactEmployerSearch = ""
+        isAddingNewContactEmployer = true
+    }
+
+    func chooseTrackedContactEmployer() {
+        contactEmployer = ""
+        contactEmployerSearch = ""
+        isAddingNewContactEmployer = false
+    }
+
     func saveSelectedContact() {
         guard let store = readyStore(), !selectedContactID.isEmpty else { return }
         do {
-            _ = try store.updateContact(id: selectedContactID, command: contactCommand())
+            let contact = try store.updateContact(id: selectedContactID, command: contactCommand())
             refreshCounts()
+            selectContact(contact)
             statusMessage = "Contact updated locally."
         } catch let error as LocalizedError {
             statusMessage = error.errorDescription ?? "The contact could not be updated."
@@ -744,6 +789,28 @@ final class WorkspaceViewModel: ObservableObject {
         guard let store = readyStore(), !selectedOpportunityID.isEmpty else { return }
         do {
             try store.unlinkContact(contactID: contact.id, fromOpportunityID: selectedOpportunityID)
+            refreshCounts()
+            statusMessage = "Contact unlinked locally."
+        } catch {
+            statusMessage = "The contact could not be unlinked."
+        }
+    }
+
+    func linkSelectedContact(to opportunity: Opportunity) {
+        guard let store = readyStore(), !selectedContactID.isEmpty else { return }
+        do {
+            try store.linkContact(contactID: selectedContactID, toOpportunityID: opportunity.id)
+            refreshCounts()
+            statusMessage = "Contact linked locally."
+        } catch {
+            statusMessage = "The contact could not be linked."
+        }
+    }
+
+    func unlinkSelectedContact(from opportunity: Opportunity) {
+        guard let store = readyStore(), !selectedContactID.isEmpty else { return }
+        do {
+            try store.unlinkContact(contactID: selectedContactID, fromOpportunityID: opportunity.id)
             refreshCounts()
             statusMessage = "Contact unlinked locally."
         } catch {
@@ -1284,6 +1351,8 @@ final class WorkspaceViewModel: ObservableObject {
         selectedContactID = ""
         contactName = ""
         contactEmployer = ""
+        contactEmployerSearch = ""
+        isAddingNewContactEmployer = false
         contactTitle = ""
         contactEmail = ""
         contactProfileURL = ""
@@ -1306,12 +1375,14 @@ final class WorkspaceViewModel: ObservableObject {
             guard let store, !selectedContactID.isEmpty else {
                 selectedContactInteractions = []
                 selectedContactOpportunities = []
+                selectedContactEmployerOpportunities = []
                 selectedContactLastTouch = nil
                 selectedContactNextTouch = nil
                 return
             }
             selectedContactInteractions = try store.contactInteractions(forContactID: selectedContactID)
             selectedContactOpportunities = try store.opportunities(forContactID: selectedContactID)
+            selectedContactEmployerOpportunities = try store.opportunities(forEmployer: selectedContact?.employer ?? "")
             selectedContactLastTouch = try store.lastTouch(forContactID: selectedContactID)
             selectedContactNextTouch = try store.nextTouch(forContactID: selectedContactID)
             if !interactionOpportunityID.isEmpty && !selectedContactOpportunities.contains(where: { $0.id == interactionOpportunityID }) {
@@ -1424,6 +1495,15 @@ final class WorkspaceViewModel: ObservableObject {
             return "Use an absolute http or https URL with a host. Imported legacy URLs are preserved until changed."
         }
         return scheme == "http" ? "This job URL uses HTTP rather than HTTPS." : nil
+    }
+
+    private func profileURLWarning(for value: String) -> String? {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        guard let components = URLComponents(string: value), let scheme = components.scheme?.lowercased(), let host = components.host, !host.isEmpty, ["http", "https"].contains(scheme) else {
+            return "Use an absolute http or https profile URL with a host."
+        }
+        return scheme == "http" ? "This profile URL uses HTTP rather than HTTPS." : nil
     }
 
     private func refreshStageHistory() {

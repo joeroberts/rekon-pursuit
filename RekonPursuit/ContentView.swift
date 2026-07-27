@@ -747,6 +747,9 @@ private struct CSVImportView: View {
 
 private struct ContactsView: View {
     @ObservedObject var model: WorkspaceViewModel; let open: (Opportunity) -> Void; let delete: (Contact) -> Void
+    @State private var relationshipContextExpanded = false
+    @State private var notesExpanded = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -778,12 +781,49 @@ private struct ContactsView: View {
                 GroupBox(model.selectedContact == nil ? "New contact" : "Contact record") {
                     Form {
                         TextField("Name", text: $model.contactName).accessibilityIdentifier("contact-name")
-                        TextField("Current employer (optional)", text: $model.contactEmployer)
+                        if model.isAddingNewContactEmployer {
+                            TextField("New employer (optional)", text: $model.contactEmployer)
+                            Button("Choose tracked employer") { model.chooseTrackedContactEmployer() }
+                        } else {
+                            TextField("Search tracked employers", text: $model.contactEmployerSearch)
+                                .accessibilityIdentifier("contact-employer-search")
+                            if !model.contactEmployer.isEmpty {
+                                HStack {
+                                    Text("Employer: \(model.contactEmployer)").foregroundStyle(.secondary)
+                                    Button("Clear") { model.chooseTrackedContactEmployer() }
+                                }
+                            }
+                            if model.filteredContactEmployerSuggestions.isEmpty {
+                                Text("No tracked employers match. Add one only when needed.").font(.caption).foregroundStyle(.secondary)
+                            } else {
+                                ForEach(model.filteredContactEmployerSuggestions, id: \.self) { employer in
+                                    Button(employer) { model.selectContactEmployer(employer) }
+                                }
+                            }
+                            Button("Add new employer") { model.beginNewContactEmployer() }
+                        }
                         TextField("Title (optional)", text: $model.contactTitle)
                         TextField("Email (optional)", text: $model.contactEmail)
                         TextField("Profile URL (optional)", text: $model.contactProfileURL)
-                        TextField("Relationship context (optional)", text: $model.contactRelationshipContext)
-                        TextField("Notes (optional)", text: $model.contactNotes, axis: .vertical)
+                        if let warning = model.contactProfileURLWarning { Text(warning).font(.caption).foregroundStyle(.orange) }
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Relationship context (optional)").font(.caption).foregroundStyle(.secondary)
+                                Spacer()
+                                Button(relationshipContextExpanded ? "Collapse" : "Expand") { relationshipContextExpanded.toggle() }
+                            }
+                            TextEditor(text: $model.contactRelationshipContext)
+                                .frame(minHeight: relationshipContextExpanded ? 120 : 48, maxHeight: relationshipContextExpanded ? 180 : 48)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Notes (optional)").font(.caption).foregroundStyle(.secondary)
+                                Spacer()
+                                Button(notesExpanded ? "Collapse" : "Expand") { notesExpanded.toggle() }
+                            }
+                            TextEditor(text: $model.contactNotes)
+                                .frame(minHeight: notesExpanded ? 120 : 48, maxHeight: notesExpanded ? 180 : 48)
+                        }
                         HStack {
                             Button("New contact") { model.beginNewContact() }
                             Spacer()
@@ -796,12 +836,35 @@ private struct ContactsView: View {
                     }
                 }
                 if model.selectedContact != nil {
-                    GroupBox("Linked opportunities") {
-                        if model.selectedContactOpportunities.isEmpty {
-                            Text("This contact is not linked to an active opportunity.").foregroundStyle(.secondary)
+                    GroupBox("Employer opportunities") {
+                        if model.contactEmployer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("Choose or add an employer to show its active tracked opportunities.").foregroundStyle(.secondary)
+                        } else if model.selectedContactEmployerOpportunities.isEmpty {
+                            Text("No active tracked opportunities use this employer.").foregroundStyle(.secondary)
                         } else {
+                            Text("Choose Link to create a relationship; viewing an employer never links records automatically.")
+                                .font(.caption).foregroundStyle(.secondary)
+                            ForEach(model.selectedContactEmployerOpportunities, id: \.id) { opportunity in
+                                HStack {
+                                    Button("\(opportunity.title) · \(opportunity.company)") { open(opportunity) }
+                                    Spacer()
+                                    if model.selectedContactOpportunities.contains(where: { $0.id == opportunity.id }) {
+                                        Button("Unlink") { model.unlinkSelectedContact(from: opportunity) }
+                                    } else {
+                                        Button("Link") { model.linkSelectedContact(to: opportunity) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if !model.selectedContactOpportunities.isEmpty {
+                        GroupBox("Linked opportunities") {
                             ForEach(model.selectedContactOpportunities, id: \.id) { opportunity in
-                                Button("\(opportunity.title) · \(opportunity.company)") { open(opportunity) }
+                                HStack {
+                                    Button("\(opportunity.title) · \(opportunity.company)") { open(opportunity) }
+                                    Spacer()
+                                    Button("Unlink") { model.unlinkSelectedContact(from: opportunity) }
+                                }
                             }
                         }
                     }

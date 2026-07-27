@@ -484,6 +484,14 @@ final class WorkspaceStore {
         }
     }
 
+    func opportunities(forEmployer employer: String) throws -> [Opportunity] {
+        let employer = employer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !employer.isEmpty else { return [] }
+        return try synchronized {
+            try database.rows(opportunitySelect + " FROM opportunities WHERE deleted_at IS NULL AND lower(trim(company)) = lower(trim(?)) ORDER BY company, title, id", values: [.text(employer)]).map(opportunity(from:))
+        }
+    }
+
     func interactions(forOpportunityID opportunityID: String) throws -> [Interaction] {
         try synchronized {
             guard try isActiveOpportunity(opportunityID) else { return [] }
@@ -962,16 +970,25 @@ final class WorkspaceStore {
     private func validatedContact(id: String?, command: CreateContact) throws -> Contact {
         let name = command.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw WorkspaceStoreError.invalidContact }
+        let email = command.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isValidContactEmail(email) else { throw WorkspaceStoreError.invalidContactEmail }
+        let profileURL = command.profileURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isValidJobURL(profileURL) else { throw WorkspaceStoreError.invalidContactProfileURL }
         return Contact(
             id: id ?? "",
             name: name,
             employer: command.employer.trimmingCharacters(in: .whitespacesAndNewlines),
             title: command.title.trimmingCharacters(in: .whitespacesAndNewlines),
-            email: command.email.trimmingCharacters(in: .whitespacesAndNewlines),
-            profileURL: command.profileURL.trimmingCharacters(in: .whitespacesAndNewlines),
+            email: email,
+            profileURL: profileURL,
             relationshipContext: command.relationshipContext.trimmingCharacters(in: .whitespacesAndNewlines),
             notes: command.notes.trimmingCharacters(in: .whitespacesAndNewlines)
         )
+    }
+
+    private func isValidContactEmail(_ value: String) -> Bool {
+        guard !value.isEmpty else { return true }
+        return value.range(of: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", options: .regularExpression) != nil
     }
 
     private func normalizedOpportunityKey(title: String, company: String) -> String {
