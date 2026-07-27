@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 20)
+        XCTAssertEqual(try store.schemaVersion(), 21)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -39,7 +39,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 20)
+        XCTAssertEqual(try store.schemaVersion(), 21)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -60,6 +60,7 @@ final class WorkspaceStoreTests: XCTestCase {
                 , [.integer(18), .text(WorkspaceMigrations.versionEighteenChecksum)]
                 , [.integer(19), .text(WorkspaceMigrations.versionNineteenChecksum)]
                 , [.integer(20), .text(WorkspaceMigrations.versionTwentyChecksum)]
+                , [.integer(21), .text(WorkspaceMigrations.versionTwentyOneChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
@@ -88,7 +89,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 20)
+        XCTAssertEqual(try store.schemaVersion(), 21)
         XCTAssertEqual(try database.rows("SELECT id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at FROM interactions"), [[.text("interaction-1"), .null, .text("opportunity-1"), .text("Note"), .text("Legacy note"), .real(1_704_067_200), .null]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
@@ -160,7 +161,7 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try database.rows("SELECT id FROM import_reports"), [[.text("prior")]])
         XCTAssertTrue(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
         try WorkspaceMigrations.apply(to: database)
-        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(20)]])
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(21)]])
         XCTAssertEqual(try database.rows("SELECT updated_count, source_basename FROM import_reports"), [[.integer(0), .text("")]])
     }
 
@@ -180,7 +181,7 @@ final class WorkspaceStoreTests: XCTestCase {
             [.text("legacy-review"), .text("Needs manual review"), .text("Needs manual review"), .text("Ambiguous"), .null]
         ])
         XCTAssertEqual(try database.rows("SELECT count(*) FROM reconciliation_reviews"), [[.integer(1)]])
-        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(20)]])
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(21)]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
 
@@ -201,7 +202,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         try WorkspaceMigrations.apply(to: database)
 
-        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(20)]])
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(21)]])
         XCTAssertEqual(
             try database.rows("SELECT id, opportunity_id, url, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status, check_operation_id, method, checker_version, http_status, mime_type, declared_bytes, received_bytes, content_sha256, response_date, last_modified, etag, retry_after, redirect_target_redacted, evidence_excerpt, redacted_error_code FROM reconciliation_results"),
             [[
@@ -437,6 +438,92 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.responseHistory(forOpportunityID: opportunity.id).map(\.toState), [.awaitingResponse])
         XCTAssertEqual(try store.responseHistory(forOpportunityID: opportunity.id).first?.occurredAt, responseDate)
         XCTAssertEqual(try store.activityEvents().map(\.kind), ["opportunity_created", "opportunity_response_changed"])
+    }
+
+    func testCreateRejectsMalformedOrHostlessJobURLsWithoutWriting() throws {
+        let store = try makeStore()
+
+        for url in ["jobs.example.com/role", "https://", "https:///role", "mailto:jobs@example.com"] {
+            XCTAssertThrowsError(try store.create(CreateOpportunity(
+                title: "Product Manager", company: "Rekon Labs", jobURL: url
+            )))
+        }
+
+        XCTAssertEqual(try store.opportunities(), [])
+        XCTAssertEqual(try store.activityEvents(), [])
+    }
+
+    func testCreateDefaultsApplicationDateToItsCreationDate() throws {
+        let store = try makeStore()
+
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+
+        XCTAssertEqual(opportunity.applicationDate, now)
+        XCTAssertEqual(try store.opportunities().first?.applicationDate, now)
+    }
+
+    func testStructuredCompensationAndOtherActionPersistWithoutChangingStageHistory() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(
+            title: "Product Manager", company: "Rekon Labs", dueAt: now,
+            compensationMinimum: 125_000, compensationMaximum: 150_000, compensationPayPeriod: .year,
+            actionType: .other, actionCustomText: "Ask Morgan for a referral"
+        ))
+
+        XCTAssertEqual(opportunity.compensation, nil)
+        XCTAssertEqual(opportunity.compensationMinimum, 125_000)
+        XCTAssertEqual(opportunity.compensationMaximum, 150_000)
+        XCTAssertEqual(opportunity.compensationPayPeriod, .year)
+        XCTAssertEqual(opportunity.actionType, .other)
+        XCTAssertEqual(opportunity.actionCustomText, "Ask Morgan for a referral")
+        XCTAssertEqual(opportunity.nextAction, "Ask Morgan for a referral")
+        XCTAssertEqual(try store.latestTask(forOpportunityID: opportunity.id)?.title, "Ask Morgan for a referral")
+
+        try store.updateOpportunity(
+            id: opportunity.id, title: opportunity.title, company: opportunity.company,
+            stage: .saved, nextAction: "", dueAt: nil,
+            compensationMinimum: 130_000, compensationMaximum: nil, compensationPayPeriod: .year,
+            structuredCompensationEdited: true, actionType: .followUp, actionCustomText: nil, typedActionEdited: true
+        )
+
+        let updated = try XCTUnwrap(store.opportunities().first)
+        XCTAssertEqual(updated.compensation, nil)
+        XCTAssertEqual(updated.compensationMinimum, 130_000)
+        XCTAssertNil(updated.compensationMaximum)
+        XCTAssertEqual(updated.compensationPayPeriod, .year)
+        XCTAssertEqual(updated.actionType, .followUp)
+        XCTAssertNil(updated.actionCustomText)
+        XCTAssertEqual(updated.nextAction, "Follow up")
+        XCTAssertEqual(try store.stageHistory(forOpportunityID: opportunity.id).count, 1)
+    }
+
+    func testLegacyCompensationAndActionTextRemainAvailableAsCompatibilityValues() throws {
+        let store = try makeStore()
+
+        let opportunity = try store.create(CreateOpportunity(
+            title: "Product Manager", company: "Rekon Labs", nextAction: "Ask Morgan for a referral", compensation: "150k base"
+        ))
+
+        XCTAssertEqual(opportunity.compensation, "150k base")
+        XCTAssertNil(opportunity.compensationMinimum)
+        XCTAssertEqual(opportunity.actionType, OpportunityActionType.other)
+        XCTAssertEqual(opportunity.actionCustomText, "Ask Morgan for a referral")
+        XCTAssertEqual(try store.latestTask(forOpportunityID: opportunity.id)?.title, "Ask Morgan for a referral")
+    }
+
+    func testInvalidStructuredCompensationRejectsUpdateWithoutWriting() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let baselineActivity = try store.activityEvents()
+
+        XCTAssertThrowsError(try store.updateOpportunity(
+            id: opportunity.id, title: opportunity.title, company: opportunity.company,
+            stage: opportunity.stage, nextAction: opportunity.nextAction, dueAt: opportunity.dueAt,
+            compensationMinimum: -1, compensationMaximum: 10, compensationPayPeriod: .year, structuredCompensationEdited: true
+        ))
+
+        XCTAssertEqual(try store.opportunities().first, opportunity)
+        XCTAssertEqual(try store.activityEvents(), baselineActivity)
     }
 
     func testFailureBetweenOpportunityAndEventRollsBackBothRecords() throws {

@@ -98,6 +98,9 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var jobDescription = ""
     @Published var notes = ""
     @Published var compensation = ""
+    @Published var compensationMinimum = ""
+    @Published var compensationMaximum = ""
+    @Published var compensationPayPeriod: CompensationPayPeriod = .year
     @Published var location = ""
     @Published var workArrangement: WorkArrangement = .notSpecified
     @Published var applicationDate = Date.now
@@ -105,10 +108,15 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var responseState: ResponseState = .noResponseRecorded
     @Published var responseEffectiveDate = Date.now
     @Published var stageChangedAt = Date.now
+    @Published var actionType: OpportunityActionType = .noAction
+    @Published var actionCustomText = ""
     @Published var selectedJobURL = ""
     @Published var selectedJobDescription = ""
     @Published var selectedNotes = ""
     @Published var selectedCompensation = ""
+    @Published var selectedCompensationMinimum = ""
+    @Published var selectedCompensationMaximum = ""
+    @Published var selectedCompensationPayPeriod: CompensationPayPeriod = .year
     @Published var selectedLocation = ""
     @Published var selectedWorkArrangement: WorkArrangement = .notSpecified
     @Published var selectedApplicationDate = Date.now
@@ -118,6 +126,8 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var selectedStageChangedAt = Date.now
     @Published var selectedStage: PipelineStage = .saved
     @Published var selectedNextAction = ""
+    @Published var selectedActionType: OpportunityActionType = .noAction
+    @Published var selectedActionCustomText = ""
     @Published var selectedDueAt = Date.now
     @Published var selectedHasDueDate = false
     @Published var contactName = ""
@@ -375,13 +385,17 @@ final class WorkspaceViewModel: ObservableObject {
     func createOpportunity() {
         guard let store = readyStore() else { return }
         do {
-            _ = try store.create(CreateOpportunity(title: title, company: company, stage: stage, nextAction: nextAction, dueAt: nextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !hasDueDate ? nil : dueAt, jobURL: jobURL, jobDescription: jobDescription, notes: notes, compensation: compensation, location: location, workArrangement: workArrangement, applicationDate: hasApplicationDate ? applicationDate : nil, responseState: responseState, responseEffectiveDate: responseEffectiveDate, stageChangedAt: stageChangedAt))
+            let actionTitle = actionDraftTitle(type: actionType, customText: actionCustomText)
+            _ = try store.create(CreateOpportunity(title: title, company: company, stage: stage, nextAction: actionTitle, dueAt: actionTitle.isEmpty || !hasDueDate ? nil : dueAt, jobURL: jobURL, jobDescription: jobDescription, notes: notes, compensation: compensation, compensationMinimum: compensationDraftValue(compensationMinimum), compensationMaximum: compensationDraftValue(compensationMaximum), compensationPayPeriod: compensationMinimum.isEmpty && compensationMaximum.isEmpty ? nil : compensationPayPeriod, location: location, workArrangement: workArrangement, applicationDate: hasApplicationDate ? applicationDate : nil, responseState: responseState, responseEffectiveDate: responseEffectiveDate, stageChangedAt: stageChangedAt, actionType: actionType, actionCustomText: actionCustomText))
             title = ""
             company = ""
             jobURL = ""
             jobDescription = ""
             notes = ""
             compensation = ""
+            compensationMinimum = ""
+            compensationMaximum = ""
+            compensationPayPeriod = .year
             location = ""
             workArrangement = .notSpecified
             applicationDate = .now
@@ -390,6 +404,8 @@ final class WorkspaceViewModel: ObservableObject {
             responseEffectiveDate = .now
             stageChangedAt = .now
             nextAction = ""
+            actionType = .noAction
+            actionCustomText = ""
             hasDueDate = false
             refreshCounts()
             statusMessage = "Saved locally."
@@ -566,23 +582,31 @@ final class WorkspaceViewModel: ObservableObject {
     func saveSelectedOpportunity() {
         guard let store = readyStore(), !selectedOpportunityID.isEmpty else { return }
         do {
+            let actionTitle = actionDraftTitle(type: selectedActionType, customText: selectedActionCustomText)
             try store.updateOpportunity(
                 id: selectedOpportunityID,
                 title: selectedTitle,
                 company: selectedCompany,
                 stage: selectedStage,
-                nextAction: selectedNextAction,
-                dueAt: selectedNextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedHasDueDate ? nil : selectedDueAt,
+                nextAction: actionTitle,
+                dueAt: actionTitle.isEmpty || !selectedHasDueDate ? nil : selectedDueAt,
                 jobURL: selectedJobURL,
                 jobDescription: selectedJobDescription,
                 notes: selectedNotes,
                 compensation: selectedCompensation,
+                compensationMinimum: compensationDraftValue(selectedCompensationMinimum),
+                compensationMaximum: compensationDraftValue(selectedCompensationMaximum),
+                compensationPayPeriod: selectedCompensationMinimum.isEmpty && selectedCompensationMaximum.isEmpty ? nil : selectedCompensationPayPeriod,
+                structuredCompensationEdited: true,
                 location: selectedLocation,
                 workArrangement: selectedWorkArrangement,
                 applicationDate: selectedHasApplicationDate ? selectedApplicationDate : nil,
                 responseState: selectedResponseState,
                 responseEffectiveDate: selectedResponseEffectiveDate,
-                stageChangedAt: selectedStageChangedAt
+                stageChangedAt: selectedStageChangedAt,
+                actionType: selectedActionType,
+                actionCustomText: selectedActionCustomText,
+                typedActionEdited: true
             )
             refreshCounts()
             statusMessage = "Opportunity updated locally."
@@ -1264,6 +1288,9 @@ final class WorkspaceViewModel: ObservableObject {
             selectedJobDescription = ""
             selectedNotes = ""
             selectedCompensation = ""
+            selectedCompensationMinimum = ""
+            selectedCompensationMaximum = ""
+            selectedCompensationPayPeriod = .year
             selectedLocation = ""
             selectedWorkArrangement = .notSpecified
             selectedHasApplicationDate = false
@@ -1272,6 +1299,8 @@ final class WorkspaceViewModel: ObservableObject {
             selectedStageChangedAt = Date.now
             selectedStage = .saved
             selectedNextAction = ""
+            selectedActionType = .noAction
+            selectedActionCustomText = ""
             selectedHasDueDate = false
             selectedDueAt = Date.now
             return
@@ -1282,6 +1311,9 @@ final class WorkspaceViewModel: ObservableObject {
         selectedJobDescription = opportunity.jobDescription
         selectedNotes = opportunity.notes
         selectedCompensation = opportunity.compensation ?? ""
+        selectedCompensationMinimum = opportunity.compensationMinimum.map(compensationDraftText) ?? ""
+        selectedCompensationMaximum = opportunity.compensationMaximum.map(compensationDraftText) ?? ""
+        selectedCompensationPayPeriod = opportunity.compensationPayPeriod ?? .year
         selectedLocation = opportunity.location ?? ""
         selectedWorkArrangement = opportunity.workArrangement
         selectedHasApplicationDate = opportunity.applicationDate != nil
@@ -1291,8 +1323,44 @@ final class WorkspaceViewModel: ObservableObject {
         selectedStageChangedAt = opportunity.stageChangedAt ?? opportunity.createdAt
         selectedStage = opportunity.stage
         selectedNextAction = opportunity.nextAction
+        selectedActionType = opportunity.actionType
+        selectedActionCustomText = opportunity.actionCustomText ?? ""
         selectedHasDueDate = opportunity.dueAt != nil
         selectedDueAt = opportunity.dueAt ?? Date.now
+    }
+
+    var jobURLWarning: String? { urlWarning(for: jobURL) }
+    var selectedJobURLWarning: String? { urlWarning(for: selectedJobURL) }
+
+    func formattedCompensation(for opportunity: Opportunity) -> String? {
+        guard opportunity.compensationMinimum != nil || opportunity.compensationMaximum != nil else { return opportunity.compensation }
+        let formatter = FloatingPointFormatStyle<Double>.Currency(code: "USD").precision(.fractionLength(0))
+        let values = [opportunity.compensationMinimum.map { $0.formatted(formatter) }, opportunity.compensationMaximum.map { $0.formatted(formatter) }].compactMap { $0 }
+        return values.joined(separator: " – ") + (opportunity.compensationPayPeriod.map { " / \($0.rawValue.lowercased())" } ?? "")
+    }
+
+    private func compensationDraftValue(_ value: String) throws -> Double? {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        guard let parsed = Double(value) else { throw WorkspaceStoreError.invalidCompensation }
+        return parsed
+    }
+
+    private func compensationDraftText(_ value: Double) -> String {
+        value.rounded() == value ? String(Int(value)) : String(value)
+    }
+
+    private func actionDraftTitle(type: OpportunityActionType, customText: String) -> String {
+        type == .other ? customText.trimmingCharacters(in: .whitespacesAndNewlines) : (type == .noAction ? "" : type.rawValue)
+    }
+
+    private func urlWarning(for value: String) -> String? {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        guard let components = URLComponents(string: value), let scheme = components.scheme?.lowercased(), let host = components.host, !host.isEmpty, ["http", "https"].contains(scheme) else {
+            return "Use an absolute http or https URL with a host. Imported legacy URLs are preserved until changed."
+        }
+        return scheme == "http" ? "This job URL uses HTTP rather than HTTPS." : nil
     }
 
     private func refreshStageHistory() {

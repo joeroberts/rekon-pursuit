@@ -12,13 +12,18 @@ struct Opportunity: Equatable {
     let jobDescription: String
     let notes: String
     let compensation: String?
+    let compensationMinimum: Double?
+    let compensationMaximum: Double?
+    let compensationPayPeriod: CompensationPayPeriod?
     let location: String?
     let workArrangement: WorkArrangement
     let applicationDate: Date?
     let responseState: ResponseState
     let stageChangedAt: Date?
+    let actionType: OpportunityActionType
+    let actionCustomText: String?
 
-    init(id: String, title: String, company: String, createdAt: Date, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil, jobURL: String = "", jobDescription: String = "", notes: String = "", compensation: String? = nil, location: String? = nil, workArrangement: WorkArrangement = .notSpecified, applicationDate: Date? = nil, responseState: ResponseState = .noResponseRecorded, stageChangedAt: Date? = nil) {
+    init(id: String, title: String, company: String, createdAt: Date, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil, jobURL: String = "", jobDescription: String = "", notes: String = "", compensation: String? = nil, compensationMinimum: Double? = nil, compensationMaximum: Double? = nil, compensationPayPeriod: CompensationPayPeriod? = nil, location: String? = nil, workArrangement: WorkArrangement = .notSpecified, applicationDate: Date? = nil, responseState: ResponseState = .noResponseRecorded, stageChangedAt: Date? = nil, actionType: OpportunityActionType = .noAction, actionCustomText: String? = nil) {
         self.id = id
         self.title = title
         self.company = company
@@ -30,11 +35,16 @@ struct Opportunity: Equatable {
         self.jobDescription = jobDescription
         self.notes = notes
         self.compensation = compensation
+        self.compensationMinimum = compensationMinimum
+        self.compensationMaximum = compensationMaximum
+        self.compensationPayPeriod = compensationPayPeriod
         self.location = location
         self.workArrangement = workArrangement
         self.applicationDate = applicationDate
         self.responseState = responseState
         self.stageChangedAt = stageChangedAt
+        self.actionType = actionType
+        self.actionCustomText = actionCustomText
     }
 }
 
@@ -43,6 +53,20 @@ enum WorkArrangement: String, CaseIterable, Equatable {
     case onSite = "On-site"
     case hybrid = "Hybrid"
     case remote = "Remote"
+}
+
+enum CompensationPayPeriod: String, CaseIterable, Equatable {
+    case year = "Year"
+    case month = "Month"
+    case hour = "Hour"
+}
+
+enum OpportunityActionType: String, CaseIterable, Equatable {
+    case noAction = "No action"
+    case apply = "Apply"
+    case followUp = "Follow up"
+    case interviewPrep = "Prepare for interview"
+    case other = "Other"
 }
 
 enum ResponseState: String, CaseIterable, Equatable {
@@ -471,14 +495,19 @@ struct CreateOpportunity: Equatable {
     let jobDescription: String
     let notes: String
     let compensation: String?
+    let compensationMinimum: Double?
+    let compensationMaximum: Double?
+    let compensationPayPeriod: CompensationPayPeriod?
     let location: String?
     let workArrangement: WorkArrangement
     let applicationDate: Date?
     let responseState: ResponseState
     let responseEffectiveDate: Date?
     let stageChangedAt: Date?
+    let actionType: OpportunityActionType?
+    let actionCustomText: String?
 
-    init(title: String, company: String, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil, jobURL: String = "", jobDescription: String = "", notes: String = "", compensation: String? = nil, location: String? = nil, workArrangement: WorkArrangement = .notSpecified, applicationDate: Date? = nil, responseState: ResponseState = .noResponseRecorded, responseEffectiveDate: Date? = nil, stageChangedAt: Date? = nil) {
+    init(title: String, company: String, stage: PipelineStage = .saved, nextAction: String = "", dueAt: Date? = nil, jobURL: String = "", jobDescription: String = "", notes: String = "", compensation: String? = nil, compensationMinimum: Double? = nil, compensationMaximum: Double? = nil, compensationPayPeriod: CompensationPayPeriod? = nil, location: String? = nil, workArrangement: WorkArrangement = .notSpecified, applicationDate: Date? = nil, responseState: ResponseState = .noResponseRecorded, responseEffectiveDate: Date? = nil, stageChangedAt: Date? = nil, actionType: OpportunityActionType? = nil, actionCustomText: String? = nil) {
         self.title = title
         self.company = company
         self.stage = stage
@@ -488,12 +517,17 @@ struct CreateOpportunity: Equatable {
         self.jobDescription = jobDescription
         self.notes = notes
         self.compensation = compensation
+        self.compensationMinimum = compensationMinimum
+        self.compensationMaximum = compensationMaximum
+        self.compensationPayPeriod = compensationPayPeriod
         self.location = location
         self.workArrangement = workArrangement
         self.applicationDate = applicationDate
         self.responseState = responseState
         self.responseEffectiveDate = responseEffectiveDate
         self.stageChangedAt = stageChangedAt
+        self.actionType = actionType
+        self.actionCustomText = actionCustomText
     }
 }
 
@@ -520,6 +554,8 @@ enum OpportunityCSVExport {
 
 enum WorkspaceStoreError: Error, LocalizedError {
     case invalidOpportunity
+    case invalidOpportunityURL
+    case invalidCompensation
     case injectedFailure
     case unexpectedDatabaseValue
     case unresolvedImportDecision
@@ -535,6 +571,10 @@ enum WorkspaceStoreError: Error, LocalizedError {
         switch self {
         case .invalidOpportunity:
             return "Enter a job title and company."
+        case .invalidOpportunityURL:
+            return "Enter an absolute http or https job URL with a host."
+        case .invalidCompensation:
+            return "Compensation amounts must be non-negative, and the minimum cannot exceed the maximum."
         case .injectedFailure:
             return "The opportunity could not be saved."
         case .unexpectedDatabaseValue:

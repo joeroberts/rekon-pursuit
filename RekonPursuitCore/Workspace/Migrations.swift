@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 enum WorkspaceMigrations {
-    static let currentVersion = 20
+    static let currentVersion = 21
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
@@ -20,6 +20,7 @@ enum WorkspaceMigrations {
     static let versionEighteenChecksum = checksum(for: "18|import_reports.failed_count")
     static let versionNineteenChecksum = checksum(for: "19|reconciliation_reviews|reconciliation_results|legacy_posting_check_provenance")
     static let versionTwentyChecksum = checksum(for: "20|reconciliation_check_operations|reconciliation_results.public_url_evidence")
+    static let versionTwentyOneChecksum = checksum(for: "21|opportunities.structured_compensation|opportunities.typed_next_action")
 
     static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false, failVersionSixteen: Bool = false, failVersionSeventeen: Bool = false, failVersionNineteen: Bool = false, failVersionTwenty: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
@@ -354,6 +355,22 @@ enum WorkspaceMigrations {
             } catch {
                 throw error
             }
+        }
+        if version < 21 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    try database.execute("ALTER TABLE opportunities ADD COLUMN compensation_minimum REAL")
+                    try database.execute("ALTER TABLE opportunities ADD COLUMN compensation_maximum REAL")
+                    try database.execute("ALTER TABLE opportunities ADD COLUMN compensation_pay_period TEXT")
+                    try database.execute("ALTER TABLE opportunities ADD COLUMN action_type TEXT NOT NULL DEFAULT 'No action'")
+                    try database.execute("ALTER TABLE opportunities ADD COLUMN action_custom_text TEXT")
+                    try database.execute("UPDATE opportunities SET action_type = CASE WHEN trim(next_action) = '' THEN 'No action' ELSE 'Other' END, action_custom_text = CASE WHEN trim(next_action) = '' THEN NULL ELSE next_action END")
+                    try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(21), .text(versionTwentyOneChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 21")
+                }
+                database.removeMigrationSnapshot()
+            } catch { throw error }
         }
     }
 

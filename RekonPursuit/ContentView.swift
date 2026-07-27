@@ -406,31 +406,33 @@ private struct OpportunityOverviewView: View {
                             Spacer()
                             Menu("More") { Button("Activity & history", action: showHistory); Button("Reconcile posting", action: showReconcile) }
                         }
-                        HStack(alignment: .firstTextBaseline) {
-                            VStack(alignment: .leading, spacing: 3) { Text(opportunity.title).font(.largeTitle.bold()); Text(opportunity.company).foregroundStyle(RekonTheme.secondaryText) }
-                            Spacer()
-                            Text(opportunity.stage.rawValue).padding(.horizontal, 10).padding(.vertical, 5).background(RekonTheme.elevatedSurface, in: Capsule())
-                        }
+                        VStack(alignment: .leading, spacing: 3) { Text(opportunity.title).font(.largeTitle.bold()); Text(opportunity.company).foregroundStyle(RekonTheme.secondaryText) }
                         GroupBox("Opportunity") {
                             Form {
                                 TextField("Job title", text: $model.selectedTitle).accessibilityIdentifier("selected-opportunity-title")
                                 TextField("Company", text: $model.selectedCompany)
                                 TextField("Job URL (optional)", text: $model.selectedJobURL)
-                                TextField("Job description (optional)", text: $model.selectedJobDescription, axis: .vertical)
-                                TextField("Notes (optional)", text: $model.selectedNotes, axis: .vertical)
-                                TextField("Compensation (optional)", text: $model.selectedCompensation)
+                                if let warning = model.selectedJobURLWarning { Text(warning).font(.caption).foregroundStyle(.orange) }
+                                Text("Job description").font(.caption).foregroundStyle(.secondary)
+                                TextEditor(text: $model.selectedJobDescription).frame(minHeight: 110)
+                                Text("Notes").font(.caption).foregroundStyle(.secondary)
+                                TextEditor(text: $model.selectedNotes).frame(minHeight: 90)
+                                Section("Compensation") {
+                                    if !model.selectedCompensation.isEmpty { Text("Imported: \(model.selectedCompensation)").font(.caption).foregroundStyle(.secondary) }
+                                    TextField("Minimum (USD)", text: $model.selectedCompensationMinimum)
+                                    TextField("Maximum (USD)", text: $model.selectedCompensationMaximum)
+                                    Picker("Pay period", selection: $model.selectedCompensationPayPeriod) { ForEach(CompensationPayPeriod.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                                    if let formatted = model.formattedCompensation(for: opportunity) { Text(formatted).font(.caption).foregroundStyle(.secondary) }
+                                }
                                 TextField("Location (optional)", text: $model.selectedLocation)
                                 Picker("Work arrangement", selection: $model.selectedWorkArrangement) { ForEach(WorkArrangement.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
                                 Picker("Stage", selection: $model.selectedStage) { ForEach(PipelineStage.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                                TextField("Next action (optional)", text: $model.selectedNextAction)
+                                Picker("Next action", selection: $model.selectedActionType) { ForEach(OpportunityActionType.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                                if model.selectedActionType == .other { TextField("Other action", text: $model.selectedActionCustomText) }
                                 Toggle("Add a due date", isOn: $model.selectedHasDueDate)
                                 if model.selectedHasDueDate { DatePicker("Due", selection: $model.selectedDueAt, displayedComponents: [.date, .hourAndMinute]) }
                                 HStack { Button("Save changes locally") { _ = model.selectRouteOpportunity(id: opportunityID); model.saveSelectedOpportunity() }.accessibilityIdentifier("save-opportunity-changes"); Button("Reschedule action") { _ = model.selectRouteOpportunity(id: opportunityID); model.rescheduleSelectedTask() }.disabled(model.selectedNextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
                             }
-                        }
-                        HStack(spacing: 12) {
-                            Button("Activity & history", systemImage: "clock.arrow.circlepath", action: showHistory)
-                            Button("Reconcile posting", systemImage: "checkmark.shield", action: showReconcile)
                         }
                         CompactDocumentsView(model: model, opportunityID: opportunityID, chooseDocument: chooseDocument)
                     }
@@ -626,7 +628,40 @@ private struct FlexibleCenteredContent<Content: View>: View {
 
 private struct AddOpportunityView: View {
     @ObservedObject var model: WorkspaceViewModel
-    var body: some View { ScrollView { VStack(alignment: .leading, spacing: 16) { Text("Add opportunity").font(.largeTitle.bold()); Form { TextField("Job title", text: $model.title).accessibilityIdentifier("opportunity-title"); TextField("Company", text: $model.company).accessibilityIdentifier("opportunity-company"); TextField("Job URL (optional)", text: $model.jobURL); TextField("Job description (optional)", text: $model.jobDescription, axis: .vertical); TextField("Notes (optional)", text: $model.notes, axis: .vertical); Section("Job details") { TextField("Compensation (optional)", text: $model.compensation); TextField("Location (optional)", text: $model.location); Picker("Work arrangement", selection: $model.workArrangement) { ForEach(WorkArrangement.allCases, id: \.self) { Text($0.rawValue).tag($0) } }; Toggle("Add applied date", isOn: $model.hasApplicationDate); if model.hasApplicationDate { DatePicker("Applied date", selection: $model.applicationDate, displayedComponents: .date) }; Picker("Current response", selection: $model.responseState) { ForEach(ResponseState.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }; Picker("Stage", selection: $model.stage) { ForEach(PipelineStage.allCases, id: \.self) { Text($0.rawValue).tag($0) } }; TextField("Next action (optional)", text: $model.nextAction).accessibilityIdentifier("opportunity-next-action"); Toggle("Add a due date", isOn: $model.hasDueDate); if model.hasDueDate { DatePicker("Due", selection: $model.dueAt, displayedComponents: [.date, .hourAndMinute]) }; Button("Save opportunity locally") { model.createOpportunity() }.accessibilityIdentifier("save-opportunity").keyboardShortcut(.defaultAction).disabled(model.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.company.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) } }.padding(28).frame(maxWidth: 860, alignment: .leading) } }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Add opportunity").font(.largeTitle.bold())
+                Form {
+                    TextField("Job title", text: $model.title).accessibilityIdentifier("opportunity-title")
+                    TextField("Company", text: $model.company).accessibilityIdentifier("opportunity-company")
+                    TextField("Job URL (optional)", text: $model.jobURL)
+                    if let warning = model.jobURLWarning { Text(warning).font(.caption).foregroundStyle(.orange) }
+                    Text("Job description").font(.caption).foregroundStyle(.secondary)
+                    TextEditor(text: $model.jobDescription).frame(minHeight: 110)
+                    Text("Notes").font(.caption).foregroundStyle(.secondary)
+                    TextEditor(text: $model.notes).frame(minHeight: 90)
+                    Section("Job details") {
+                        TextField("Minimum (USD)", text: $model.compensationMinimum)
+                        TextField("Maximum (USD)", text: $model.compensationMaximum)
+                        Picker("Pay period", selection: $model.compensationPayPeriod) { ForEach(CompensationPayPeriod.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                        TextField("Location (optional)", text: $model.location)
+                        Picker("Work arrangement", selection: $model.workArrangement) { ForEach(WorkArrangement.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                        Toggle("Add applied date", isOn: $model.hasApplicationDate)
+                        if model.hasApplicationDate { DatePicker("Applied date", selection: $model.applicationDate, displayedComponents: .date) }
+                        Picker("Current response", selection: $model.responseState) { ForEach(ResponseState.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                    }
+                    Picker("Stage", selection: $model.stage) { ForEach(PipelineStage.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                    Picker("Next action", selection: $model.actionType) { ForEach(OpportunityActionType.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                    if model.actionType == .other { TextField("Other action", text: $model.actionCustomText).accessibilityIdentifier("opportunity-next-action") }
+                    Toggle("Add a due date", isOn: $model.hasDueDate)
+                    if model.hasDueDate { DatePicker("Due", selection: $model.dueAt, displayedComponents: [.date, .hourAndMinute]) }
+                    Button("Save opportunity locally") { model.createOpportunity() }.accessibilityIdentifier("save-opportunity").keyboardShortcut(.defaultAction).disabled(model.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.company.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }.padding(28).frame(maxWidth: 860, alignment: .leading)
+        }
+    }
 }
 
 private struct CSVImportView: View {
