@@ -4,7 +4,9 @@
 `RP-R1a`, `RP-R1b`, `RP-R2`, `RP-R3`, `RP-R4`, `RP-R5`, `UX-R1`, and
 `UX-R2` (including sub-slices A, B, and C) and `RP-R6` are Accepted.
 `RP-R7a-1` and `RP-R7a-2` are Accepted. The `RP-R7a` parent remains in
-progress: restore and export remain unreleased.
+progress: `RP-R7a-3` restore planning is approved and is Next up, but restore
+implementation and export remain unreleased. There is no active implementation
+task.
 `RP-R7b`–`RP-R10` remain Backlog.
 
 **Authority:** [dashboard-status.json](dashboard-status.json) is the canonical
@@ -74,9 +76,10 @@ ordinary sequencing.
 | `UX-R1` | Shell and opportunity navigation: native icon/compact sidebar emblem, first-run onboarding, Home default with Needs Attention as its first section, Pipeline-owned add/import entry points, consistent Rekon tokens, responsive empty states, scrollable Pipeline → dedicated opportunity overview, Activity & history and Reconcile posting sub-screens, and a compact overview document area. | `RP-R5` | **Accepted** | Product-owner verification of the shell/navigation route behavior and separate local-workspace correction. | Accepted after the product owner verified a fresh build: Board Back restoration and safe History/Reconcile fallback work. The deferred live-handoff work remains separate and does not block product remediation. |
 | `UX-R2` | Pipeline-owned core workflow forms: Add Opportunity layout/validation/structured action details and creation-date default; contact validation/employer association/expandable text; and staged CSV mapping/review/completion redesign. | `UX-R1` | **Accepted** | Product-owner hands-on verification of all three serial workflow slices. | Planning, Architect, QA, TPM, and Delivery approved the brief. Product-owner acceptance closed A, B, and C; this completes UX-R2. RP-R6 is now eligible but not released. |
 | `RP-R6` | Security-scoped document bookmark, open/verify/relink, hash revalidation, and relink-required after encrypted-backup restore. No copy/edit/parse. | `UX-R2` | **Accepted** | PDF/DOCX attach, relaunch/open, moved-file relink, permission failure smoke; 21 focused R6 checks; signed Debug build. | Product owner accepted hands-on verification. Independent Architecture/Security, QA, and Code Review approved the final guarded open/relink implementation. Release `RP-R7a` only to its required design gate; do not implement it yet. |
-| `RP-R7a` | Recovery-key enrollment/verification, authenticated portable archive/export default, minimal creation/expiry/recoverability and retained-deletion disclosure, and restore-as-new-workspace. | `RP-R6` | **In progress — R7a-1 and R7a-2 accepted** | Recovery-key, portable restore, encrypted/default-export, and truthful backup-state evidence. | Recovery-key setup and authenticated portable archive creation/cataloguing are accepted. Restore, export, purge, and expiry removal remain unreleased and require their own high-risk gates. |
-| `RP-R7b` | Expiry removal and verified retained-backup purge/rebuild. | `RP-R7a` | Backlog | Expiry removal and purge success/failure evidence. | Architect + Security/Privacy approval required. |
-| `RP-R8` | Empty read-only local AI ledger with time, feature, opportunity, route, model, completion, and cost filters. No AI/network/metrics execution. | `RP-R6` | Backlog | Every filter works at zero entries; no entry/network is produced. | Release only in serial order after its predecessor gate is accepted. |
+| `RP-R7a` | Recovery-key enrollment/verification, authenticated portable archive/export default, minimal creation/expiry/recoverability and retained-deletion disclosure, and restore-as-new-workspace. | `RP-R6` | **In progress — R7a-1 and R7a-2 accepted; R7a-3 planned** | Recovery-key, portable restore, encrypted/default-export, and truthful backup-state evidence. | Recovery-key setup and archive creation/cataloguing are accepted. R7a-3 has a draft restore brief only; restore, export, purge, and expiry removal remain unreleased and require their own high-risk gates. |
+| `RP-R7a-3` | Verify a portable archive and import it into a fresh separate local workspace; do not activate/switch it. | `RP-R7a-2` | **Next up — planning approved** | Typed package/snapshot verification; fresh-key target; document relink-required; non-destructive candidate lifecycle. | Planning, Architect/Security, QA, TPM, and Delivery approved the plan. A separate release decision is required before implementation. |
+| `RP-R7b` | Expiry removal and verified retained-backup purge/rebuild. | Full `RP-R7a` restore/export sequence | Backlog | Expiry removal and purge success/failure evidence. | Architect + Security/Privacy approval required; R7b is not eligible while R7a restore/export are unreleased. |
+| `RP-R8` | Empty read-only local AI ledger with time, feature, opportunity, route, model, completion, and cost filters. No AI/network/metrics execution. | Full `RP-R7a` and `RP-R7b` lifecycle sequence | Backlog | Every filter works at zero entries; no entry/network is produced. | The former R6-only dependency is superseded by the approved serial order: R8 is not eligible while restore/export and lifecycle removal are unreleased. |
 | `RP-R9` | Settings exposes real recovery, expiry, deletion, export, document-reference, and ledger state; no fake integration controls. | `RP-R6`, `RP-R7b`, `RP-R8` | Backlog | Settings state matches stored state across relaunch. | Pending dependencies. |
 | `RP-R10` | Clean-state, hands-on acceptance of all remediation tasks and candidate-package status reconciliation. | `RP-R1a`–`RP-R9`, `UX-R1`, `UX-R2` | Backlog | Full user workflow evidence and independent milestone reviews. | Pending every preceding task. |
 
@@ -150,6 +153,16 @@ ordinary sequencing.
 | QA | **Approved** | Six focused archive checks passed, including post-create metadata failure, partial copy, destination collision, replacement detection, and catalogue behavior. |
 | Code Reviewer | **Approved** | No P0/P1 remained after the post-create metadata failure correction. |
 | Delivery Manager | **Accepted — no successor released** | `RP-R7a-2` is complete. The parent recovery milestone remains in progress, and restore/export, purge, expiry removal, and legacy-route access are still unreleased. |
+
+### RP-R7a-3 restore planning record
+
+| Role | Decision | Evidence / release boundary |
+| --- | --- | --- |
+| Planning | **Drafted — not released** | [R7a-3 brief](task-briefs/RP-R7a-3-restore-as-new-workspace.md) limits the slice to authenticated archive verification and import into a new separate workspace. It explicitly excludes activation/switch, export, purge, and expiry work. |
+| Architect / Security | **Approved — planning only** | ADR-001, the lifecycle contract, and architecture specification consistently state the v1 clean-Mac authority; the brief defines the sealed app-global candidate registry with `reserved`, `key_root_created`, `ready`, `cleanup_retry`, and `unavailable` states. |
+| QA | **Approved — planning only** | The brief requires schema/migration, importer mapping/constraint/default, journal/checkpoint/reopen, candidate-Keychain-cleanup, deletion-exclusion, bookmark-relink, cancellation, and source-preservation evidence. |
+| TPM | **Approved — planning only** | `RP-R7b` follows the full R7a restore/export sequence. `RP-R8`'s former R6-only dependency is superseded by the approved serial lifecycle order, so it is not eligible. |
+| Delivery Manager | **Approved — R7a-3 Next up** | R7a-3 is the sole dependency-safe successor. It is Next up for a separate implementation-release decision; dashboard has no active implementation task. |
 
 ### UX-R1 external-workspace bookmark Task 1 review and release
 

@@ -21,6 +21,16 @@ so every portable-backup creation requires the user to re-enter the recovery
 key; the key itself is never retained. This does not change the no-reset,
 no-escrow, or user-held recovery decision above.
 
+**Implementation refinement (2026-07-27, portable archive v1 trust):** A v1
+portable archive has no separate recovery-secret source-provenance binding.
+For a clean-Mac restore, successful recovery-key possession plus valid package
+authentication is the v1 authority to decrypt the archive; Rekon Pursuit shows
+the verified archive ID, creation time, and signing-key fingerprint and
+requires explicit confirmation before creating a new workspace. On the source
+Mac, a matching local catalogue must also bind archive ID and signing-key
+fingerprint. A later archive format may add stronger provenance only through a
+new version; v1 must not claim it has that property.
+
 The app permits unencrypted exports only after an explicit warning and a final filename/location review. Encrypted export remains available as the safer default. OAuth tokens, database keys, and recovery secrets are never exported.
 
 ## Rationale
@@ -79,7 +89,14 @@ Logical deletion cascades only through user-visible availability, never by silen
 - A destructive purge flow can identify, regenerate, verify, and remove all eligible retained backups containing deleted data; it reports incomplete work truthfully and never silently treats a failed purge as complete.
 - The export flow defaults to encrypted export. Unencrypted export cannot complete without an explicit warning plus filename/location review and confirmation.
 - Neither backups nor exports contain OAuth tokens, database keys, recovery secrets, or plaintext backup encryption keys.
-- Restore verifies recovery trust binding, manifest/authentication/checksums, and compatibility in a newly created workspace before any switch-workspace action becomes available.
+- Restore uses a newly created workspace before any switch-workspace action
+  becomes available. For portable archive v1 on a clean Mac, authority is
+  recovery-key possession plus complete authenticated package verification and
+  explicit confirmation of the verified archive ID, creation time, and
+  signing-key fingerprint. When a local catalogue exists, its archive ID and
+  signing-key fingerprint must match. V1 makes no independent
+  source-provenance claim; stronger provenance binding is a future,
+  versioned-archive-format requirement only.
 
 ## Consequences
 

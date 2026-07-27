@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "activeTaskId": null,
-  "nextEligibleTaskId": null,
+  "nextEligibleTaskId": "RP-R7a-3",
   "tasks": [
     {
       "id": "RP-R0",
@@ -199,11 +199,24 @@
       "needsUserAction": false
     },
     {
+      "id": "RP-R7a-3",
+      "title": "Restore authenticated archive as new workspace",
+      "workType": "Data lifecycle",
+      "status": "next_up",
+      "releaseCondition": "Requires its own Architecture/Security, QA, TPM, and Delivery gate; no activation, export, purge, or expiry work is included.",
+      "latestTransition": "Planning, Architect/Security, TPM, QA, and Delivery approved the bounded restore-as-new-workspace plan; implementation is not released.",
+      "evidence": {
+        "label": "R7a-3 task brief",
+        "href": "../task-briefs/RP-R7a-3-restore-as-new-workspace.md"
+      },
+      "needsUserAction": false
+    },
+    {
       "id": "RP-R7b",
       "title": "Backup expiry and retained-data purge",
       "workType": "Data lifecycle",
       "status": "backlog",
-      "releaseCondition": "Release after RP-R7a and the high-risk lifecycle approval.",
+      "releaseCondition": "Release only after the full R7a restore/export sequence is accepted and its own high-risk lifecycle approval.",
       "latestTransition": "Planned remediation work.",
       "evidence": {
         "label": "Remediation ledger",
@@ -216,8 +229,8 @@
       "title": "Searchable local AI ledger",
       "workType": "Observability",
       "status": "backlog",
-      "releaseCondition": "Release after RP-R6 in the approved serial sequence.",
-      "latestTransition": "Planned remediation work.",
+      "releaseCondition": "Release only after the R7a/R7b lifecycle sequence is accepted; its former R6-only dependency was superseded by the approved serial delivery order.",
+      "latestTransition": "Backlog: R8 is not eligible while portable restore/export and lifecycle removal remain unreleased.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
