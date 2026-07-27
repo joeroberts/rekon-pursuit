@@ -23,7 +23,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 21)
+        XCTAssertEqual(try store.schemaVersion(), 22)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -39,7 +39,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 21)
+        XCTAssertEqual(try store.schemaVersion(), 22)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -61,6 +61,7 @@ final class WorkspaceStoreTests: XCTestCase {
                 , [.integer(19), .text(WorkspaceMigrations.versionNineteenChecksum)]
                 , [.integer(20), .text(WorkspaceMigrations.versionTwentyChecksum)]
                 , [.integer(21), .text(WorkspaceMigrations.versionTwentyOneChecksum)]
+                , [.integer(22), .text(WorkspaceMigrations.versionTwentyTwoChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
@@ -89,7 +90,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 21)
+        XCTAssertEqual(try store.schemaVersion(), 22)
         XCTAssertEqual(try database.rows("SELECT id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at FROM interactions"), [[.text("interaction-1"), .null, .text("opportunity-1"), .text("Note"), .text("Legacy note"), .real(1_704_067_200), .null]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
@@ -161,7 +162,7 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try database.rows("SELECT id FROM import_reports"), [[.text("prior")]])
         XCTAssertTrue(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
         try WorkspaceMigrations.apply(to: database)
-        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(21)]])
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(22)]])
         XCTAssertEqual(try database.rows("SELECT updated_count, source_basename FROM import_reports"), [[.integer(0), .text("")]])
     }
 
@@ -181,7 +182,7 @@ final class WorkspaceStoreTests: XCTestCase {
             [.text("legacy-review"), .text("Needs manual review"), .text("Needs manual review"), .text("Ambiguous"), .null]
         ])
         XCTAssertEqual(try database.rows("SELECT count(*) FROM reconciliation_reviews"), [[.integer(1)]])
-        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(21)]])
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(22)]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
 
@@ -202,7 +203,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         try WorkspaceMigrations.apply(to: database)
 
-        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(21)]])
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(22)]])
         XCTAssertEqual(
             try database.rows("SELECT id, opportunity_id, url, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status, check_operation_id, method, checker_version, http_status, mime_type, declared_bytes, received_bytes, content_sha256, response_date, last_modified, etag, retry_after, redirect_target_redacted, evidence_excerpt, redacted_error_code FROM reconciliation_results"),
             [[
@@ -226,7 +227,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         try WorkspaceMigrations.apply(to: database)
 
-        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(21)]])
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(22)]])
         XCTAssertEqual(try database.rows("PRAGMA foreign_key_check"), [])
         let store = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test")
         let migrated = try XCTUnwrap(try store.opportunities().first)
@@ -970,6 +971,8 @@ final class WorkspaceStoreTests: XCTestCase {
         let reportRow = try XCTUnwrap(try store.importReportRows(for: report.id).first)
         XCTAssertEqual(reportRow.outcome, "updated")
         XCTAssertTrue(reportRow.reason.contains("Selected fields: Compensation"))
+        XCTAssertEqual(reportRow.title, "Product Manager")
+        XCTAssertEqual(reportRow.company, "Rekon Labs")
     }
 
     func testCSVCandidateCannotBeSilentlyCreatedAndRejectsDateOnlySelection() throws {

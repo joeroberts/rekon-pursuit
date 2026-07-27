@@ -135,7 +135,7 @@ struct ContentView: View {
         case .home: HomeView(model: model, open: openAttentionTask, addOpportunity: { navigation.handle(.homeEmptyStateAdd) }, reschedule: { task in taskToReschedule = task; rescheduledDueAt = task.dueAt ?? .now })
         case .pipeline: PipelineView(model: model, showsBoard: $showsPipelineBoard, anchorID: $pipelineAnchorID, open: openOpportunity, delete: { pendingDeletion = $0 }, addOpportunity: { navigation.handle(.pipelineAdd) }, importCSV: { navigation.handle(.pipelineImport) })
         case .addOpportunity: AddOpportunityView(model: model)
-        case .importCSV: CSVImportView(model: model, chooseFile: chooseCSVFile, open: openOpportunity)
+        case .importCSV: CSVImportView(model: model, chooseFile: chooseCSVFile, open: openOpportunity, finish: { navigation.select(.pipeline) })
         case .contacts: ContactsView(model: model, open: openOpportunity, delete: { pendingContactDeletion = $0 })
         case .activityAI: GlobalActivityView(model: model)
         case .settings: SettingsView(model: model, export: { showsUnencryptedExportWarning = true }, backup: createBackup, restore: { showsBackupImporter = true })
@@ -676,71 +676,129 @@ private struct AddOpportunityView: View {
 }
 
 private struct CSVImportView: View {
-    @ObservedObject var model: WorkspaceViewModel; let chooseFile: () -> Void; let open: (Opportunity) -> Void
+    @ObservedObject var model: WorkspaceViewModel; let chooseFile: () -> Void; let open: (Opportunity) -> Void; let finish: () -> Void
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Import CSV").font(.largeTitle.bold())
-                GroupBox("Import opportunities") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Map a UTF-8 CSV, validate it, review duplicates, then import local data in one step.")
-                            .foregroundStyle(.secondary)
-                        Button("Choose CSV file…", action: chooseFile)
-                            .accessibilityIdentifier("choose-csv-file")
-                        if let preview = model.csvPreview {
-                            Text("1. Map columns").font(.headline)
-                            ForEach(CSVImportField.allCases) { field in
-                                Picker(field.label + (field.required ? " *" : ""), selection: Binding(
-                                    get: { preview.mapping[field] },
-                                    set: { model.setCSVMapping(field, to: $0) }
-                                )) {
-                                    Text("Not mapped").tag(Int?.none)
-                                    ForEach(Array(preview.headers.enumerated()), id: \.offset) { index, header in
-                                        Text(header).tag(Int?.some(index))
-                                    }
-                                }
-                            }
-                            Button("2. Validate mapped rows") { model.validateCSVMapping() }
-                                .disabled(!CSVOpportunityImporter.mappingIsValid(preview.mapping))
-                            ForEach(model.csvImportPlan) { row in
-                                VStack(alignment: .leading) {
-                                    Text("Row \(row.id): \(row.row.opportunity?.title ?? "") · \(row.row.opportunity?.company ?? "")")
-                                    if row.isDuplicate {
-                                        Picker("Duplicate decision", selection: Binding(
-                                            get: { row.decision },
-                                            set: { value in if let value { model.setCSVDecision(value, for: row.id) } }
-                                        )) {
-                                            Text("Choose a decision").tag(CSVDuplicateDecision?.none)
-                                            Text("Update selected fields").tag(CSVDuplicateDecision?.some(.updateSelectedFields))
-                                            Text("Keep as separate opportunity").tag(CSVDuplicateDecision?.some(.keepSeparate))
-                                            Text("Skip this row").tag(CSVDuplicateDecision?.some(.skip))
+                Text("Choose a file, map its columns, review exceptions, then import it locally.")
+                    .foregroundStyle(.secondary)
+                if let preview = model.csvPreview {
+                    if model.csvImportPlan.isEmpty {
+                        GroupBox("1. Map columns") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Map Job title and Company to different source columns. Other fields are optional.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                ForEach(CSVImportField.allCases) { field in
+                                    Picker(field.label + (field.required ? " *" : ""), selection: Binding(
+                                        get: { preview.mapping[field] },
+                                        set: { model.setCSVMapping(field, to: $0) }
+                                    )) {
+                                        Text("Not mapped").tag(Int?.none)
+                                        ForEach(Array(preview.headers.enumerated()), id: \.offset) { index, header in
+                                            Text(header).tag(Int?.some(index))
                                         }
                                     }
                                 }
-                            }
-                            if !model.csvImportPlan.isEmpty {
-                                Button("Import reviewed rows") { model.importCSVPreview() }
-                                    .disabled(model.csvImportPlan.contains { $0.decision == nil || ($0.decision == .updateSelectedFields && $0.selectedFields.isEmpty) })
-                                    .accessibilityIdentifier("import-reviewed-csv")
-                            }
-                        }
-                        if let report = model.csvImportReport, model.csvPreview == nil {
-                            Divider()
-                            Text("Last import report").font(.headline)
-                            Text("\(report.sourceBasename) · Created \(report.importedCount) · updated \(report.updatedCount) · kept separate \(report.duplicateKeptCount) · skipped \(report.skippedCount) · invalid \(report.invalidCount) · failed \(report.failedCount)")
-                                .foregroundStyle(.secondary)
-                            ForEach(model.csvImportReportRows) { row in
-                                if let id = row.opportunityID {
-                                    Button("Open \(row.outcome): \(row.sourceRow)") {
-                                        if let opportunity = model.opportunities.first(where: { $0.id == id }) { open(opportunity) }
-                                    }
+                                HStack {
+                                    Button("Cancel") { model.cancelCSVPreview(); finish() }
+                                    Spacer()
+                                    Button("Validate mapped rows") { model.validateCSVMapping() }
+                                        .buttonStyle(RekonPrimaryButtonStyle())
+                                        .disabled(!CSVOpportunityImporter.mappingIsValid(preview.mapping))
                                 }
                             }
+                        }
+                    } else {
+                        GroupBox("2. Review rows and duplicates") {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Review only exceptions before committing the mapped rows to this local workspace.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                ForEach(model.csvImportPlan) { row in
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text([row.row.opportunity?.title ?? row.row.values[.title] ?? "Untitled", row.row.opportunity?.company ?? row.row.values[.company] ?? "Unknown employer"].joined(separator: " · "))
+                                        if row.isDuplicate {
+                                            Text("Possible duplicate: \(row.candidateTitle ?? "existing opportunity") · \(row.candidateCompany ?? "")")
+                                                .font(.caption).foregroundStyle(.secondary)
+                                            Picker("Duplicate decision", selection: Binding(
+                                                get: { row.decision },
+                                                set: { value in if let value { model.setCSVDecision(value, for: row.id) } }
+                                            )) {
+                                                Text("Choose a decision").tag(CSVDuplicateDecision?.none)
+                                                Text("Update selected fields").tag(CSVDuplicateDecision?.some(.updateSelectedFields))
+                                                Text("Keep as separate opportunity").tag(CSVDuplicateDecision?.some(.keepSeparate))
+                                                Text("Skip this row").tag(CSVDuplicateDecision?.some(.skip))
+                                            }
+                                        }
+                                    }
+                                    Divider()
+                                }
+                                HStack {
+                                    Button("Back to mapping") { model.returnToCSVMapping() }
+                                    Button("Cancel") { model.cancelCSVPreview(); finish() }
+                                    Spacer()
+                                    Button("Import reviewed rows") { model.importCSVPreview() }
+                                        .buttonStyle(RekonPrimaryButtonStyle())
+                                        .disabled(model.csvImportPlan.contains { $0.decision == nil || ($0.decision == .updateSelectedFields && $0.selectedFields.isEmpty) })
+                                        .accessibilityIdentifier("import-reviewed-csv")
+                                }
+                            }
+                        }
+                    }
+                } else if let report = model.csvImportReport {
+                    CSVImportCompletionView(report: report, rows: model.csvImportReportRows, startOver: chooseFile, done: finish)
+                } else {
+                    GroupBox("1. Choose CSV file") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Rekon Pursuit reads a UTF-8 CSV locally. Nothing is imported until you review and confirm it.")
+                                .foregroundStyle(.secondary)
+                            Button("Choose CSV file…", action: chooseFile)
+                                .buttonStyle(RekonPrimaryButtonStyle())
+                                .accessibilityIdentifier("choose-csv-file")
                         }
                     }
                 }
             }
             .padding(28).frame(maxWidth: 960, alignment: .leading)
+        }
+    }
+}
+
+private struct CSVImportCompletionView: View {
+    let report: CSVImportReport
+    let rows: [CSVImportReportRow]
+    let startOver: () -> Void
+    let done: () -> Void
+
+    private var exceptions: [CSVImportReportRow] { rows.filter { $0.outcome != "created" } }
+
+    var body: some View {
+        GroupBox("3. Import complete") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("\(report.sourceBasename) imported locally.").font(.headline)
+                Text("Created \(report.importedCount) · Updated \(report.updatedCount) · Kept separate \(report.duplicateKeptCount) · Skipped \(report.skippedCount) · Invalid \(report.invalidCount) · Failed \(report.failedCount)")
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Button("View imported opportunities in Pipeline", action: done)
+                        .buttonStyle(RekonPrimaryButtonStyle())
+                    Button("Start another import", action: startOver)
+                    Spacer()
+                    Button("Done", action: done)
+                }
+                if !exceptions.isEmpty {
+                    DisclosureGroup("View detailed report (\(exceptions.count) exceptions)") {
+                        ForEach(exceptions) { row in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text([row.title.isEmpty ? "Untitled" : row.title, row.company.isEmpty ? "Unknown employer" : row.company].joined(separator: " · "))
+                                Text("\(row.outcome.capitalized)\(row.reason.isEmpty ? "" : ": \(row.reason)")")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+            }
         }
     }
 }

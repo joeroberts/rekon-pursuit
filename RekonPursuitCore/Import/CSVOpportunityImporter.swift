@@ -71,6 +71,8 @@ struct CSVImportReportRow: Equatable, Identifiable {
     let reason: String
     let duplicateRationale: String
     let opportunityID: String?
+    let title: String
+    let company: String
 }
 
 enum CSVImportError: LocalizedError { case unreadableFile, malformedCSV, missingRequiredColumns, duplicateMappedColumn, validationBlocked

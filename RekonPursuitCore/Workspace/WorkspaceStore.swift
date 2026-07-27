@@ -163,7 +163,7 @@ final class WorkspaceStore {
                     try insertImportReportRow(reportID: report.id, planRow: planRow, outcome: planRow.decision == .keepSeparate ? "kept_separate" : "created", opportunityID: opportunity.id)
                 }
                 for invalid in invalidRows where !invalid.isValid {
-                    try database.execute("INSERT INTO import_report_rows (id, report_id, source_row, outcome, reason, duplicate_rationale, opportunity_id) VALUES (?, ?, ?, 'invalid', ?, '', NULL)", values: [.text(nextIdentifier()), .text(report.id), .integer(Int64(invalid.sourceRow)), .text(invalid.reasons.joined(separator: " "))])
+                    try database.execute("INSERT INTO import_report_rows (id, report_id, source_row, outcome, reason, duplicate_rationale, opportunity_id, display_title, display_company) VALUES (?, ?, ?, 'invalid', ?, '', NULL, ?, ?)", values: [.text(nextIdentifier()), .text(report.id), .integer(Int64(invalid.sourceRow)), .text(invalid.reasons.joined(separator: " ")), .text(invalid.values[.title]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""), .text(invalid.values[.company]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")])
                 }
                 try appendActivity(kind: "csv_import_batch_completed", opportunityID: nil, occurredAt: commandNow)
             }
@@ -179,7 +179,7 @@ final class WorkspaceStore {
 
     func importReportRows(for reportID: String) throws -> [CSVImportReportRow] {
         try synchronized {
-            try database.rows("SELECT id, source_row, outcome, reason, duplicate_rationale, opportunity_id FROM import_report_rows WHERE report_id = ? ORDER BY source_row, id", values: [.text(reportID)]).map(importReportRow(from:))
+            try database.rows("SELECT id, source_row, outcome, reason, duplicate_rationale, opportunity_id, display_title, display_company FROM import_report_rows WHERE report_id = ? ORDER BY source_row, id", values: [.text(reportID)]).map(importReportRow(from:))
         }
     }
 
@@ -1014,7 +1014,9 @@ final class WorkspaceStore {
 
     private func insertImportReportRow(reportID: String, planRow: CSVImportPlanRow, outcome: String, opportunityID: String?) throws {
         let detail = planRow.selectedFields.isEmpty ? planRow.row.reasons.joined(separator: " ") : "Selected fields: " + planRow.selectedFields.map(\.label).sorted().joined(separator: ", ")
-        try database.execute("INSERT INTO import_report_rows (id, report_id, source_row, outcome, reason, duplicate_rationale, opportunity_id) VALUES (?, ?, ?, ?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(reportID), .integer(Int64(planRow.row.sourceRow)), .text(outcome), .text(detail), .text(planRow.duplicateRationale ?? ""), opportunityID.map(DatabaseValue.text) ?? .null])
+        let title = planRow.row.opportunity?.title ?? planRow.row.values[.title] ?? ""
+        let company = planRow.row.opportunity?.company ?? planRow.row.values[.company] ?? ""
+        try database.execute("INSERT INTO import_report_rows (id, report_id, source_row, outcome, reason, duplicate_rationale, opportunity_id, display_title, display_company) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(reportID), .integer(Int64(planRow.row.sourceRow)), .text(outcome), .text(detail), .text(planRow.duplicateRationale ?? ""), opportunityID.map(DatabaseValue.text) ?? .null, .text(title.trimmingCharacters(in: .whitespacesAndNewlines)), .text(company.trimmingCharacters(in: .whitespacesAndNewlines))])
     }
 
     private func selectedFieldsAreCoupled(_ fields: Set<CSVImportField>) -> Bool {
@@ -1466,8 +1468,8 @@ final class WorkspaceStore {
     }
 
     private func importReportRow(from row: [DatabaseValue]) throws -> CSVImportReportRow {
-        guard row.count == 6, case let .text(id) = row[0], case let .integer(sourceRow) = row[1], case let .text(outcome) = row[2], case let .text(reason) = row[3], case let .text(rationale) = row[4] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+        guard row.count == 8, case let .text(id) = row[0], case let .integer(sourceRow) = row[1], case let .text(outcome) = row[2], case let .text(reason) = row[3], case let .text(rationale) = row[4], case let .text(title) = row[6], case let .text(company) = row[7] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
         let opportunityID: String? = if case let .text(value) = row[5] { value } else { nil }
-        return CSVImportReportRow(id: id, sourceRow: Int(sourceRow), outcome: outcome, reason: reason, duplicateRationale: rationale, opportunityID: opportunityID)
+        return CSVImportReportRow(id: id, sourceRow: Int(sourceRow), outcome: outcome, reason: reason, duplicateRationale: rationale, opportunityID: opportunityID, title: title, company: company)
     }
 }

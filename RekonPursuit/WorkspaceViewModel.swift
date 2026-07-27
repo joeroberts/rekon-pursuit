@@ -1129,12 +1129,12 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func previewCSV(at url: URL) {
-        guard let store = readyStore() else { return }
+        guard readyStore() != nil else { return }
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         do {
             csvPreview = try CSVOpportunityImporter.preview(data: Data(contentsOf: url), sourceBasename: url.lastPathComponent)
-            csvImportPlan = try store.csvImportPlan(for: csvPreview!)
+            csvImportPlan = []
             statusMessage = "CSV map ready. Confirm the columns, validate rows, then review duplicates."
         } catch {
             csvPreview = nil
@@ -1180,6 +1180,18 @@ final class WorkspaceViewModel: ObservableObject {
         guard let preview = csvPreview, CSVOpportunityImporter.mappingIsValid(preview.mapping), let store = readyStore() else { statusMessage = "Map both Job title and Company using separate columns."; return }
         do { csvImportPlan = try store.csvImportPlan(for: preview); statusMessage = "Validation complete. Choose an action for each possible duplicate." }
         catch { statusMessage = "The mapped CSV could not be validated." }
+    }
+
+    func returnToCSVMapping() {
+        guard csvPreview != nil else { return }
+        csvImportPlan = []
+        statusMessage = "Review cleared. Adjust the mapping, then validate the rows again."
+    }
+
+    func cancelCSVPreview() {
+        csvPreview = nil
+        csvImportPlan = []
+        statusMessage = "CSV import cancelled. No local data was changed."
     }
 
     func setCSVSelectedField(_ field: CSVImportField, selected: Bool, for rowID: Int) {

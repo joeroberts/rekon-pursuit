@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 enum WorkspaceMigrations {
-    static let currentVersion = 21
+    static let currentVersion = 22
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
@@ -21,6 +21,7 @@ enum WorkspaceMigrations {
     static let versionNineteenChecksum = checksum(for: "19|reconciliation_reviews|reconciliation_results|legacy_posting_check_provenance")
     static let versionTwentyChecksum = checksum(for: "20|reconciliation_check_operations|reconciliation_results.public_url_evidence")
     static let versionTwentyOneChecksum = checksum(for: "21|opportunities.structured_compensation|opportunities.typed_next_action")
+    static let versionTwentyTwoChecksum = checksum(for: "22|import_report_rows.display_title_company")
 
     static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false, failVersionSixteen: Bool = false, failVersionSeventeen: Bool = false, failVersionNineteen: Bool = false, failVersionTwenty: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
@@ -371,6 +372,14 @@ enum WorkspaceMigrations {
                 }
                 database.removeMigrationSnapshot()
             } catch { throw error }
+        }
+        if version < 22 {
+            try database.transaction {
+                try database.execute("ALTER TABLE import_report_rows ADD COLUMN display_title TEXT NOT NULL DEFAULT ''")
+                try database.execute("ALTER TABLE import_report_rows ADD COLUMN display_company TEXT NOT NULL DEFAULT ''")
+                try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(22), .text(versionTwentyTwoChecksum)])
+                try database.execute("UPDATE schema_migrations SET version = 22")
+            }
         }
     }
 

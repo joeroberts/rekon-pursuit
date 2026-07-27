@@ -703,6 +703,26 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(restored.sourceBasename, report.sourceBasename)
         XCTAssertEqual(restored.mappingSummary, report.mappingSummary)
         XCTAssertEqual(restored.createdAt.timeIntervalSince1970, report.createdAt.timeIntervalSince1970, accuracy: 0.001)
+        XCTAssertEqual(model.csvImportReportRows.map(\.title), ["Product Manager"])
+        XCTAssertEqual(model.csvImportReportRows.map(\.company), ["Rekon Labs"])
+    }
+
+    func testCSVPreviewRequiresExplicitValidationBeforeRowsAreReadyForReview() throws {
+        let store = try makeStore()
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("rekon-csv-preview-\(UUID().uuidString).csv")
+        try Data("title,company\nProduct Manager,Rekon Labs\n".utf8).write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
+
+        model.start()
+        model.previewCSV(at: fileURL)
+
+        XCTAssertNotNil(model.csvPreview)
+        XCTAssertTrue(model.csvImportPlan.isEmpty)
+
+        model.validateCSVMapping()
+
+        XCTAssertEqual(model.csvImportPlan.count, 1)
     }
 
     func testExportReturnsCSVAndRecordsOnlyAnAuditEvent() throws {

@@ -1,6 +1,6 @@
 # UX-R2 — Core workflow forms
 
-**State:** In progress — UX-R2-A and UX-R2-B accepted; UX-R2-C is next up and not yet started
+**State:** In progress — UX-R2-A and UX-R2-B accepted; UX-R2-C is released for implementation
 **Depends on:** Accepted `UX-R1`  
 **Blocks:** `RP-R6` durable document references
 

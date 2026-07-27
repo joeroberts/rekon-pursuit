@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "UX-R2",
-  "nextEligibleTaskId": "UX-R2-C",
+  "activeTaskId": "UX-R2-C",
+  "nextEligibleTaskId": null,
   "tasks": [
     {
       "id": "RP-R0",
@@ -150,9 +150,9 @@
       "id": "UX-R2-C",
       "title": "CSV completion and report redesign",
       "workType": "Workflow",
-      "status": "next_up",
-      "releaseCondition": "UX-R2-B is accepted. Release only this approved CSV presentation slice; RP-R6 remains unreleased.",
-      "latestTransition": "Eligible after UX-R2-B product-owner acceptance; not yet started.",
+      "status": "in_progress",
+      "releaseCondition": "Implement only the approved CSV presentation slice. RP-R6 remains unreleased.",
+      "latestTransition": "Released after UX-R2-B product-owner acceptance; implementation is in progress.",
       "evidence": {
         "label": "UX-R2 task brief",
         "href": "../task-briefs/UX-R2-core-workflow-forms.md"
