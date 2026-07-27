@@ -14,8 +14,9 @@ released.
 
 ## R7b-1 — Automatic archive expiry removal
 
-At workspace open and while the app is running, the expiry service finds
-catalogued archives at or past their fixed expiry time. It first writes a
+At workspace open and on each transition from inactive to active while a
+workspace is open, the expiry service finds catalogued archives at or past
+their fixed expiry time. It first writes a
 durable `expired_pending_removal` state, then attempts removal only after it:
 
 1. resolves the archived file's scoped bookmark;
@@ -31,8 +32,9 @@ unavailable bookmark, identity mismatch, replacement, permission denial, or
 I/O failure leaves the archive in an explicit retryable or blocked expired
 state with redacted evidence. The operation is idempotent across relaunches.
 
-The app is not a background daemon. It makes no exact-clock guarantee while it
-is closed. Expiry never reads, modifies, or deletes active workspace data.
+The app is not a background daemon or timer. It makes no exact-clock guarantee
+while it is closed or remains active without another bounded service
+opportunity. Expiry never reads, modifies, or deletes active workspace data.
 
 ## R7b-2 — Explicit purge of retained deleted data
 

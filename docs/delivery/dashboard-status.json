@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": null,
-  "nextEligibleTaskId": "RP-R7b",
+  "activeTaskId": "RP-R7b",
+  "nextEligibleTaskId": null,
   "tasks": [
     {
       "id": "RP-R0",
@@ -252,14 +252,14 @@
     },
     {
       "id": "RP-R7b",
-      "title": "Backup expiry and retained-data purge",
+      "title": "Automatic portable archive expiry (R7b-1)",
       "workType": "Data lifecycle",
-      "status": "next_up",
-      "releaseCondition": "Eligible for planning and its own high-risk lifecycle gates; no implementation is released.",
-      "latestTransition": "Became the sole eligible successor after the full R7a recovery/archive/restore/export sequence was accepted.",
+      "status": "in_progress",
+      "releaseCondition": "R7b-1 only is released after Planning, Architect/Security, QA, TPM, and Delivery approval; R7b-2 purge/rebuild remains unreleased.",
+      "latestTransition": "R7b-1 automatic expiry was released after the independent plan gate; R7b-2 remains out of scope.",
       "evidence": {
-        "label": "Remediation ledger",
-        "href": "../remediation-ledger.md"
+        "label": "R7b-1 task brief",
+        "href": "../task-briefs/RP-R7b-1-automatic-archive-expiry.md"
       },
       "needsUserAction": false
     },

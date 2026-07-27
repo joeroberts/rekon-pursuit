@@ -4,7 +4,7 @@
 
 **Goal:** Remove a verified portable recovery archive only after its fixed 30-day retention period, at a bounded app-run service opportunity, without touching active workspace data.
 
-**Architecture:** Add a constrained, durable archive-lifecycle state to the local catalogue and a focused expiry worker separate from archive creation. The worker resolves the existing security-scoped bookmark only for an attempt, verifies the file's readable public header and its catalogue binding, rechecks file identity immediately before unlinking, and records only redacted outcomes. Workspace opening invokes the service once after a successful open; it is not a background daemon and makes no exact-clock promise while the app is closed.
+**Architecture:** Add a constrained, durable archive-lifecycle state to the local catalogue and a focused expiry worker separate from archive creation. The worker resolves the existing security-scoped bookmark only for an attempt, verifies the file's readable public header and its catalogue binding, rechecks file identity immediately before unlinking, and records only redacted outcomes. Workspace opening and an inactive-to-active transition invoke the bounded service while a workspace is open; it is not a background daemon or timer and makes no exact-clock promise while the app is closed or remains active without another trigger.
 
 **Tech Stack:** Swift 6, SwiftUI, Foundation, CryptoKit, Darwin POSIX file descriptors, encrypted SQLite via the existing `EncryptedDatabase`, XCTest.
 
@@ -30,7 +30,7 @@
 | `RekonPursuitCore/Workspace/PortableArchiveExpiryWorker.swift` | Isolated serial expiry attempt: bookmark scope, no-follow open, header verification, identity recheck, unlink, durable redacted state/activity. |
 | `RekonPursuitCore/Workspace/WorkspaceStore.swift` | Injected expiry seam, catalogue queries, and one bounded service-opportunity entry point. |
 | `RekonPursuit/WorkspaceViewModel.swift` | Calls the store service after a successful workspace open and refreshes published catalogue state without blocking UI. |
-| `RekonPursuit/ContentView.swift` | Presents existing catalogue state truthfully; no new destructive control. |
+| `RekonPursuit/ContentView.swift` | Observes the bounded inactive-to-active app transition and presents existing catalogue state truthfully; no new destructive control. |
 | `RekonPursuitCoreTests/PortableArchiveTests.swift` | Deterministic expiry, failure, identity, and redaction regression tests. |
 
 ### Task 1: Durable catalogue lifecycle contract
@@ -143,7 +143,7 @@
   func testExpiryStateAndActivityRemainRedacted() async throws
   ```
 
-  The boundary test must assert no work at `expiresAt - 0.001`, then at `expiresAt` assert the row first transitions through `expired_pending_removal`, the file is unlinked, the row is absent after refresh, and exactly one `portable_backup_expired_removed` activity exists. The redaction test must assert activity/category fields do not contain a filesystem path, bookmark bytes, recovery-key text, or archive payload.
+  The boundary test must seed a second valid future archive and assert no work at `expiresAt - 0.001`. At `expiresAt`, it must assert the due row first transitions through `expired_pending_removal`, its file is unlinked, its row is absent after refresh, and exactly one `portable_backup_expired_removed` activity exists; the future row and file must remain untouched. The retry test must close and recreate the store/worker against the same database after the injected first failure, then assert the new instance retries successfully and still records exactly one removal activity. The redaction test must assert activity/category fields do not contain a filesystem path, bookmark bytes, recovery-key text, or archive payload.
 
 - [ ] **Step 2: Run the focused test group to verify it fails**
 
@@ -175,8 +175,8 @@
   3. Reject non-regular/symlink targets through an `O_NOFOLLOW` read descriptor and `fstat` mode check.
   4. Capture `(st_dev, st_ino)`, read the archive from that descriptor, and verify its public binding against the row.
   5. Re-read target identity immediately before `unlink`; unlink only on an exact match.
-  6. On success, transactionally delete the catalogue row and insert one redacted `portable_backup_expired_removed` event correlated only to the opaque archive UUID.
-  7. On missing target persist `.expiredMissing/.targetMissing`; on scope/I-O failure persist `.expiredRetryable` with category only; on unsafe/mismatch/replacement persist `.expiredBlocked` with category only. Never claim removal for these branches.
+  6. After a successful unlink, transactionally delete the catalogue row and insert one redacted `portable_backup_expired_removed` event correlated only to the opaque archive UUID. If that follow-on transaction fails, do not fabricate the event or removal result: retain the pre-unlink catalogue row in a non-success retryable state so the next service opportunity observes the missing target and truthfully records `.expiredMissing/.targetMissing` without a deletion claim.
+  7. On a target already missing persist `.expiredMissing/.targetMissing`; on scope/I-O failure persist `.expiredRetryable` with category only; on unsafe/mismatch/replacement persist `.expiredBlocked` with category only. Never claim removal for these branches.
 
 - [ ] **Step 5: Wire one bounded store service opportunity**
 
@@ -210,13 +210,22 @@
 
 - [ ] **Step 1: Write the narrow lifecycle integration test**
 
-  Add one view-model seam test only if a test target exists for it. It must prove that a successfully opened workspace schedules the service opportunity and publishes the returned catalogue without blocking the initial usable UI state.
+  Add one view-model seam test only if a test target exists for it. Seed a stable opportunity and contact, then prove that a successfully opened workspace and a later inactive-to-active trigger each schedule one idempotent service opportunity and publish the returned catalogue without blocking the usable UI state or changing either active record.
 
   ```swift
   func testSuccessfulWorkspaceOpenSchedulesPortableArchiveExpiryRefresh() async throws {
-      let model = makeModel(expiryService: { [.expiredFixture] })
+      let model = makeModel(expiryService: { [.expiredFixture] }, seededOpportunity: .fixture, seededContact: .fixture)
       model.openWorkspaceForTesting()
       await eventually { model.portableArchiveCatalogue == [.expiredFixture] }
+      XCTAssertEqual(model.opportunities, [.fixture])
+      XCTAssertEqual(model.contacts, [.fixture])
+  }
+
+  func testInactiveToActiveSchedulesOneAdditionalExpiryRefresh() async throws {
+      let model = makeModel(expiryService: { [.fixture] })
+      model.workspaceOpenedForTesting()
+      model.applicationBecameActiveForTesting()
+      await eventually { model.expiryServiceInvocationCount == 2 }
   }
   ```
 
@@ -226,7 +235,7 @@
 
 - [ ] **Step 3: Schedule the bounded opportunity after successful open**
 
-  In the existing successful workspace-open path, launch one structured task after the store is assigned and the initial catalogue is available. It must capture the current store identity, return to `MainActor` before publishing, ignore stale-store completion, and make failure non-blocking while retaining the durable state from Task 2. Do not introduce a timer, background task, periodic daemon, or an exact timing claim.
+  In the existing successful workspace-open path, launch one structured task after the store is assigned and the initial catalogue is available. Add `@Environment(\\.scenePhase)` in `ContentView` and call a view-model `applicationBecameActive()` seam only on an observed `.inactive` → `.active` transition while `workspaceReady` is true. Both paths must capture the current store identity, return to `MainActor` before publishing, ignore stale-store completion, and make failure non-blocking while retaining the durable state from Task 2. Do not introduce a timer, background task, periodic daemon, or an exact timing claim.
 
 - [ ] **Step 4: Present catalogue truth, not inferred success**
 

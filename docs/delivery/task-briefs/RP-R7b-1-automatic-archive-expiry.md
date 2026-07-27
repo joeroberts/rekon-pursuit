@@ -2,7 +2,7 @@
 
 ## User-visible outcome
 
-At the next successful workspace-open opportunity after an archive's fixed 30-day expiry, Rekon Pursuit safely removes that archive only when it still exactly matches the verified, catalogued archive. Settings reflects the durable redacted outcome; no active workspace data is affected.
+At the next successful workspace-open or inactive-to-active app opportunity after an archive's fixed 30-day expiry, Rekon Pursuit safely removes that archive only when it still exactly matches the verified, catalogued archive. Settings reflects the durable redacted outcome; no active workspace data is affected.
 
 ## Release boundary
 
@@ -16,7 +16,7 @@ This is R7b-1 only. It does not purge deleted records from retained archives, re
 
 ## Acceptance evidence
 
-- Focused `PortableArchiveTests` cover the exact expiry boundary, retry/idempotence, missing/unavailable target, symlink/replacement/identity mismatch, header/signature/catalogue mismatch, and redaction.
+- Focused `PortableArchiveTests` cover the exact expiry boundary while a future archive remains untouched, persisted retry across a recreated store, missing/unavailable target, symlink/replacement/identity mismatch, header/signature/catalogue mismatch, redaction, and no active-workspace mutation.
 - Relevant signed Debug build succeeds.
 - Independent Architect/Security, QA, code review, TPM, and Delivery Manager approve completion.
 
