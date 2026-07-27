@@ -1072,11 +1072,31 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.contactProfileURLWarning, "This profile URL uses HTTP rather than HTTPS.")
 
         model.contactProfileURL = "profiles.example.com/alex"
-        XCTAssertEqual(model.contactProfileURLWarning, "Use an absolute http or https profile URL with a host.")
+        XCTAssertEqual(model.contactProfileURLWarning, "Use an absolute http or https profile URL with a public hostname.")
         model.createContact()
 
         XCTAssertEqual(model.contacts, [])
-        XCTAssertEqual(model.statusMessage, "Enter an absolute http or https profile URL with a host.")
+        XCTAssertEqual(model.statusMessage, "Enter an absolute http or https profile URL with a public hostname.")
+    }
+
+    func testInvalidContactFieldsExposeASaveErrorWithoutWriting() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
+
+        model.start()
+        model.contactName = "Alex Morgan"
+        model.contactEmail = "alex@"
+        model.createContact()
+
+        XCTAssertEqual(model.contactSaveError, "Enter an email address with a local part, @, and domain.")
+        XCTAssertEqual(try store.contacts(), [])
+
+        model.contactEmail = "alex@example.com"
+        model.contactProfileURL = "https://microsoft"
+        model.createContact()
+
+        XCTAssertEqual(model.contactSaveError, "Enter an absolute http or https profile URL with a public hostname.")
+        XCTAssertEqual(try store.contacts(), [])
     }
 
     func testSelectedContactCanLogAndDisplayALocalInteraction() throws {

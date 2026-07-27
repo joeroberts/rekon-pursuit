@@ -853,6 +853,12 @@ private struct ContactsView: View {
                             }
                             .disabled(model.contactName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                             .accessibilityIdentifier("save-contact")
+                            if let error = model.contactSaveError {
+                                Text(error)
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                                    .accessibilityIdentifier("contact-save-error")
+                            }
                         }
                     }
                 }

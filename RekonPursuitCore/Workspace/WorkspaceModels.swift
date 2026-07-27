@@ -588,7 +588,7 @@ enum WorkspaceStoreError: Error, LocalizedError {
         case .invalidContactEmail:
             return "Enter an email address with a local part, @, and domain."
         case .invalidContactProfileURL:
-            return "Enter an absolute http or https profile URL with a host."
+            return "Enter an absolute http or https profile URL with a public hostname."
         case .invalidInteraction:
             return "Enter an interaction summary and choose a valid linked opportunity."
         case .invalidReconciliationResult:

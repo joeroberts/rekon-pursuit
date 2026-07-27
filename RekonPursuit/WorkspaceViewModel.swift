@@ -186,6 +186,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var csvImportReport: CSVImportReport?
     @Published private(set) var csvImportReportRows: [CSVImportReportRow] = []
     @Published private(set) var addOpportunitySaveError: String?
+    @Published private(set) var contactSaveError: String?
     @Published private(set) var statusMessage = "Opening local workspace…"
     @Published private(set) var canCreateWorkspace = false
     @Published private(set) var workspaceReady = false
@@ -716,11 +717,16 @@ final class WorkspaceViewModel: ObservableObject {
             let contact = try store.createContact(contactCommand())
             refreshCounts()
             selectContact(contact)
+            contactSaveError = nil
             statusMessage = "Contact saved locally."
         } catch let error as LocalizedError {
-            statusMessage = error.errorDescription ?? "The contact could not be saved."
+            let message = error.errorDescription ?? "The contact could not be saved."
+            contactSaveError = message
+            statusMessage = message
         } catch {
-            statusMessage = "The contact could not be saved."
+            let message = "The contact could not be saved."
+            contactSaveError = message
+            statusMessage = message
         }
     }
 
@@ -737,6 +743,7 @@ final class WorkspaceViewModel: ObservableObject {
         contactProfileURL = contact.profileURL
         contactRelationshipContext = contact.relationshipContext
         contactNotes = contact.notes
+        contactSaveError = nil
         refreshSelectedContactInteraction()
     }
 
@@ -782,11 +789,16 @@ final class WorkspaceViewModel: ObservableObject {
             let contact = try store.updateContact(id: selectedContactID, command: contactCommand())
             refreshCounts()
             selectContact(contact)
+            contactSaveError = nil
             statusMessage = "Contact updated locally."
         } catch let error as LocalizedError {
-            statusMessage = error.errorDescription ?? "The contact could not be updated."
+            let message = error.errorDescription ?? "The contact could not be updated."
+            contactSaveError = message
+            statusMessage = message
         } catch {
-            statusMessage = "The contact could not be updated."
+            let message = "The contact could not be updated."
+            contactSaveError = message
+            statusMessage = message
         }
     }
 
@@ -1386,6 +1398,7 @@ final class WorkspaceViewModel: ObservableObject {
         contactProfileURL = ""
         contactRelationshipContext = ""
         contactNotes = ""
+        contactSaveError = nil
         clearInteractionDraft()
     }
 
@@ -1533,8 +1546,8 @@ final class WorkspaceViewModel: ObservableObject {
     private func profileURLWarning(for value: String) -> String? {
         let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return nil }
-        guard let components = URLComponents(string: value), let scheme = components.scheme?.lowercased(), let host = components.host, !host.isEmpty, ["http", "https"].contains(scheme) else {
-            return "Use an absolute http or https profile URL with a host."
+        guard let components = URLComponents(string: value), let scheme = components.scheme?.lowercased(), let host = components.host, host.contains("."), ["http", "https"].contains(scheme) else {
+            return "Use an absolute http or https profile URL with a public hostname."
         }
         return scheme == "http" ? "This profile URL uses HTTP rather than HTTPS." : nil
     }

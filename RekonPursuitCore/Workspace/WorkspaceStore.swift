@@ -925,6 +925,18 @@ final class WorkspaceStore {
         return true
     }
 
+    private func isValidContactProfileURL(_ value: String) -> Bool {
+        guard !value.isEmpty else { return true }
+        guard let components = URLComponents(string: value),
+              let scheme = components.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              let host = components.host,
+              host.contains(".") else {
+            return false
+        }
+        return true
+    }
+
     private func isHostfulAbsoluteURL(_ value: String) -> Bool {
         guard let components = URLComponents(string: value),
               let scheme = components.scheme,
@@ -973,7 +985,7 @@ final class WorkspaceStore {
         let email = command.email.trimmingCharacters(in: .whitespacesAndNewlines)
         guard isValidContactEmail(email) else { throw WorkspaceStoreError.invalidContactEmail }
         let profileURL = command.profileURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isValidJobURL(profileURL) else { throw WorkspaceStoreError.invalidContactProfileURL }
+        guard isValidContactProfileURL(profileURL) else { throw WorkspaceStoreError.invalidContactProfileURL }
         return Contact(
             id: id ?? "",
             name: name,
