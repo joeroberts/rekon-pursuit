@@ -2,7 +2,7 @@
 
 ## User-visible outcome
 
-At the next successful workspace-open or inactive-to-active app opportunity after an archive's fixed 30-day expiry, Rekon Pursuit safely removes that archive only when it still exactly matches the verified, catalogued archive. Settings reflects the durable redacted outcome; no active workspace data is affected.
+At the next successful workspace-open or inactive-to-active app opportunity after a workspace-managed archive's fixed 30-day expiry, Rekon Pursuit safely removes it only when it still exactly matches the verified, catalogued archive. External/user-selected archives are retained and marked for manual removal; Settings reflects the durable redacted outcome and no active workspace data is affected.
 
 ## Release boundary
 
@@ -16,10 +16,10 @@ This is R7b-1 only. It does not purge deleted records from retained archives, re
 
 ## Acceptance evidence
 
-- Focused `PortableArchiveTests` cover the exact expiry boundary while a future archive remains untouched, persisted retry across a recreated store, missing/unavailable target, symlink/replacement/identity mismatch, header/signature/catalogue mismatch, redaction, and no active-workspace mutation.
+- Focused `PortableArchiveTests` cover managed-archive creation, the exact expiry boundary while a future archive remains untouched, durable retry, external-archive no-delete/manual-removal behavior, missing/unsafe/mismatch paths, redaction, and no active-workspace mutation.
 - Relevant signed Debug build succeeds.
 - Independent Architect/Security, QA, code review, TPM, and Delivery Manager approve completion.
 
 ## Material risk and handling
 
-An expired archive is a destructive target. The worker must acquire its scoped bookmark only for an attempt, verify a regular no-follow file and public v1 binding, recheck device/inode immediately before unlink, and retain the catalogue on every non-success path. It records categories only, never paths, bookmark bytes, payloads, or recovery material.
+An expired managed archive is a destructive target. The worker must use only a validated workspace-relative locator, verify a regular no-follow file and public v1 binding, preserve durable prepared/quarantined state across non-success paths, and retain the catalogue on every non-success path. External archives are never destructive targets. Activity records categories only, never paths, bookmark bytes, payloads, or recovery material.

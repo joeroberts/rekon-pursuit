@@ -278,6 +278,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var portableArchiveCatalogue: [PortableArchiveCatalogueRow] = []
     @Published private(set) var isCreatingPortableArchive = false
     @Published private(set) var protectedExportReview: ProtectedExportReview?
+    @Published private(set) var protectedExportErrorMessage: String?
     @Published private(set) var isCreatingProtectedExport = false
     @Published private(set) var isRestoringPortableArchive = false
     @Published private(set) var portableArchiveRestoreState: PortableArchiveRestoreState = .idle
@@ -1184,10 +1185,6 @@ final class WorkspaceViewModel: ObservableObject {
             statusMessage = "Enter the complete recovery key, including its checksum."
             return
         }
-        guard let url = portableArchiveDestination() else {
-            statusMessage = "Portable archive creation was cancelled."
-            return
-        }
         guard let store = readyStore() else { return }
         isCreatingPortableArchive = true
         statusMessage = "Creating and verifying the portable recovery archive…"
@@ -1195,7 +1192,7 @@ final class WorkspaceViewModel: ObservableObject {
             guard let self else { return }
             defer { self.isCreatingPortableArchive = false }
             do {
-                _ = try await store.createPortableArchive(recoveryKey: key, at: url)
+                _ = try await store.createManagedPortableArchive(recoveryKey: key)
                 guard self.store === store, self.workspaceReady else { return }
                 self.refreshCounts()
                 self.statusMessage = "Portable recovery archive verified and saved."
@@ -1212,8 +1209,17 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func reviewProtectedExport(reentry: String) {
-        guard let key = RecoveryKey.parse(reentry) else { statusMessage = "Enter the complete recovery key, including its checksum."; return }
-        guard let url = protectedExportDestination() else { statusMessage = "Protected export was cancelled."; return }
+        protectedExportErrorMessage = nil
+        guard let key = RecoveryKey.parse(reentry) else {
+            let message = "Enter the complete recovery key, including its checksum."
+            statusMessage = message
+            protectedExportErrorMessage = message
+            return
+        }
+        guard let url = protectedExportDestination() else {
+            statusMessage = "Protected export was cancelled."
+            return
+        }
         guard let store = readyStore() else { return }
         isCreatingProtectedExport = true
         Task { @MainActor [weak self, store] in
@@ -1224,13 +1230,21 @@ final class WorkspaceViewModel: ObservableObject {
                 self.protectedExportReview = review
                 self.statusMessage = "Review the protected export before confirming."
             } catch {
-                self?.statusMessage = Self.protectedExportMessage(for: error, fallback: "The protected export could not be prepared.")
+                let message = Self.protectedExportMessage(for: error, fallback: "The protected export could not be prepared.")
+                self?.statusMessage = message
+                self?.protectedExportErrorMessage = message
             }
         }
     }
 
     func confirmProtectedExport(reentry: String) {
-        guard let review = protectedExportReview, let key = RecoveryKey.parse(reentry), let store = readyStore() else { statusMessage = "Enter the complete recovery key before confirming."; return }
+        protectedExportErrorMessage = nil
+        guard let review = protectedExportReview, let key = RecoveryKey.parse(reentry), let store = readyStore() else {
+            let message = "Enter the complete recovery key before confirming."
+            statusMessage = message
+            protectedExportErrorMessage = message
+            return
+        }
         isCreatingProtectedExport = true
         Task { @MainActor [weak self, store] in
             defer { self?.isCreatingProtectedExport = false }
@@ -1238,14 +1252,20 @@ final class WorkspaceViewModel: ObservableObject {
                 _ = try await store.createProtectedExport(review: review, recoveryKey: key)
                 guard let self, self.store === store else { return }
                 self.protectedExportReview = nil
+                self.protectedExportErrorMessage = nil
                 self.statusMessage = "Protected export verified and saved."
             } catch {
-                self?.statusMessage = Self.protectedExportMessage(for: error, fallback: "The protected export could not be created.")
+                let message = Self.protectedExportMessage(for: error, fallback: "The protected export could not be created.")
+                self?.statusMessage = message
+                self?.protectedExportErrorMessage = message
             }
         }
     }
 
-    func cancelProtectedExport() { protectedExportReview = nil }
+    func cancelProtectedExport() {
+        protectedExportReview = nil
+        protectedExportErrorMessage = nil
+    }
 
     private static func protectedExportMessage(for error: Error, fallback: String) -> String {
         if let controlled = error as? ProtectedExportWorkerError { return controlled.errorDescription ?? fallback }

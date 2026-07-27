@@ -30,6 +30,25 @@ final class ProtectedExportTests: XCTestCase {
         try store.close()
     }
 
+    func testProtectedExportCopiesAndVerifiesLargeWorkspaceData() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("protected-export-large-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let database = try EncryptedDatabase.open(url: root.appendingPathComponent("workspace.sqlite"), key: Data(repeating: 17, count: 32), createIfMissing: true)
+        let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
+        let key = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: key)
+        _ = try store.create(.init(title: "Large export", company: "Example", jobDescription: String(repeating: "A", count: 1_200_000)))
+        let destination = root.appendingPathComponent("large-workspace.rekonexport")
+
+        let review = try await store.reviewProtectedExport(recoveryKey: key, at: destination)
+        let receipt = try await store.createProtectedExport(review: review, recoveryKey: key)
+
+        XCTAssertGreaterThan((try Data(contentsOf: destination)).count, 1_048_576)
+        XCTAssertEqual(try ProtectedExportService.verify(data: Data(contentsOf: destination), recoveryKey: key), receipt)
+        try store.close()
+    }
+
     func testReviewBindsDestinationParentIdentity() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("protected-export-parent-\(UUID().uuidString)")
         let destinationDirectory = root.appendingPathComponent("exports", isDirectory: true)

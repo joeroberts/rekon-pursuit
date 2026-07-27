@@ -427,6 +427,29 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.statusMessage, "Portable recovery archive verified and saved.")
     }
 
+    func testProtectedExportReviewFailureRemainsVisibleForCorrection() async throws {
+        let store = try makeStore()
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("existing-protected-export-\(UUID().uuidString).rekonexport")
+        try Data("existing export".utf8).write(to: destination)
+        defer { try? FileManager.default.removeItem(at: destination) }
+        let model = WorkspaceViewModel(
+            openWorkspace: { .ready(store) },
+            createWorkspace: { store },
+            protectedExportDestination: { destination },
+            separateLocalWorkspace: .disabledForTesting
+        )
+        model.start()
+
+        model.reviewProtectedExport(reentry: recoveryKey.displayValue)
+        while model.isCreatingProtectedExport { await Task.yield() }
+
+        XCTAssertNil(model.protectedExportReview)
+        XCTAssertEqual(model.protectedExportErrorMessage, "That filename already exists. Choose a new filename; Rekon Pursuit will not replace a file.")
+    }
+
     func testExternalFolderLeaseIsRetainedForTheOpenedStoreThenReleasedOnClose() throws {
         let store = try makeStore()
         let bookmarkFixture = ViewModelBookmarkFixture()

@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 nonisolated enum WorkspaceMigrations {
-    static let currentVersion = 28
+    static let currentVersion = 30
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
@@ -28,6 +28,8 @@ nonisolated enum WorkspaceMigrations {
     static let versionTwentySixChecksum = checksum(for: "26|tracker_export_revision|protected_export_events|active-data-triggers.v1")
     static let versionTwentySevenChecksum = checksum(for: "27|ALTER TABLE portable_archive_catalogue ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'Verified'|ALTER TABLE portable_archive_catalogue ADD COLUMN last_expiry_outcome TEXT NOT NULL DEFAULT 'none'")
     static let versionTwentyEightChecksum = checksum(for: "28|portable_archive_catalogue.managed_expiry.v1")
+    static let versionTwentyNineChecksum = checksum(for: "29|portable_archive_catalogue.expiry_quarantine_relative_path")
+    static let versionThirtyChecksum = checksum(for: "30|portable_archive_catalogue.expiry_expected_identity")
 
     static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false, failVersionSixteen: Bool = false, failVersionSeventeen: Bool = false, failVersionNineteen: Bool = false, failVersionTwenty: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
@@ -465,6 +467,43 @@ nonisolated enum WorkspaceMigrations {
                     if !existingColumns.contains("expiry_revision") { try database.execute("ALTER TABLE portable_archive_catalogue ADD COLUMN expiry_revision INTEGER NOT NULL DEFAULT 0") }
                     try database.execute("INSERT OR IGNORE INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(28), .text(versionTwentyEightChecksum)])
                     try database.execute("UPDATE schema_migrations SET version = 28")
+                }
+                database.removeMigrationSnapshot()
+            } catch { throw error }
+        }
+        if version < 29 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    let existingColumns = try database.rows("PRAGMA table_info(portable_archive_catalogue)").compactMap { values -> String? in
+                        guard values.count > 1, case let .text(name) = values[1] else { return nil }
+                        return name
+                    }
+                    if !existingColumns.contains("expiry_quarantine_relative_path") {
+                        try database.execute("ALTER TABLE portable_archive_catalogue ADD COLUMN expiry_quarantine_relative_path TEXT")
+                    }
+                    try database.execute("INSERT OR IGNORE INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(29), .text(versionTwentyNineChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 29")
+                }
+                database.removeMigrationSnapshot()
+            } catch { throw error }
+        }
+        if version < 30 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    let existingColumns = try database.rows("PRAGMA table_info(portable_archive_catalogue)").compactMap { values -> String? in
+                        guard values.count > 1, case let .text(name) = values[1] else { return nil }
+                        return name
+                    }
+                    if !existingColumns.contains("expiry_expected_device") {
+                        try database.execute("ALTER TABLE portable_archive_catalogue ADD COLUMN expiry_expected_device INTEGER")
+                    }
+                    if !existingColumns.contains("expiry_expected_inode") {
+                        try database.execute("ALTER TABLE portable_archive_catalogue ADD COLUMN expiry_expected_inode INTEGER")
+                    }
+                    try database.execute("INSERT OR IGNORE INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(30), .text(versionThirtyChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 30")
                 }
                 database.removeMigrationSnapshot()
             } catch { throw error }

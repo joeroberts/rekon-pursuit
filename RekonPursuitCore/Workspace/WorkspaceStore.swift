@@ -909,6 +909,30 @@ final class WorkspaceStore {
         return try await portableArchiveWorker.createArchive(request)
     }
 
+    func createManagedPortableArchive(recoveryKey: RecoveryKey) async throws -> PortableArchiveCatalogueRow {
+        let archiveID = UUID()
+        let relativePath = "\(archiveID.uuidString.lowercased()).rekonarchive"
+        let root = database.portableArchiveConnectionConfiguration().url
+            .deletingLastPathComponent()
+            .appendingPathComponent("portable-archives", isDirectory: true)
+        try synchronized {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            var metadata = stat()
+            guard Darwin.lstat(root.path, &metadata) == 0,
+                  (metadata.st_mode & S_IFMT) == S_IFDIR,
+                  (metadata.st_mode & S_IFLNK) == 0 else {
+                throw PortableArchiveError.destinationUnavailable
+            }
+            guard Darwin.chmod(root.path, S_IRWXU) == 0 else { throw PortableArchiveError.destinationUnavailable }
+        }
+        let request = PortableArchiveRequest(
+            recoveryKey: recoveryKey, destinationURL: root.appendingPathComponent(relativePath),
+            archiveID: archiveID, temporaryID: UUID(), activityID: nextIdentifier(), createdAt: clock(),
+            actorID: actorID, correlationID: correlationID, managedRelativePath: relativePath
+        )
+        return try await portableArchiveWorker.createArchive(request)
+    }
+
     func reviewProtectedExport(recoveryKey: RecoveryKey, at destinationURL: URL) async throws -> ProtectedExportReview {
         try await protectedExportWorker.review(destinationURL: destinationURL, recoveryKey: recoveryKey)
     }

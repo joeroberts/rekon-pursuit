@@ -3,11 +3,13 @@
 ## Decision
 
 Rekon Pursuit retains active workspace data indefinitely until the user deletes
-it. Portable recovery archives expire automatically **at the next app-run
-service opportunity** on or after `created_at + 30 × 24 hours`. A user may
-explicitly purge logically deleted material from retained archives. Purge
-requires one recovery-key re-entry per purge job; the key exists only in
-operation memory and is never persisted.
+it. **Workspace-managed** portable recovery archives expire automatically at
+the next app-run service opportunity on or after `created_at + 30 × 24 hours`.
+An external, user-selected portable archive is an unmanaged export: the app
+never automatically renames or deletes it and instead records that manual
+removal is required after expiry. A user may explicitly purge logically deleted
+material from retained archives. Purge requires one recovery-key re-entry per
+purge job; the key exists only in operation memory and is never persisted.
 
 This work is two serial slices. `R7b-1` must be accepted before `R7b-2` can be
 released.
@@ -16,21 +18,30 @@ released.
 
 At workspace open and on each transition from inactive to active while a
 workspace is open, the expiry service finds catalogued archives at or past
-their fixed expiry time. It first writes a
-durable `expired_pending_removal` state, then attempts removal only after it:
+their fixed expiry time. External archives transition to
+`expired_manual_removal_required` and are left untouched. For a
+workspace-managed archive, the service first durably claims the archive, then
+uses the private workspace archive store and a durable
+`expired_prepared` → `expired_quarantined` → removal sequence before it:
 
-1. resolves the archived file's scoped bookmark;
+1. resolves the managed relative locator beneath the private workspace archive
+   store (it does not resolve an external bookmark);
 2. opens and verifies the intended regular no-follow file;
 3. validates the versioned readable archive header/signature, archive identity,
    recorded fingerprint, and payload checksum against the catalogue; and
 4. rechecks device/inode identity immediately before deletion.
 
-Successful removal deletes the verified file and closes/removes its catalogue
-record with a redacted `portable_backup_expired_removed` activity. A missing
-file records `expired_missing`; it never claims physical deletion. An
-unavailable bookmark, identity mismatch, replacement, permission denial, or
-I/O failure leaves the archive in an explicit retryable or blocked expired
-state with redacted evidence. The operation is idempotent across relaunches.
+The managed store and its quarantine directory are created owner-only (`0700`)
+under the workspace. The MVP protects against ordinary failures and replacement
+races; it does not claim to defend against a malicious process running as the
+same macOS user.
+
+Successful removal deletes the verified managed file and closes/removes its
+catalogue record with a redacted `portable_backup_expired_removed` activity. A
+missing file records `expired_missing`; it never claims physical deletion.
+Identity mismatch, replacement, permission denial, or I/O failure leaves the
+archive in an explicit retryable or blocked expired state with redacted
+evidence. The operation is idempotent across relaunches.
 
 The app is not a background daemon or timer. It makes no exact-clock guarantee
 while it is closed or remains active without another bounded service
@@ -58,6 +69,7 @@ new recovery-key entry.
 ## Boundaries
 
 - No automatic expiry of active workspace data.
+- No automatic deletion, move, or rename of an external/user-selected archive.
 - No physical-overwrite guarantee; removal is best-effort and described
   truthfully.
 - No unencrypted export, archive format expansion, restore activation/switch,

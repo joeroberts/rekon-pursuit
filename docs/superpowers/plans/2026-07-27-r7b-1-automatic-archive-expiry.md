@@ -4,7 +4,7 @@
 
 **Goal:** Remove a verified portable recovery archive only after its fixed 30-day retention period, at a bounded app-run service opportunity, without touching active workspace data.
 
-**Architecture:** Add a constrained, durable archive-lifecycle state to the local catalogue and a focused expiry worker separate from archive creation. The worker resolves the existing security-scoped bookmark only for an attempt, verifies the file's readable public header and its catalogue binding, rechecks file identity immediately before unlinking, and records only redacted outcomes. Workspace opening and an inactive-to-active transition invoke the bounded service while a workspace is open; it is not a background daemon or timer and makes no exact-clock promise while the app is closed or remains active without another trigger.
+**Architecture amendment (2026-07-27):** Automatic expiry applies only to workspace-managed recovery archives in the private workspace `portable-archives` store, which is created and maintained as owner-only (`0700`). External/user-selected archives are retained and become `expired_manual_removal_required`; they are never auto-renamed or deleted. Managed expiry persists an opaque attempt token, a workspace-relative quarantine locator, and expected device/inode identity before the destructive transition; it uses prepared/quarantined lifecycle states and must not hold a synchronous lock across an `await`. This protects against ordinary failures and replacement races, but does not claim to defend against a malicious process running as the same macOS user. This amendment supersedes the original bookmark-based unlink wording below where they conflict.
 
 **Tech Stack:** Swift 6, SwiftUI, Foundation, CryptoKit, Darwin POSIX file descriptors, encrypted SQLite via the existing `EncryptedDatabase`, XCTest.
 
@@ -12,7 +12,7 @@
 
 - R7b-1 depends on accepted RP-R7a-4 and the approved R7b expiry/purge design in `docs/superpowers/specs/2026-07-27-r7b-expiry-and-purge-design.md`.
 - Process only portable archive catalogue entries at or after `expires_at`; do not expire, purge, rewrite, or alter active workspace data.
-- Deletion requires security-scoped bookmark access, a regular no-follow file, readable v1 header/signature/checksum validation, a catalogue ID/fingerprint/checksum match, and a final device/inode recheck before unlink.
+- Managed deletion requires a validated generated workspace-relative locator under the owner-only store, a regular no-follow file, readable v1 header/signature/checksum validation, a catalogue ID/fingerprint/checksum match, an atomic move into the private quarantine directory, and a final device/inode recheck before unlink. It never resolves an external bookmark.
 - Persist no recovery key, raw bookmark, resolved path, payload, or free-form filesystem error in lifecycle state or activity.
 - Do not modify v1 archive encoding, full recovery-key verification, restore, protected export, or R7b-2 purge/rewrite behavior.
 - A failed, missing, inaccessible, replaced, symlinked, nonregular, or mismatched target must remain non-destructively represented in the catalogue; it is never a successful deletion.
@@ -27,7 +27,7 @@
 | `RekonPursuitCore/Workspace/WorkspaceModels.swift` | Constrained lifecycle state and redacted expiry outcome exposed by catalogue reads. |
 | `RekonPursuitCore/Workspace/Migrations.swift` | Rollback-safe migration from catalogue v25/26 to durable expiry state and last outcome category. |
 | `RekonPursuitCore/Workspace/PortableArchiveService.swift` | Readable, recovery-key-free v1 archive-header verifier used only to bind a file to a catalogue row. |
-| `RekonPursuitCore/Workspace/PortableArchiveExpiryWorker.swift` | Isolated serial expiry attempt: bookmark scope, no-follow open, header verification, identity recheck, unlink, durable redacted state/activity. |
+| `RekonPursuitCore/Workspace/PortableArchiveExpiryWorker.swift` | Isolated serial expiry attempt: durable claim, private managed-store/quarantine protocol, no-follow open, header verification, identity recheck, unlink, durable redacted state/activity. |
 | `RekonPursuitCore/Workspace/WorkspaceStore.swift` | Injected expiry seam, catalogue queries, and one bounded service-opportunity entry point. |
 | `RekonPursuit/WorkspaceViewModel.swift` | Calls the store service after a successful workspace open and refreshes published catalogue state without blocking UI. |
 | `RekonPursuit/ContentView.swift` | Observes the bounded inactive-to-active app transition and presents existing catalogue state truthfully; no new destructive control. |
@@ -47,10 +47,12 @@
   ```swift
   nonisolated enum PortableArchiveLifecycleState: String, Equatable, Sendable {
       case verified = "Verified"
-      case expiredPendingRemoval = "expired_pending_removal"
+      case expiredPrepared = "expired_prepared"
+      case expiredQuarantined = "expired_quarantined"
       case expiredRetryable = "expired_retryable"
       case expiredBlocked = "expired_blocked"
       case expiredMissing = "expired_missing"
+      case expiredManualRemovalRequired = "expired_manual_removal_required"
   }
 
   nonisolated enum PortableArchiveExpiryOutcome: String, Equatable, Sendable {
@@ -132,7 +134,7 @@
 
 - [ ] **Step 1: Write failing material safety tests**
 
-  Add deterministic tests using an injected clock, temporary archive, bookmark resolver, file-operation seam, and one synthetic valid v1 archive. Cover exactly:
+  Add deterministic tests using an injected clock, temporary managed archive store, file-operation seam, and one synthetic valid v1 archive. Cover exactly:
 
   ```swift
   func testExpiryAtBoundaryRemovesOnlyVerifiedMatchingRegularArchive() async throws
@@ -143,7 +145,7 @@
   func testExpiryStateAndActivityRemainRedacted() async throws
   ```
 
-  The boundary test must seed a second valid future archive and assert no work at `expiresAt - 0.001`. At `expiresAt`, it must assert the due row first transitions through `expired_pending_removal`, its file is unlinked, its row is absent after refresh, and exactly one `portable_backup_expired_removed` activity exists; the future row and file must remain untouched. The retry test must close and recreate the store/worker against the same database after the injected first failure, then assert the new instance retries successfully and still records exactly one removal activity. The redaction test must assert activity/category fields do not contain a filesystem path, bookmark bytes, recovery-key text, or archive payload.
+  The boundary test must seed a second valid future archive and assert no work at `expiresAt - 0.001`. At `expiresAt`, it must assert the due row transitions through `expired_prepared` and `expired_quarantined`, its file is unlinked, its row is absent after refresh, and exactly one `portable_backup_expired_removed` activity exists; the future row and file must remain untouched. The retry test must close and recreate the store/worker against the same database after the injected first failure, then assert the new instance retries successfully and still records exactly one removal activity. The redaction test must assert activity/category fields do not contain a filesystem path, bookmark bytes, recovery-key text, or archive payload.
 
 - [ ] **Step 2: Run the focused test group to verify it fails**
 
@@ -168,10 +170,10 @@
 
 - [ ] **Step 4: Implement the expiry worker with identity-safe unlink**
 
-  Create `PortableArchiveExpiryWorker` with injected `now`, bookmark resolver, read/open, metadata, unlink, and activity seams. For each due row only:
+  Create `PortableArchiveExpiryWorker` with injected `now`, managed-store locator, read/open, metadata, unlink, and activity seams. For each due row only:
 
-  1. Persist `expired_pending_removal` before any destructive attempt.
-  2. Resolve/start scope once, and always stop it with `defer`.
+  1. Persist `expired_prepared` with an exact generated archive locator and opaque attempt token before any destructive attempt.
+  2. Resolve only the app-owned managed store and quarantine paths; never resolve an external bookmark.
   3. Reject non-regular/symlink targets through an `O_NOFOLLOW` read descriptor and `fstat` mode check.
   4. Capture `(st_dev, st_ino)`, read the archive from that descriptor, and verify its public binding against the row.
   5. Re-read target identity immediately before `unlink`; unlink only on an exact match.
