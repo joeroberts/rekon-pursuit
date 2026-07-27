@@ -4,6 +4,19 @@ import XCTest
 
 @MainActor
 final class WorkspaceLocationBookmarkTests: XCTestCase {
+    func testDocumentReferenceValidationRejectsRenamedNonPDFBytes() {
+        XCTAssertThrowsError(try DocumentReferenceBookmarkStore.validateContents(Data("not a PDF".utf8), pathExtension: "pdf")) { error in
+            XCTAssertEqual(error as? DocumentReferenceBookmarkError, .unsupportedType)
+        }
+    }
+
+    func testDocumentReferenceValidationAcceptsPDFSignatureAndRejectsOversize() throws {
+        XCTAssertEqual(try DocumentReferenceBookmarkStore.validateContents(Data("%PDF-1.7".utf8), pathExtension: "pdf"), "application/pdf")
+        XCTAssertThrowsError(try DocumentReferenceBookmarkStore.validateContents(Data(repeating: 0, count: DocumentReferenceBookmarkStore.maximumByteCount + 1), pathExtension: "pdf")) { error in
+            XCTAssertEqual(error as? DocumentReferenceBookmarkError, .tooLarge)
+        }
+    }
+
     func testValidateAndSavePersistsOpaqueBookmarkOnlyAfterDirectDatabaseValidation() throws {
         let fixture = BookmarkFixture()
         let priorBookmark = Data("prior-bookmark".utf8)

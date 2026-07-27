@@ -206,27 +206,29 @@ struct DocumentReferenceBookmarkStore {
 
     func release(_ url: URL) { url.stopAccessingSecurityScopedResource() }
 
+    static func validateContents(_ data: Data, pathExtension: String) throws -> String {
+        guard data.count <= maximumByteCount else { throw DocumentReferenceBookmarkError.tooLarge }
+        switch pathExtension.lowercased() {
+        case "pdf":
+            guard data.starts(with: Data("%PDF-".utf8)) else { throw DocumentReferenceBookmarkError.unsupportedType }
+            return "application/pdf"
+        case "docx":
+            guard data.starts(with: Data([0x50, 0x4b, 0x03, 0x04])) else { throw DocumentReferenceBookmarkError.unsupportedType }
+            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        default:
+            throw DocumentReferenceBookmarkError.unsupportedType
+        }
+    }
+
     private func verify(url: URL, expectedHash: String?, expectedByteCount: Int?) throws -> (contentType: String, hash: String, byteCount: Int) {
         var status = stat()
         guard lstat(url.path, &status) == 0, (status.st_mode & S_IFMT) == S_IFREG else { throw DocumentReferenceBookmarkError.unsafeFile }
         let ext = url.pathExtension.lowercased()
-        let contentType: String
-        switch ext {
-        case "pdf": contentType = "application/pdf"
-        case "docx": contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        default: throw DocumentReferenceBookmarkError.unsupportedType
-        }
         let size = Int(status.st_size)
         guard size >= 0, size <= Self.maximumByteCount else { throw DocumentReferenceBookmarkError.tooLarge }
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
         guard data.count == size else { throw DocumentReferenceBookmarkError.mismatch }
-        let isExpectedFormat: Bool
-        switch ext {
-        case "pdf": isExpectedFormat = data.starts(with: Data("%PDF-".utf8))
-        case "docx": isExpectedFormat = data.starts(with: Data([0x50, 0x4b, 0x03, 0x04]))
-        default: isExpectedFormat = false
-        }
-        guard isExpectedFormat else { throw DocumentReferenceBookmarkError.unsupportedType }
+        let contentType = try Self.validateContents(data, pathExtension: ext)
         let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         if let expectedHash, let expectedByteCount, (hash != expectedHash || size != expectedByteCount) { throw DocumentReferenceBookmarkError.mismatch }
         return (contentType, hash, size)
