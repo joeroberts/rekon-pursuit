@@ -9,3 +9,4 @@ Credentials.plist
 *.sqlite-shm
 *.sqlite-wal
 .superpowers/
+.worktrees/
