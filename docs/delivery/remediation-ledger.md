@@ -1,10 +1,9 @@
 # Rekon Pursuit — MVP remediation ledger
 
 **Status:** The current evidence-backed operational state is: `RP-R0`,
-`RP-R1a`, `RP-R1b`, `RP-R2`, `RP-R3`, `RP-R4`, `RP-R5`, and `UX-R1` are
-Accepted; `UX-R2-A` and `UX-R2-B` are Accepted and parent `UX-R2` remains In progress;
-`UX-R2-C` (CSV redesign) is released and In progress.
-`RP-R6`, and `RP-R7a`–`RP-R10` remain unreleased or Backlog.
+`RP-R1a`, `RP-R1b`, `RP-R2`, `RP-R3`, `RP-R4`, `RP-R5`, `UX-R1`, and
+`UX-R2` (including sub-slices A, B, and C) are Accepted. `RP-R6` is Next up
+but unreleased; `RP-R7a`–`RP-R10` remain Backlog.
 
 **Authority:** [dashboard-status.json](dashboard-status.json) is the canonical
 machine-readable operational view for the current remediation queue. This
@@ -71,8 +70,8 @@ ordinary sequencing.
 | `RP-R4` | Reconciliation contract and local workflow states only: safe URL validation, classifications, evidence/error, confidence, retry de-duplication, closure confirmation; no request yet. | `RP-R3` | **Accepted** | Focused migration/task-isolation/startup verification, independent Architect/QA/Code Review approval, and product-owner hands-on verification. | Accepted; no network capability was released. R5 is Next up for its own plan and privacy/network gate. |
 | `RP-R5` | User-initiated public-URL check: direct GET only, bounded/no-auth/no-script request, offline/manual-review handling, retry task, no auto-close. | `RP-R4` | **Accepted** | Focused correction verification, independent Code Review/QA/Architect approvals, and product-owner hands-on verification. | Accepted after the corrected implementation proved peer-bound, bounded, no-redirect public URL checking with manual closure only. The later product-owner UX-R1 → UX-R2 → R6 sequence now governs successor release. |
 | `UX-R1` | Shell and opportunity navigation: native icon/compact sidebar emblem, first-run onboarding, Home default with Needs Attention as its first section, Pipeline-owned add/import entry points, consistent Rekon tokens, responsive empty states, scrollable Pipeline → dedicated opportunity overview, Activity & history and Reconcile posting sub-screens, and a compact overview document area. | `RP-R5` | **Accepted** | Product-owner verification of the shell/navigation route behavior and separate local-workspace correction. | Accepted after the product owner verified a fresh build: Board Back restoration and safe History/Reconcile fallback work. The deferred live-handoff work remains separate and does not block product remediation. |
-| `UX-R2` | Pipeline-owned core workflow forms: Add Opportunity layout/validation/structured action details and creation-date default; contact validation/employer association/expandable text; and staged CSV mapping/review/completion redesign. | `UX-R1` | **In progress — UX-R2-C released** | Full UX-R2 acceptance still requires C (CSV) and product-owner workflow verification. | Planning, Architect, QA, TPM, and Delivery approved the brief. Product-owner acceptance closed A and B; C is the active slice. RP-R6 remains unreleased. |
-| `RP-R6` | Security-scoped document bookmark, open/verify/relink, hash revalidation, and relink-required after portable restore. No copy/edit/parse. | `UX-R2` | Backlog | PDF/DOCX attach, relaunch/open, moved-file relink, permission failure smoke. | Deferred until UX-R2 creates the approved compact document area. |
+| `UX-R2` | Pipeline-owned core workflow forms: Add Opportunity layout/validation/structured action details and creation-date default; contact validation/employer association/expandable text; and staged CSV mapping/review/completion redesign. | `UX-R1` | **Accepted** | Product-owner hands-on verification of all three serial workflow slices. | Planning, Architect, QA, TPM, and Delivery approved the brief. Product-owner acceptance closed A, B, and C; this completes UX-R2. RP-R6 is now eligible but not released. |
+| `RP-R6` | Security-scoped document bookmark, open/verify/relink, hash revalidation, and relink-required after portable restore. No copy/edit/parse. | `UX-R2` | Next up | PDF/DOCX attach, relaunch/open, moved-file relink, permission failure smoke. | Eligible after UX-R2 acceptance. It requires its own dependency-safe brief and release gate before implementation. |
 | `RP-R7a` | Recovery-key enrollment/verification, authenticated portable archive/export default, manifest, and restore-as-new-workspace. | `RP-R6` | Backlog | Recovery-key, portable restore, encrypted/default-export evidence. | Requires Architect + Security/Privacy approval before release. |
 | `RP-R7b` | 30-day expiry display, deleted-data disclosure, and verified retained-backup purge/rebuild. | `RP-R7a` | Backlog | Expiry and purge success/failure evidence. | Architect + Security/Privacy approval required. |
 | `RP-R8` | Empty read-only local AI ledger with time, feature, opportunity, route, model, completion, and cost filters. No AI/network/metrics execution. | `RP-R6` | Backlog | Every filter works at zero entries; no entry/network is produced. | Release only in serial order after its predecessor gate is accepted. |
@@ -315,6 +314,7 @@ not release R5.
 | 2026-07-26 | `UX-R2-B` | **Released for implementation** | The already-approved serial brief and accepted A make Contacts/employer relationships dependency-safe. Implement only B; keep C and RP-R6 unreleased. |
 | 2026-07-26 | `UX-R2-B` | **Accepted — UX-R2-C eligible** | Product-owner hands-on verification accepted the Contacts/employer relationship flow, including inline field feedback and the focused management sheet that shows a linked opportunity only once. UX-R2-C is Next up; it is not yet started. |
 | 2026-07-26 | `UX-R2-C` | **Released for implementation** | The already-approved serial brief and accepted B make the CSV completion/report presentation dependency-safe. Implement only C; keep RP-R6 unreleased. |
+| 2026-07-27 | `UX-R2-C` / `UX-R2` | **Accepted — RP-R6 Next up** | Product-owner hands-on verification accepted the staged CSV mapping, validation, review, completion, and durable report workflow. This accepts C and the parent UX-R2. RP-R6 is the sole eligible successor, but remains unreleased pending its own brief and gate. |
 
 ### UX-R2-A acceptance record
 

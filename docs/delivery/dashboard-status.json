@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "UX-R2-C",
-  "nextEligibleTaskId": null,
+  "activeTaskId": null,
+  "nextEligibleTaskId": "RP-R6",
   "tasks": [
     {
       "id": "RP-R0",
@@ -111,9 +111,9 @@
       "id": "UX-R2",
       "title": "Core workflow forms",
       "workType": "UX",
-      "status": "in_progress",
-      "releaseCondition": "UX-R2-A and UX-R2-B are accepted. UX-R2-C is the only eligible successor; RP-R6 remains unreleased.",
-      "latestTransition": "Product owner accepted UX-R2-B; the parent remains in progress pending CSV completion and final workflow verification.",
+      "status": "accepted",
+      "releaseCondition": "Accepted after its three serial workflow slices and product-owner hands-on verification.",
+      "latestTransition": "Product owner accepted the CSV completion/report workflow, completing UX-R2.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
@@ -150,9 +150,9 @@
       "id": "UX-R2-C",
       "title": "CSV completion and report redesign",
       "workType": "Workflow",
-      "status": "in_progress",
-      "releaseCondition": "Implement only the approved CSV presentation slice. RP-R6 remains unreleased.",
-      "latestTransition": "Released after UX-R2-B product-owner acceptance; implementation is in progress.",
+      "status": "accepted",
+      "releaseCondition": "Accepted staged CSV mapping, validation, review, completion, and durable report workflow.",
+      "latestTransition": "Accepted by the product owner after hands-on CSV workflow verification.",
       "evidence": {
         "label": "UX-R2 task brief",
         "href": "../task-briefs/UX-R2-core-workflow-forms.md"
@@ -163,9 +163,9 @@
       "id": "RP-R6",
       "title": "Durable document references",
       "workType": "Data",
-      "status": "backlog",
-      "releaseCondition": "Release after UX-R2 acceptance into the compact document area; no implementation is released yet.",
-      "latestTransition": "Deferred behind the approved UX-R1 and UX-R2 remediation sequence.",
+      "status": "next_up",
+      "releaseCondition": "UX-R2 is accepted. Requires its approved dependency-safe brief and release gate before implementation.",
+      "latestTransition": "Eligible after UX-R2 product-owner acceptance; no implementation is released yet.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
