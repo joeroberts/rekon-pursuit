@@ -29,6 +29,7 @@ struct ContentView: View {
     @State private var taskToReschedule: TaskReminder?
     @State private var rescheduledDueAt = Date.now
     @State private var showsDocumentReferenceImporter = false
+    @State private var documentReferenceToRelink: DocumentReference?
     @State private var showsBackupImporter = false
     @State private var pendingRestoreURL: URL?
     @State private var showsUnencryptedExportWarning = false
@@ -107,7 +108,14 @@ struct ContentView: View {
             if case let .success(urls) = result, let url = urls.first { pendingRestoreURL = model.stageEncryptedBackupForRestore(from: url) }
         }
         .fileImporter(isPresented: $showsDocumentReferenceImporter, allowedContentTypes: [.pdf, UTType(filenameExtension: "docx") ?? .data], allowsMultipleSelection: false) { result in
-            if case let .success(urls) = result, let url = urls.first { model.attachDocumentReference(at: url) }
+            if case let .success(urls) = result, let url = urls.first {
+                if let documentReferenceToRelink {
+                    model.relinkDocumentReference(documentReferenceToRelink, at: url)
+                    self.documentReferenceToRelink = nil
+                } else {
+                    model.attachDocumentReference(at: url)
+                }
+            }
         }
         .fileExporter(isPresented: $showsCSVExporter, document: exportDocument, contentType: .commaSeparatedText, defaultFilename: "rekon-pursuit-opportunities") { result in
             if case .success = result { model.noteExportSaved() }
@@ -145,7 +153,7 @@ struct ContentView: View {
     @ViewBuilder private func routedOpportunityView(_ route: OpportunityRoute) -> some View {
         switch route {
         case let .overview(id):
-            OpportunityOverviewView(model: model, opportunityID: id, back: returnToPipeline, showHistory: { openRoute(.history(id)) }, showReconcile: { openRoute(.reconcile(id)) }, chooseDocument: { showsDocumentReferenceImporter = true })
+            OpportunityOverviewView(model: model, opportunityID: id, back: returnToPipeline, showHistory: { openRoute(.history(id)) }, showReconcile: { openRoute(.reconcile(id)) }, chooseDocument: { showsDocumentReferenceImporter = true }, relinkDocument: { reference in documentReferenceToRelink = reference; showsDocumentReferenceImporter = true })
         case let .history(id):
             OpportunityHistoryView(model: model, opportunityID: id, back: { returnFromOpportunitySubroute(.history(id)) })
         case let .reconcile(id):
@@ -396,6 +404,7 @@ private struct OpportunityOverviewView: View {
     let showHistory: () -> Void
     let showReconcile: () -> Void
     let chooseDocument: () -> Void
+    let relinkDocument: (DocumentReference) -> Void
     var body: some View {
         Group {
             if let opportunity = model.opportunity(id: opportunityID), model.selectedOpportunityID == opportunityID {
@@ -434,7 +443,7 @@ private struct OpportunityOverviewView: View {
                                 HStack { Button("Save changes locally") { model.saveRouteOpportunity(id: opportunityID) }.accessibilityIdentifier("save-opportunity-changes"); Button("Reschedule action") { model.rescheduleRouteTask(id: opportunityID) }.disabled(model.selectedNextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
                             }
                         }
-                        CompactDocumentsView(model: model, opportunityID: opportunityID, chooseDocument: chooseDocument)
+                        CompactDocumentsView(model: model, opportunityID: opportunityID, chooseDocument: chooseDocument, relinkDocument: relinkDocument)
                     }
                     .padding(28).frame(maxWidth: 880, alignment: .leading)
                 }
@@ -447,6 +456,7 @@ private struct CompactDocumentsView: View {
     @ObservedObject var model: WorkspaceViewModel
     let opportunityID: String
     let chooseDocument: () -> Void
+    let relinkDocument: (DocumentReference) -> Void
     var body: some View {
         GroupBox("Documents") {
             if model.selectedOpportunityID == opportunityID {
@@ -458,6 +468,11 @@ private struct CompactDocumentsView: View {
                         Picker("Reference type", selection: $model.documentReferenceKind) { ForEach(DocumentReferenceKind.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
                         Button("Choose PDF or DOCX…", action: chooseDocument).accessibilityIdentifier("choose-document-reference")
                         ForEach(model.selectedDocumentReferences, id: \.id) { reference in
+                            Text(reference.filename)
+                            Text(reference.availability == .available ? "Available" : "Relink required").foregroundStyle(.secondary)
+                            if reference.availability == .available { Button("Open \(reference.filename)") { model.openDocumentReference(reference) } }
+                            Button("Relink \(reference.filename)") { relinkDocument(reference) }
+                            Button("Remove \(reference.filename)", role: .destructive) { model.removeDocumentReference(reference) }
                             if reference.finalSentAt == nil { Button("Mark \(reference.filename) final sent") { _ = model.selectRouteOpportunity(id: opportunityID); model.markDocumentReferenceFinalSent(reference) } }
                         }
                     }

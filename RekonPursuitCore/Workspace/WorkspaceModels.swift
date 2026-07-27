@@ -355,7 +355,17 @@ struct RecordDocumentReference {
     let contentType: String
     let sourceHash: String
     let byteCount: Int
-    let bookmarkData: Data? = nil
+    let bookmarkData: Data?
+
+    init(opportunityID: String, kind: DocumentReferenceKind, filename: String, contentType: String, sourceHash: String, byteCount: Int, bookmarkData: Data? = nil) {
+        self.opportunityID = opportunityID
+        self.kind = kind
+        self.filename = filename
+        self.contentType = contentType
+        self.sourceHash = sourceHash
+        self.byteCount = byteCount
+        self.bookmarkData = bookmarkData
+    }
 }
 
 enum PipelineStage: String, CaseIterable, Equatable {

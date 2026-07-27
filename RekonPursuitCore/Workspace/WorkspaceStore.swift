@@ -812,6 +812,42 @@ final class WorkspaceStore {
         }
     }
 
+    func replaceDocumentReferenceBookmark(id: String, bookmarkData: Data) throws {
+        try synchronized {
+            try database.transaction {
+                try database.execute("UPDATE document_references SET bookmark_data = ?, availability = 'available' WHERE id = ?", values: [.blob(bookmarkData), .text(id)])
+            }
+        }
+    }
+
+    func markDocumentReferenceRelinkRequired(id: String) throws {
+        try synchronized {
+            try database.transaction {
+                try database.execute("UPDATE document_references SET availability = 'relink_required' WHERE id = ?", values: [.text(id)])
+            }
+        }
+    }
+
+    func removeDocumentReference(id: String) throws {
+        try synchronized {
+            try database.transaction {
+                try database.execute("UPDATE document_references SET bookmark_data = NULL, availability = 'relink_required' WHERE id = ?", values: [.text(id)])
+                try database.execute("DELETE FROM document_references WHERE id = ?", values: [.text(id)])
+            }
+        }
+    }
+
+    /// Restore is a capability boundary: backup-created bookmarks are never
+    /// trusted, even on the same Mac. This runs against the staging database
+    /// before it can replace the active workspace.
+    func revokeDocumentReferenceBookmarksForRestore() throws {
+        try synchronized {
+            try database.transaction {
+                try database.execute("UPDATE document_references SET bookmark_data = NULL, availability = 'relink_required'")
+            }
+        }
+    }
+
     func documentReferences(forOpportunityID opportunityID: String) throws -> [DocumentReference] {
         try synchronized {
             guard try isActiveOpportunity(opportunityID) else { return [] }

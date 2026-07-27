@@ -193,6 +193,9 @@ final class WorkspaceSession {
         let previousURL = root.appendingPathComponent(".restore-rollback-\(UUID().uuidString)")
         try FileManager.default.copyItem(at: backupURL, to: stagingURL)
         do {
+            let staged = try openStore(at: stagingURL, with: key, createIfMissing: false)
+            try staged.revokeDocumentReferenceBookmarksForRestore()
+            try staged.close()
             try FileManager.default.moveItem(at: databaseURL, to: previousURL)
             try FileManager.default.moveItem(at: stagingURL, to: databaseURL)
             let restored = try openStore(with: key, createIfMissing: false)

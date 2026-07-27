@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import CryptoKit
 
 enum WorkspaceLocationBookmarkError: Error, Equatable {
     case securityScopeUnavailable
@@ -164,5 +165,63 @@ final class WorkspaceLocationBookmarkStore {
         } catch {
             return .stale
         }
+    }
+}
+
+enum DocumentReferenceBookmarkError: Error {
+    case unavailable
+    case unsupportedType
+    case tooLarge
+    case unsafeFile
+    case mismatch
+}
+
+/// Owns short-lived access to an externally selected document. It stores no
+/// path and returns only opaque bookmark data plus the identity needed by the
+/// encrypted workspace record.
+struct DocumentReferenceBookmarkStore {
+    static let maximumByteCount = 25_000_000
+
+    func create(from url: URL) throws -> (bookmark: Data, contentType: String, hash: String, byteCount: Int) {
+        guard url.startAccessingSecurityScopedResource() else { throw DocumentReferenceBookmarkError.unavailable }
+        defer { url.stopAccessingSecurityScopedResource() }
+        let identity = try verify(url: url, expectedHash: nil, expectedByteCount: nil)
+        let bookmark = try url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+        return (bookmark, identity.contentType, identity.hash, identity.byteCount)
+    }
+
+    func resolveAndVerify(_ reference: DocumentReference) throws -> URL {
+        guard let bookmark = reference.bookmarkData else { throw DocumentReferenceBookmarkError.unavailable }
+        var stale = false
+        let url = try URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope], relativeTo: nil, bookmarkDataIsStale: &stale)
+        guard !stale, url.startAccessingSecurityScopedResource() else { throw DocumentReferenceBookmarkError.unavailable }
+        do {
+            _ = try verify(url: url, expectedHash: reference.sourceHash, expectedByteCount: reference.byteCount)
+            return url
+        } catch {
+            url.stopAccessingSecurityScopedResource()
+            throw error
+        }
+    }
+
+    func release(_ url: URL) { url.stopAccessingSecurityScopedResource() }
+
+    private func verify(url: URL, expectedHash: String?, expectedByteCount: Int?) throws -> (contentType: String, hash: String, byteCount: Int) {
+        var status = stat()
+        guard lstat(url.path, &status) == 0, (status.st_mode & S_IFMT) == S_IFREG else { throw DocumentReferenceBookmarkError.unsafeFile }
+        let ext = url.pathExtension.lowercased()
+        let contentType: String
+        switch ext {
+        case "pdf": contentType = "application/pdf"
+        case "docx": contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        default: throw DocumentReferenceBookmarkError.unsupportedType
+        }
+        let size = Int(status.st_size)
+        guard size >= 0, size <= Self.maximumByteCount else { throw DocumentReferenceBookmarkError.tooLarge }
+        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        guard data.count == size else { throw DocumentReferenceBookmarkError.mismatch }
+        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        if let expectedHash, let expectedByteCount, (hash != expectedHash || size != expectedByteCount) { throw DocumentReferenceBookmarkError.mismatch }
+        return (contentType, hash, size)
     }
 }

@@ -1,6 +1,7 @@
 import Combine
 import CryptoKit
 import Foundation
+import AppKit
 
 private enum SeparateLocalWorkspaceConfiguration {
     static let activeIdentityPreferenceKey = "active-separate-local-workspace-identity"
@@ -1073,27 +1074,51 @@ final class WorkspaceViewModel: ObservableObject {
             statusMessage = "Select an opportunity before attaching a document reference."
             return
         }
-        let extensionValue = url.pathExtension.lowercased()
-        guard extensionValue == "pdf" || extensionValue == "docx" else {
-            statusMessage = "Choose a PDF or DOCX file."
-            return
-        }
-        let accessed = url.startAccessingSecurityScopedResource()
-        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
         do {
-            let data = try Data(contentsOf: url, options: .mappedIfSafe)
-            guard data.count <= 25_000_000 else {
-                statusMessage = "Choose a PDF or DOCX smaller than 25 MB."
-                return
-            }
-            let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-            let contentType = extensionValue == "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            _ = try store.recordDocumentReference(RecordDocumentReference(opportunityID: selectedOpportunityID, kind: documentReferenceKind, filename: url.lastPathComponent, contentType: contentType, sourceHash: hash, byteCount: data.count))
+            let bookmark = try DocumentReferenceBookmarkStore().create(from: url)
+            _ = try store.recordDocumentReference(RecordDocumentReference(opportunityID: selectedOpportunityID, kind: documentReferenceKind, filename: url.lastPathComponent, contentType: bookmark.contentType, sourceHash: bookmark.hash, byteCount: bookmark.byteCount, bookmarkData: bookmark.bookmark))
             refreshCounts()
             statusMessage = "Document reference saved locally. The file was not copied, edited, or uploaded."
         } catch {
-            statusMessage = "The document reference could not be attached."
+            statusMessage = "Choose a regular PDF or DOCX no larger than 25 MB."
         }
+    }
+
+    func openDocumentReference(_ reference: DocumentReference) {
+        guard let store = readyStore() else { return }
+        do {
+            let bookmarks = DocumentReferenceBookmarkStore()
+            let url = try bookmarks.resolveAndVerify(reference)
+            defer { bookmarks.release(url) }
+            guard NSWorkspace.shared.open(url) else { throw DocumentReferenceBookmarkError.unavailable }
+            statusMessage = "Opened the verified local document reference."
+        } catch {
+            try? store.markDocumentReferenceRelinkRequired(id: reference.id)
+            refreshCounts()
+            statusMessage = "This document needs to be relinked before it can be opened."
+        }
+    }
+
+    func relinkDocumentReference(_ reference: DocumentReference, at url: URL) {
+        guard let store = readyStore() else { return }
+        do {
+            let bookmark = try DocumentReferenceBookmarkStore().create(from: url)
+            guard bookmark.hash == reference.sourceHash, bookmark.byteCount == reference.byteCount else { throw DocumentReferenceBookmarkError.mismatch }
+            try store.replaceDocumentReferenceBookmark(id: reference.id, bookmarkData: bookmark.bookmark)
+            refreshCounts()
+            statusMessage = "Document reference relinked locally."
+        } catch {
+            statusMessage = "Choose the exact original document to relink this reference."
+        }
+    }
+
+    func removeDocumentReference(_ reference: DocumentReference) {
+        guard let store = readyStore() else { return }
+        do {
+            try store.removeDocumentReference(id: reference.id)
+            refreshCounts()
+            statusMessage = "Document reference removed. The source file was not changed."
+        } catch { statusMessage = "The document reference could not be removed." }
     }
 
     func markDocumentReferenceFinalSent(_ reference: DocumentReference) {
