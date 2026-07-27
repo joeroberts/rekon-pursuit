@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import XCTest
 @testable import RekonPursuit
@@ -1237,6 +1238,69 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertNotNil(model.selectedReconciliationTask)
     }
 
+    func testOpeningUnavailableDocumentMarksItForRelinkingWithoutLaunchingIt() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let reference = try store.recordDocumentReference(RecordDocumentReference(
+            opportunityID: opportunity.id,
+            kind: .resume,
+            filename: "resume.pdf",
+            contentType: "application/pdf",
+            sourceHash: String(repeating: "a", count: 64),
+            byteCount: 8,
+            bookmarkData: Data("missing".utf8)
+        ))
+        let fixture = DocumentOpenFixture(data: Data("%PDF-1.7".utf8), resolveError: .unavailable)
+        var didOpen = false
+        let model = WorkspaceViewModel(
+            openWorkspace: { .ready(store) },
+            createWorkspace: { store },
+            documentReferenceBookmarks: fixture.makeStore(),
+            openDocumentURL: { _ in didOpen = true; return true },
+            separateLocalWorkspace: .disabledForTesting
+        )
+        model.start()
+
+        model.openDocumentReference(reference)
+
+        XCTAssertFalse(didOpen)
+        XCTAssertEqual(try store.documentReferences(forOpportunityID: opportunity.id).first?.availability, .relinkRequired)
+        XCTAssertEqual(model.statusMessage, "This document needs to be relinked before it can be opened.")
+    }
+
+    func testOpeningVerifiedDocumentHoldsThenReleasesItsLease() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let data = Data("%PDF-1.7".utf8)
+        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let reference = try store.recordDocumentReference(RecordDocumentReference(
+            opportunityID: opportunity.id,
+            kind: .resume,
+            filename: "resume.pdf",
+            contentType: "application/pdf",
+            sourceHash: hash,
+            byteCount: data.count,
+            bookmarkData: Data("available".utf8)
+        ))
+        let fixture = DocumentOpenFixture(data: data)
+        var wasLeaseActiveDuringOpen = false
+        let model = WorkspaceViewModel(
+            openWorkspace: { .ready(store) },
+            createWorkspace: { store },
+            documentReferenceBookmarks: fixture.makeStore(),
+            openDocumentURL: { _ in wasLeaseActiveDuringOpen = fixture.isAccessing; return true },
+            separateLocalWorkspace: .disabledForTesting
+        )
+        model.start()
+
+        model.openDocumentReference(reference)
+
+        XCTAssertTrue(wasLeaseActiveDuringOpen)
+        XCTAssertFalse(fixture.isAccessing)
+        XCTAssertEqual(fixture.stopAccessCount, 1)
+        XCTAssertEqual(model.statusMessage, "Opened the verified local document reference.")
+    }
+
     private func makeStore() throws -> WorkspaceStore {
         let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent("rekon-view-model-\(UUID().uuidString).sqlite")
         let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 5, count: 32))
@@ -1396,6 +1460,38 @@ private final class SeparateWorkspaceFixture {
 
 private enum ViewModelBookmarkFixtureError: Error {
     case unresolvable
+}
+
+@MainActor
+private final class DocumentOpenFixture {
+    let data: Data
+    let url = URL(fileURLWithPath: "/fixture/resume.pdf")
+    let resolveError: DocumentReferenceBookmarkError?
+    private(set) var isAccessing = false
+    private(set) var stopAccessCount = 0
+
+    init(data: Data, resolveError: DocumentReferenceBookmarkError? = nil) {
+        self.data = data
+        self.resolveError = resolveError
+    }
+
+    func makeStore() -> DocumentReferenceBookmarkStore {
+        DocumentReferenceBookmarkStore(dependencies: .init(
+            createBookmark: { _ in Data("unused".utf8) },
+            resolveBookmark: { [weak self] _ in
+                guard let self else { throw DocumentReferenceBookmarkError.unavailable }
+                if let resolveError { throw resolveError }
+                return (url, false)
+            },
+            startAccessing: { [weak self] _ in self?.isAccessing = true; return true },
+            stopAccessing: { [weak self] _ in self?.isAccessing = false; self?.stopAccessCount += 1 },
+            inspectFile: { [weak self] _ in
+                guard let self else { return nil }
+                return DocumentReferenceFileInspection(isRegularFile: true, byteCount: self.data.count)
+            },
+            readData: { [weak self] _ in self?.data ?? Data() }
+        ))
+    }
 }
 
 @MainActor

@@ -204,6 +204,8 @@ final class WorkspaceViewModel: ObservableObject {
     private let createWorkspace: () throws -> WorkspaceStore
     private let restoreWorkspace: (URL) throws -> WorkspaceStore
     private let workspaceLocationBookmarks: WorkspaceLocationBookmarkStore
+    private let documentReferenceBookmarks: DocumentReferenceBookmarkStore
+    private let openDocumentURL: (URL) -> Bool
     private let separateLocalWorkspace: SeparateLocalWorkspaceDependencies
     private let publicURLChecker: PublicURLChecking
     private var store: WorkspaceStore?
@@ -218,6 +220,8 @@ final class WorkspaceViewModel: ObservableObject {
         createWorkspace: @escaping () throws -> WorkspaceStore,
         restoreWorkspace: @escaping (URL) throws -> WorkspaceStore = { _ in throw WorkspaceStoreError.injectedFailure },
         workspaceLocationBookmarks: WorkspaceLocationBookmarkStore = WorkspaceLocationBookmarkStore(),
+        documentReferenceBookmarks: DocumentReferenceBookmarkStore = DocumentReferenceBookmarkStore(),
+        openDocumentURL: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
         openExternalWorkspace: @escaping (URL) throws -> WorkspaceOpenState = { _ in .recoveryRequired },
         closeWorkspaceStore: @escaping (WorkspaceStore) throws -> Void = { try $0.close() },
         publicURLChecker: PublicURLChecking = PublicURLChecker(),
@@ -229,6 +233,8 @@ final class WorkspaceViewModel: ObservableObject {
         self.createWorkspace = createWorkspace
         self.restoreWorkspace = restoreWorkspace
         self.workspaceLocationBookmarks = workspaceLocationBookmarks
+        self.documentReferenceBookmarks = documentReferenceBookmarks
+        self.openDocumentURL = openDocumentURL
         self.publicURLChecker = publicURLChecker
         self.separateLocalWorkspace = separateLocalWorkspace
     }
@@ -1087,10 +1093,9 @@ final class WorkspaceViewModel: ObservableObject {
     func openDocumentReference(_ reference: DocumentReference) {
         guard let store = readyStore() else { return }
         do {
-            let bookmarks = DocumentReferenceBookmarkStore()
-            let url = try bookmarks.resolveAndVerify(reference)
-            defer { bookmarks.release(url) }
-            guard NSWorkspace.shared.open(url) else { throw DocumentReferenceBookmarkError.unavailable }
+            let url = try documentReferenceBookmarks.resolveAndVerify(reference)
+            defer { documentReferenceBookmarks.release(url) }
+            guard openDocumentURL(url) else { throw DocumentReferenceBookmarkError.unavailable }
             statusMessage = "Opened the verified local document reference."
         } catch {
             try? store.markDocumentReferenceRelinkRequired(id: reference.id)
