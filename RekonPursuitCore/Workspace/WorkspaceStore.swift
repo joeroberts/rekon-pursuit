@@ -774,6 +774,31 @@ final class WorkspaceStore {
         }
     }
 
+    func recoveryEnrollmentState() throws -> RecoveryEnrollmentState {
+        try synchronized {
+            RecoveryEnrollmentState(isEnabled: !(try database.rows("SELECT fingerprint FROM recovery_enrollment WHERE id = 1")).isEmpty)
+        }
+    }
+
+    func enroll(recoveryKey: RecoveryKey) throws {
+        let commandNow = clock()
+        try synchronized {
+            try database.transaction {
+                try database.execute("INSERT OR REPLACE INTO recovery_enrollment (id, fingerprint, enrolled_at) VALUES (1, ?, ?)", values: [.text(recoveryKey.fingerprint), .real(commandNow.timeIntervalSince1970)])
+                if failBeforeActivityInsert { throw WorkspaceStoreError.injectedFailure }
+                try appendActivity(kind: "recovery_enrollment_enabled", opportunityID: nil, occurredAt: commandNow)
+            }
+        }
+    }
+
+    func recoveryEnrollmentRecordForTesting() throws -> RecoveryEnrollmentRecord? {
+        try synchronized {
+            guard let row = try database.rows("SELECT fingerprint, enrolled_at FROM recovery_enrollment WHERE id = 1").first,
+                  row.count == 2, case let .text(fingerprint) = row[0], case let .real(enrolledAt) = row[1] else { return nil }
+            return RecoveryEnrollmentRecord(fingerprint: fingerprint, enrolledAt: Date(timeIntervalSince1970: enrolledAt))
+        }
+    }
+
     func createEncryptedBackup(at destinationURL: URL) throws {
         let commandNow = clock()
         try synchronized {

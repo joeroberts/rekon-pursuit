@@ -8,6 +8,32 @@ final class WorkspaceStoreTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_704_067_200)
     private var databaseURL: URL!
 
+    func testRecoveryEnrollmentRequiresACompleteChecksummedReentryAndPersistsOnlyAFingerprint() throws {
+        let generated = try RecoveryKey.generate()
+        XCTAssertEqual(RecoveryKey.parse(generated.displayValue), generated)
+        XCTAssertNil(RecoveryKey.parse(String(generated.displayValue.dropLast())))
+
+        let store = try makeStore()
+        try store.enroll(recoveryKey: generated)
+
+        XCTAssertTrue(try store.recoveryEnrollmentState().isEnabled)
+        let record = try XCTUnwrap(try store.recoveryEnrollmentRecordForTesting())
+        XCTAssertTrue(record.fingerprint.hasPrefix("v1:"))
+        XCTAssertFalse(record.fingerprint.contains(generated.displayValue))
+        XCTAssertEqual(try store.activityEvents().last?.kind, "recovery_enrollment_enabled")
+    }
+
+    func testRecoveryEnrollmentPersistenceFailureDoesNotReplaceExistingEnrollment() throws {
+        let store = try makeStore()
+        try store.enroll(recoveryKey: try RecoveryKey.generate())
+        let original = try XCTUnwrap(try store.recoveryEnrollmentRecordForTesting())
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key, createIfMissing: false)
+        let failing = try WorkspaceStore(database: database, actorID: "test", correlationID: "test", failBeforeActivityInsert: true)
+
+        XCTAssertThrowsError(try failing.enroll(recoveryKey: try RecoveryKey.generate()))
+        XCTAssertEqual(try failing.recoveryEnrollmentRecordForTesting(), original)
+    }
+
     override func setUpWithError() throws {
         databaseURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("rekon-workspace-\(UUID().uuidString)")
@@ -23,7 +49,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 23)
+        XCTAssertEqual(try store.schemaVersion(), 24)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -39,7 +65,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 23)
+        XCTAssertEqual(try store.schemaVersion(), 24)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -63,6 +89,7 @@ final class WorkspaceStoreTests: XCTestCase {
                 , [.integer(21), .text(WorkspaceMigrations.versionTwentyOneChecksum)]
                 , [.integer(22), .text(WorkspaceMigrations.versionTwentyTwoChecksum)]
                 , [.integer(23), .text(WorkspaceMigrations.versionTwentyThreeChecksum)]
+                , [.integer(24), .text(WorkspaceMigrations.versionTwentyFourChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
@@ -91,7 +118,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 23)
+        XCTAssertEqual(try store.schemaVersion(), 24)
         XCTAssertEqual(try database.rows("SELECT id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at FROM interactions"), [[.text("interaction-1"), .null, .text("opportunity-1"), .text("Note"), .text("Legacy note"), .real(1_704_067_200), .null]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
@@ -1511,7 +1538,7 @@ final class WorkspaceStoreTests: XCTestCase {
         let migratedStore = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test")
         let reference = try XCTUnwrap(migratedStore.documentReferences(forOpportunityID: opportunity.id).first)
 
-        XCTAssertEqual(try migratedStore.schemaVersion(), 23)
+        XCTAssertEqual(try migratedStore.schemaVersion(), 24)
         XCTAssertNil(reference.bookmarkData)
         XCTAssertEqual(reference.availability, .relinkRequired)
     }

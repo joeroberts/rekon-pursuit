@@ -197,6 +197,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var workspaceReady = false
     @Published private(set) var workspaceRequiresRecovery = false
     @Published private(set) var usingSeparateLocalWorkspace = false
+    @Published private(set) var recoveryEnrollmentEnabled = false
 
     private let openWorkspace: () throws -> WorkspaceOpenState
     private let openExternalWorkspace: (URL) throws -> WorkspaceOpenState
@@ -1019,6 +1020,29 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
+    @discardableResult
+    func enrollRecoveryKey(reentry: String, expected: RecoveryKey) -> Bool {
+        guard let reentered = RecoveryKey.parse(reentry) else {
+            statusMessage = "Enter the complete recovery key, including its checksum."
+            return false
+        }
+        guard reentered == expected else {
+            statusMessage = "That recovery key does not match. Recovery setup was not changed."
+            return false
+        }
+        guard let store = readyStore() else { return false }
+        do {
+            try store.enroll(recoveryKey: reentered)
+            recoveryEnrollmentEnabled = true
+            refreshCounts()
+            statusMessage = "Recovery key setup is complete. No portable backup has been created."
+            return true
+        } catch {
+            statusMessage = "Recovery key setup could not be saved. Existing recovery setup was not changed."
+            return false
+        }
+    }
+
     func noteExportSaved() {
         statusMessage = "Unencrypted CSV export saved."
     }
@@ -1399,6 +1423,7 @@ final class WorkspaceViewModel: ObservableObject {
             needsAttentionCount = needsAttention.count
             csvImportReport = try store?.importReports().last
             csvImportReportRows = try csvImportReport.map { try store?.importReportRows(for: $0.id) ?? [] } ?? []
+            recoveryEnrollmentEnabled = try store?.recoveryEnrollmentState().isEnabled ?? false
         } catch {
             statusMessage = "The local workspace could not be read."
         }

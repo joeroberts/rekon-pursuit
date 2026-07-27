@@ -30,11 +30,6 @@ struct ContentView: View {
     @State private var rescheduledDueAt = Date.now
     @State private var showsDocumentReferenceImporter = false
     @State private var documentReferenceToRelink: DocumentReference?
-    @State private var showsBackupImporter = false
-    @State private var pendingRestoreURL: URL?
-    @State private var showsUnencryptedExportWarning = false
-    @State private var showsCSVExporter = false
-    @State private var exportDocument: CSVExportDocument?
     @State private var closureConfirmationID: String?
 
     var body: some View {
@@ -104,9 +99,6 @@ struct ContentView: View {
                 .padding(24).frame(width: 380)
             }
         }
-        .fileImporter(isPresented: $showsBackupImporter, allowedContentTypes: [.data], allowsMultipleSelection: false) { result in
-            if case let .success(urls) = result, let url = urls.first { pendingRestoreURL = model.stageEncryptedBackupForRestore(from: url) }
-        }
         .fileImporter(isPresented: $showsDocumentReferenceImporter, allowedContentTypes: [.pdf, UTType(filenameExtension: "docx") ?? .data], allowsMultipleSelection: false) { result in
             if case let .success(urls) = result, let url = urls.first {
                 if let documentReferenceToRelink {
@@ -118,25 +110,6 @@ struct ContentView: View {
             }
             if case .failure = result { documentReferenceToRelink = nil }
         }
-        .fileExporter(isPresented: $showsCSVExporter, document: exportDocument, contentType: .commaSeparatedText, defaultFilename: "rekon-pursuit-opportunities") { result in
-            if case .success = result { model.noteExportSaved() }
-            exportDocument = nil
-        }
-        .alert("Export unencrypted CSV?", isPresented: $showsUnencryptedExportWarning) {
-            Button("Export unencrypted CSV") {
-                if let csv = model.exportOpportunitiesCSV() { exportDocument = CSVExportDocument(text: csv); showsCSVExporter = true }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { Text("This file will contain your job titles, companies, actions, dates, and job URLs in plain text. Save it only to storage you trust.") }
-        .alert("Replace current workspace?", isPresented: Binding(
-            get: { pendingRestoreURL != nil }, set: { if !$0 { pendingRestoreURL = nil; model.discardStagedBackupRestore() } }
-        )) {
-            Button("Restore and replace", role: .destructive) {
-                if let pendingRestoreURL { model.restoreEncryptedBackup(from: pendingRestoreURL) }
-                pendingRestoreURL = nil
-            }
-            Button("Cancel", role: .cancel) { pendingRestoreURL = nil; model.discardStagedBackupRestore() }
-        } message: { Text("This replaces the current local workspace with the selected same-Mac encrypted backup. Your current workspace is kept if the restore fails.") }
     }
 
     @ViewBuilder private var dailyDestination: some View {
@@ -147,7 +120,7 @@ struct ContentView: View {
         case .importCSV: CSVImportView(model: model, chooseFile: chooseCSVFile, open: openOpportunity, finish: { navigation.select(.pipeline) })
         case .contacts: ContactsView(model: model, open: openOpportunity, delete: { pendingContactDeletion = $0 })
         case .activityAI: GlobalActivityView(model: model)
-        case .settings: SettingsView(model: model, export: { showsUnencryptedExportWarning = true }, backup: createBackup, restore: { showsBackupImporter = true })
+        case .settings: SettingsView(model: model)
         }
     }
 
@@ -225,12 +198,6 @@ struct ContentView: View {
         panel.begin { response in if response == .OK, let url = panel.url { model.previewCSV(at: url) } }
     }
 
-    private func createBackup() {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "rekon-pursuit-backup.rekonbackup"
-        panel.canCreateDirectories = true
-        if panel.runModal() == .OK, let url = panel.url { model.createEncryptedBackup(at: url) }
-    }
 }
 
 private struct WorkspaceOnboardingView: View {
@@ -1000,4 +967,52 @@ private struct ContactOpportunityManagementSheet: View {
 
 private struct GlobalActivityView: View { @ObservedObject var model: WorkspaceViewModel; var body: some View { ScrollView { VStack(alignment: .leading, spacing: 16) { Text("Activity & AI").font(.largeTitle.bold()); GroupBox("Local activity ledger") { TextField("Search activity", text: $model.activitySearch).accessibilityIdentifier("activity-search"); if model.filteredActivityEvents.isEmpty { Text(model.activityEvents.isEmpty ? "No local activity yet." : "No activity matches that search.").foregroundStyle(.secondary) } else { ForEach(model.filteredActivityEvents, id: \.id) { Text("\($0.kind.replacingOccurrences(of: "_", with: " ").capitalized) · \($0.occurredAt.formatted(date: .abbreviated, time: .shortened))") } } }; GroupBox("AI usage and cost") { Text("No AI requests have been made. Cloud AI, local-model execution, and cost tracking are intentionally unavailable in this MVP.").foregroundStyle(.secondary) } }.padding(28).frame(maxWidth: 920, alignment: .leading) } } }
 
-private struct SettingsView: View { @ObservedObject var model: WorkspaceViewModel; let export: () -> Void; let backup: () -> Void; let restore: () -> Void; var body: some View { ScrollView { VStack(alignment: .leading, spacing: 16) { Text("Settings").font(.largeTitle.bold()); GroupBox("Workspace") { VStack(alignment: .leading, spacing: 10) { Toggle("Show closed opportunities in the pipeline", isOn: $model.showClosedOpportunities).accessibilityIdentifier("show-closed-opportunities"); if model.usingSeparateLocalWorkspace { Text("You are using a separate local workspace. Your preserved workspace remains unchanged.").foregroundStyle(.secondary); Button("Return to preserved workspace recovery") { model.returnToPreservedWorkspaceRecovery() }.accessibilityIdentifier("return-to-preserved-workspace-recovery") } } }; GroupBox("Data and recovery") { Text("CSV exports are unencrypted. Encrypted backups can be restored on this Mac after a clear replacement confirmation.").foregroundStyle(.secondary); HStack { Button("Export opportunities as CSV…", action: export).disabled(model.opportunities.isEmpty); Button("Create encrypted backup…", action: backup); Button("Restore encrypted backup…", action: restore) } }; GroupBox("AI and connections") { Text("Cloud AI, local-model execution, Gmail, and Google Calendar are disabled in this MVP. No network connections are configured.").foregroundStyle(.secondary) } }.padding(28).frame(maxWidth: 920, alignment: .leading) } } }
+private struct SettingsView: View {
+    @ObservedObject var model: WorkspaceViewModel
+    @State private var generatedRecoveryKey: RecoveryKey?
+    @State private var reentry = ""
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Settings").font(.largeTitle.bold())
+                GroupBox("Workspace") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Toggle("Show closed opportunities in the pipeline", isOn: $model.showClosedOpportunities).accessibilityIdentifier("show-closed-opportunities")
+                        if model.usingSeparateLocalWorkspace {
+                            Text("You are using a separate local workspace. Your preserved workspace remains unchanged.").foregroundStyle(.secondary)
+                            Button("Return to preserved workspace recovery") { model.returnToPreservedWorkspaceRecovery() }.accessibilityIdentifier("return-to-preserved-workspace-recovery")
+                        }
+                    }
+                }
+                GroupBox("Recovery & export") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(model.recoveryEnrollmentEnabled ? "Portable recovery is set up. No portable backup exists yet." : "Portable recovery is not set up. No portable backup exists.").foregroundStyle(.secondary)
+                        if !model.recoveryEnrollmentEnabled {
+                            Button("Set up recovery key") { generatedRecoveryKey = try? RecoveryKey.generate() }
+                                .accessibilityIdentifier("set-up-recovery-key")
+                        }
+                    }
+                }
+                GroupBox("AI and connections") { Text("Cloud AI, local-model execution, Gmail, and Google Calendar are disabled in this MVP. No network connections are configured.").foregroundStyle(.secondary) }
+            }.padding(28).frame(maxWidth: 920, alignment: .leading)
+        }
+        .sheet(isPresented: Binding(get: { generatedRecoveryKey != nil }, set: { if !$0 { generatedRecoveryKey = nil; reentry = "" } })) {
+            if let generatedRecoveryKey {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Record your recovery key").font(.title2.bold())
+                    Text("Rekon Pursuit cannot reset or recover this key. Record it outside the app; it will not be shown again.").foregroundStyle(.secondary)
+                    Text(generatedRecoveryKey.displayValue).font(.system(.body, design: .monospaced)).textSelection(.disabled)
+                    TextField("Re-enter the complete recovery key", text: $reentry).textFieldStyle(.roundedBorder)
+                    HStack {
+                        Button("Cancel", role: .cancel) { self.generatedRecoveryKey = nil; reentry = "" }
+                        Spacer()
+                        Button("Confirm setup") {
+                            if model.enrollRecoveryKey(reentry: reentry, expected: generatedRecoveryKey) { self.generatedRecoveryKey = nil; reentry = "" }
+                        }.keyboardShortcut(.defaultAction)
+                    }
+                }.padding(24).frame(width: 520)
+            }
+        }
+    }
+}

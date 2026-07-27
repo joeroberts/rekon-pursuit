@@ -1,4 +1,92 @@
+import CryptoKit
 import Foundation
+import Security
+
+struct RecoveryKey: Equatable {
+    private static let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
+    private static let keyCharacterCount = 52
+    private static let checksumCharacterCount = 6
+    private let bytes: Data
+
+    let displayValue: String
+
+    static func generate() throws -> RecoveryKey {
+        var bytes = Data(repeating: 0, count: 32)
+        let result = bytes.withUnsafeMutableBytes { SecRandomCopyBytes(kSecRandomDefault, 32, $0.baseAddress!) }
+        guard result == errSecSuccess else { throw RecoveryKeyError.randomnessUnavailable }
+        return try RecoveryKey(bytes: bytes)
+    }
+
+    static func parse(_ input: String) -> RecoveryKey? {
+        let compact = input.uppercased().filter { $0.isLetter || $0.isNumber }
+        guard compact.count == keyCharacterCount + checksumCharacterCount else { return nil }
+        let keyText = String(compact.prefix(keyCharacterCount))
+        let suppliedChecksum = String(compact.suffix(checksumCharacterCount))
+        guard let bytes = decodeBase32(keyText), bytes.count == 32,
+              suppliedChecksum == checksum(for: bytes) else { return nil }
+        return try? RecoveryKey(bytes: bytes)
+    }
+
+    var fingerprint: String {
+        "v1:" + SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private init(bytes: Data) throws {
+        guard bytes.count == 32 else { throw RecoveryKeyError.invalidLength }
+        self.bytes = bytes
+        let text = Self.encodeBase32(bytes)
+        displayValue = Self.group(text) + "-" + Self.checksum(for: bytes)
+    }
+
+    private static func checksum(for bytes: Data) -> String {
+        String(encodeBase32(Data(SHA256.hash(data: bytes))).prefix(checksumCharacterCount))
+    }
+
+    private static func group(_ text: String) -> String {
+        stride(from: 0, to: text.count, by: 4).map { start in
+            let lower = text.index(text.startIndex, offsetBy: start)
+            let upper = text.index(lower, offsetBy: min(4, text.distance(from: lower, to: text.endIndex)))
+            return String(text[lower..<upper])
+        }.joined(separator: "-")
+    }
+
+    private static func encodeBase32(_ data: Data) -> String {
+        var buffer = 0
+        var bits = 0
+        var result = ""
+        for byte in data {
+            buffer = (buffer << 8) | Int(byte)
+            bits += 8
+            while bits >= 5 {
+                result.append(alphabet[(buffer >> (bits - 5)) & 31])
+                bits -= 5
+            }
+        }
+        if bits > 0 { result.append(alphabet[(buffer << (5 - bits)) & 31]) }
+        return result
+    }
+
+    private static func decodeBase32(_ text: String) -> Data? {
+        var buffer = 0
+        var bits = 0
+        var result = Data()
+        for character in text {
+            guard let value = alphabet.firstIndex(of: character) else { return nil }
+            buffer = (buffer << 5) | value
+            bits += 5
+            while bits >= 8 {
+                result.append(UInt8((buffer >> (bits - 8)) & 255))
+                bits -= 8
+            }
+        }
+        return result
+    }
+}
+
+enum RecoveryKeyError: Error { case randomnessUnavailable, invalidLength }
+
+struct RecoveryEnrollmentState: Equatable { let isEnabled: Bool }
+struct RecoveryEnrollmentRecord: Equatable { let fingerprint: String, enrolledAt: Date }
 
 struct Opportunity: Equatable {
     let id: String
