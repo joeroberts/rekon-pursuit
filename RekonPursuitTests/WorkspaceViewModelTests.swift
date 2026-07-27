@@ -216,6 +216,43 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertNil(model.addOpportunitySaveError)
     }
 
+    func testSavingOverviewAcceptsUSDFormattedCompensationAmounts() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
+
+        model.start()
+        model.select(opportunity)
+        model.selectedCompensationMinimum = "$285,000"
+        model.selectedCompensationMaximum = "$385,000"
+        model.saveSelectedOpportunity()
+
+        let saved = try XCTUnwrap(store.opportunities().first)
+        XCTAssertEqual(saved.compensationMinimum, 285_000)
+        XCTAssertEqual(saved.compensationMaximum, 385_000)
+        XCTAssertEqual(saved.compensationPayPeriod, .year)
+        XCTAssertEqual(model.statusMessage, "Opportunity updated locally.")
+    }
+
+    func testSavingOverviewRejectsMalformedFormattedCompensationWithoutWriting() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", notes: "Original note"))
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
+
+        model.start()
+        model.select(opportunity)
+        let activityCountBeforeSave = try store.activityEvents().count
+        model.selectedCompensationMinimum = "$285,00"
+        model.selectedNotes = "Changed note"
+        model.saveSelectedOpportunity()
+
+        let saved = try XCTUnwrap(store.opportunities().first)
+        XCTAssertNil(saved.compensationMinimum)
+        XCTAssertEqual(saved.notes, "Original note")
+        XCTAssertEqual(try store.activityEvents().count, activityCountBeforeSave)
+        XCTAssertEqual(model.statusMessage, "Compensation amounts must be non-negative, and the minimum cannot exceed the maximum.")
+    }
+
     func testSuccessfulCreateUpdatesVisibleLocalCount() throws {
         let store = try makeStore()
         let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
