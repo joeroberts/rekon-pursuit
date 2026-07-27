@@ -69,8 +69,11 @@ struct PortableArchiveService {
         guard try payloadReader.take(8) == payloadMagic else { throw PortableArchiveError.archiveInvalid }
         let manifestLength = try payloadReader.uint32(); let snapshotLength = try payloadReader.uint64()
         guard manifestLength <= 8 * 1024 * 1024, snapshotLength <= 480 * 1024 * 1024, Int(manifestLength) + Int(snapshotLength) == payloadReader.remaining else { throw PortableArchiveError.archiveInvalid }
-        let manifest = try payloadReader.take(Int(manifestLength)); _ = try payloadReader.take(Int(snapshotLength))
+        let manifest = try payloadReader.take(Int(manifestLength)); let snapshot = try payloadReader.take(Int(snapshotLength))
         guard payloadReader.isAtEnd, Data(SHA256.hash(data: manifest)) == manifestHash else { throw PortableArchiveError.verificationFailed }
+        let declaredSnapshotHash = try validateManifest(manifest, archiveID: archiveID, createdAtMilliseconds: createdAt)
+        guard declaredSnapshotHash == Data(SHA256.hash(data: snapshot)) else { throw PortableArchiveError.verificationFailed }
+        try validateSnapshot(snapshot)
     }
 
     private static func sealPayload(manifest: Data, snapshot: Data, key: Data, archiveID: UUID, manifestHash: Data) throws -> Data {
@@ -83,6 +86,29 @@ struct PortableArchiveService {
         var data = Data("RPMAN01".utf8); data.append(archiveID.rawBytes); data.appendInt64(milliseconds(createdAt)); data.append(Data(SHA256.hash(data: snapshot))); return data
     }
 
+    private static func validateManifest(_ manifest: Data, archiveID: UUID, createdAtMilliseconds: Int64) throws -> Data {
+        var reader = ArchiveReader(manifest)
+        guard try reader.take(7) == Data("RPMAN01".utf8), try reader.uuid() == archiveID, try reader.int64() == createdAtMilliseconds else { throw PortableArchiveError.archiveInvalid }
+        let snapshotHash = try reader.take(32)
+        guard reader.isAtEnd else { throw PortableArchiveError.archiveInvalid }
+        return snapshotHash
+    }
+
+    private static func validateSnapshot(_ snapshot: Data) throws {
+        let expectedTables = ["opportunities", "task_reminders", "opportunity_stage_history", "opportunity_response_history", "contacts", "contact_opportunities", "interactions", "import_reports", "import_report_rows", "posting_checks", "reconciliation_reviews", "reconciliation_results", "reconciliation_check_operations", "document_references", "activity_events", "deletion_tombstones"]
+        var reader = ArchiveReader(snapshot)
+        guard try reader.take(8) == Data("RPSNAP01".utf8), try reader.uint32() == UInt32(expectedTables.count) else { throw PortableArchiveError.archiveInvalid }
+        for table in expectedTables {
+            guard try reader.archiveText() == table else { throw PortableArchiveError.archiveInvalid }
+            let rowCount = try reader.uint32()
+            for _ in 0..<rowCount {
+                let valueCount = try reader.uint32()
+                for _ in 0..<valueCount { try reader.archiveValue() }
+            }
+        }
+        guard reader.isAtEnd else { throw PortableArchiveError.archiveInvalid }
+    }
+
     private static func headerCommitment(archiveID: UUID, createdAt: Date, expiresAt: Date, salt: Data, manifestHash: Data, payloadChecksum: Data, publicKey: Data, fingerprint: Data) -> Data {
         var data = headerDomain + magic; data.appendUInt16(formatVersion); data.appendUInt32(headerLength); data.append(archiveID.rawBytes); data.appendInt64(milliseconds(createdAt)); data.appendInt64(milliseconds(expiresAt)); data.append(1); data.append(salt); data.append(manifestHash); data.append(payloadChecksum); data.append(publicKey); data.append(fingerprint); return data
     }
@@ -91,7 +117,7 @@ struct PortableArchiveService {
     private static func milliseconds(_ date: Date) -> Int64 { Int64((date.timeIntervalSince1970 * 1000).rounded(.towardZero)) }
 }
 
-private struct ArchiveReader { var data: Data; var offset = 0; init(_ data: Data) { self.data = data }; var remaining: Int { data.count - offset }; var isAtEnd: Bool { offset == data.count }; mutating func take(_ count: Int) throws -> Data { guard count >= 0, remaining >= count else { throw PortableArchiveError.archiveInvalid }; defer { offset += count }; return data.subdata(in: offset..<(offset + count)) }; mutating func byte() throws -> UInt8 { try take(1)[0] }; mutating func uint16() throws -> UInt16 { let bytes = try take(2); return UInt16(bytes[0]) << 8 | UInt16(bytes[1]) }; mutating func uint32() throws -> UInt32 { let bytes = try take(4); return bytes.reduce(0) { ($0 << 8) | UInt32($1) } }; mutating func uint64() throws -> UInt64 { let bytes = try take(8); return bytes.reduce(0) { ($0 << 8) | UInt64($1) } }; mutating func int64() throws -> Int64 { Int64(bitPattern: try uint64()) }; mutating func uuid() throws -> UUID { let bytes = try take(16); return UUID(uuid: (bytes[0],bytes[1],bytes[2],bytes[3],bytes[4],bytes[5],bytes[6],bytes[7],bytes[8],bytes[9],bytes[10],bytes[11],bytes[12],bytes[13],bytes[14],bytes[15])) } }
+private struct ArchiveReader { var data: Data; var offset = 0; init(_ data: Data) { self.data = data }; var remaining: Int { data.count - offset }; var isAtEnd: Bool { offset == data.count }; mutating func take(_ count: Int) throws -> Data { guard count >= 0, remaining >= count else { throw PortableArchiveError.archiveInvalid }; defer { offset += count }; return data.subdata(in: offset..<(offset + count)) }; mutating func byte() throws -> UInt8 { try take(1)[0] }; mutating func uint16() throws -> UInt16 { let bytes = try take(2); return UInt16(bytes[0]) << 8 | UInt16(bytes[1]) }; mutating func uint32() throws -> UInt32 { let bytes = try take(4); return bytes.reduce(0) { ($0 << 8) | UInt32($1) } }; mutating func uint64() throws -> UInt64 { let bytes = try take(8); return bytes.reduce(0) { ($0 << 8) | UInt64($1) } }; mutating func int64() throws -> Int64 { Int64(bitPattern: try uint64()) }; mutating func uuid() throws -> UUID { let bytes = try take(16); return UUID(uuid: (bytes[0],bytes[1],bytes[2],bytes[3],bytes[4],bytes[5],bytes[6],bytes[7],bytes[8],bytes[9],bytes[10],bytes[11],bytes[12],bytes[13],bytes[14],bytes[15])) }; mutating func archiveText() throws -> String { guard try byte() == 3 else { throw PortableArchiveError.archiveInvalid }; let length = try uint32(); guard let value = String(data: try take(Int(length)), encoding: .utf8) else { throw PortableArchiveError.archiveInvalid }; return value }; mutating func archiveValue() throws { let tag = try byte(); let length = try uint32(); guard tag <= 4 else { throw PortableArchiveError.archiveInvalid }; switch tag { case 0: guard length == 0 else { throw PortableArchiveError.archiveInvalid }; case 1, 2: guard length == 8 else { throw PortableArchiveError.archiveInvalid }; default: break }; _ = try take(Int(length)) } }
 private extension Data { mutating func appendUInt16(_ value: UInt16) { append(contentsOf: Swift.withUnsafeBytes(of: value.bigEndian, Array.init)) }; mutating func appendUInt32(_ value: UInt32) { append(contentsOf: Swift.withUnsafeBytes(of: value.bigEndian, Array.init)) }; mutating func appendUInt64(_ value: UInt64) { append(contentsOf: Swift.withUnsafeBytes(of: value.bigEndian, Array.init)) }; mutating func appendInt64(_ value: Int64) { appendUInt64(UInt64(bitPattern: value)) } }
 private extension UUID { var rawBytes: Data { Swift.withUnsafeBytes(of: uuid) { Data($0) } } }
 private func uint16Data(_ value: UInt16) -> Data { var data = Data(); data.appendUInt16(value); return data }

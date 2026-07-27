@@ -15,6 +15,7 @@ final class ArchiveSigningKeyStore: ArchiveSigningKeyStoring {
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
             kSecAttrAccount: account,
+            kSecUseDataProtectionKeychain: true,
             kSecReturnData: true,
             kSecMatchLimit: kSecMatchLimitOne
         ]
@@ -30,7 +31,8 @@ final class ArchiveSigningKeyStore: ArchiveSigningKeyStoring {
             kSecAttrService: service,
             kSecAttrAccount: account,
             kSecValueData: key.rawRepresentation,
-            kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecUseDataProtectionKeychain: true
         ]
         guard SecItemAdd(add as CFDictionary, nil) == errSecSuccess else { throw PortableArchiveError.signingKeyUnavailable }
         return key

@@ -78,6 +78,67 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents().last?.kind, "portable_backup_created")
     }
 
+    func testPortableArchiveWithoutEnrollmentOrWithWrongKeyLeavesNoFileOrCatalogueRow() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        let store = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test", archiveSigningKeyStore: InMemoryArchiveSigningKeyStore())
+        let destination = FileManager.default.temporaryDirectory.appendingPathComponent("archive-\(UUID().uuidString).rekonarchive")
+        defer { try? FileManager.default.removeItem(at: destination) }
+
+        XCTAssertThrowsError(try store.createPortableArchive(recoveryKey: try RecoveryKey.generate(), at: destination))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+        XCTAssertEqual(try store.portableArchiveCatalogue(), [])
+
+        let enrolled = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: enrolled)
+        XCTAssertThrowsError(try store.createPortableArchive(recoveryKey: try RecoveryKey.generate(), at: destination))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+        XCTAssertEqual(try store.portableArchiveCatalogue(), [])
+    }
+
+    func testPortableArchiveRejectsExistingDestinationWithoutChangingCatalogue() throws {
+        let store = try makeStore()
+        let enrolled = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: enrolled)
+        let destination = FileManager.default.temporaryDirectory.appendingPathComponent("archive-\(UUID().uuidString).rekonarchive")
+        try Data("existing".utf8).write(to: destination)
+        defer { try? FileManager.default.removeItem(at: destination) }
+
+        XCTAssertThrowsError(try store.createPortableArchive(recoveryKey: enrolled, at: destination))
+        XCTAssertEqual(try Data(contentsOf: destination), Data("existing".utf8))
+        XCTAssertEqual(try store.portableArchiveCatalogue(), [])
+    }
+
+    func testPortableArchiveRejectsTamperedCiphertextBeforeCataloguePromotion() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        let store = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test", archiveSigningKeyStore: InMemoryArchiveSigningKeyStore())
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+        let destination = FileManager.default.temporaryDirectory.appendingPathComponent("archive-\(UUID().uuidString).rekonarchive")
+        defer { try? FileManager.default.removeItem(at: destination) }
+        _ = try store.createPortableArchive(recoveryKey: recoveryKey, at: destination)
+        var tampered = try Data(contentsOf: destination)
+        tampered[tampered.index(before: tampered.endIndex)] ^= 0x01
+
+        XCTAssertThrowsError(try PortableArchiveService.verify(data: tampered, recoveryKey: recoveryKey))
+    }
+
+    func testPortableArchiveReadableMetadataDoesNotContainOpportunityContentOrRecoveryKey() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        let store = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test", archiveSigningKeyStore: InMemoryArchiveSigningKeyStore())
+        let recoveryKey = try RecoveryKey.generate()
+        let secretTitle = "PRIVATE-ARCHIVE-CONTENT"
+        try store.enroll(recoveryKey: recoveryKey)
+        _ = try store.create(CreateOpportunity(title: secretTitle, company: "Rekon Labs"))
+        let destination = FileManager.default.temporaryDirectory.appendingPathComponent("archive-\(UUID().uuidString).rekonarchive")
+        defer { try? FileManager.default.removeItem(at: destination) }
+
+        let archive = try store.createPortableArchive(recoveryKey: recoveryKey, at: destination)
+
+        XCTAssertNil(try Data(contentsOf: destination).range(of: Data(secretTitle.utf8)))
+        XCTAssertNil(archive.displayFilename.range(of: secretTitle))
+        XCTAssertFalse(try store.activityEvents().contains { $0.kind.contains(recoveryKey.displayValue) || $0.kind.contains(secretTitle) })
+    }
+
     override func setUpWithError() throws {
         databaseURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("rekon-workspace-\(UUID().uuidString)")

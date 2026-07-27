@@ -990,7 +990,7 @@ private struct SettingsView: View {
                 }
                 GroupBox("Recovery & export") {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(model.recoveryEnrollmentEnabled ? "Portable recovery is set up. No portable backup exists yet." : "Portable recovery is not set up. No portable backup exists.").foregroundStyle(.secondary)
+                        Text(model.recoveryEnrollmentEnabled ? (model.portableArchiveCatalogue.isEmpty ? "Portable recovery is set up. No portable backup exists yet." : "Portable recovery is set up. Verified archives are listed below.") : "Portable recovery is not set up. No portable backup exists.").foregroundStyle(.secondary)
                         if !model.recoveryEnrollmentEnabled {
                             Button("Set up recovery key") {
                                 generatedRecoveryKey = try? RecoveryKey.generate()
