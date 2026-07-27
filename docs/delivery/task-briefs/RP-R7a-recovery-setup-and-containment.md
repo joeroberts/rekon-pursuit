@@ -1,6 +1,6 @@
 # RP-R7a-1 — Recovery setup and legacy-flow containment
 
-**State:** Proposed — not released for implementation  
+**State:** In progress — released after independent R7a gate
 **Depends on:** `RP-R6` accepted and the R7a recovery-design gate  
 **Blocks:** Portable archive, restore, encrypted export, and warned unencrypted export work
 

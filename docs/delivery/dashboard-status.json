@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": null,
-  "nextEligibleTaskId": "RP-R7a",
+  "activeTaskId": "RP-R7a-1",
+  "nextEligibleTaskId": null,
   "tasks": [
     {
       "id": "RP-R0",
@@ -173,15 +173,15 @@
       "needsUserAction": false
     },
     {
-      "id": "RP-R7a",
-      "title": "Portable recovery and encrypted export",
-      "workType": "Data lifecycle",
-      "status": "next_up",
-      "releaseCondition": "Release after RP-R6, with recovery design and Architect plus Security/Privacy approval.",
-      "latestTransition": "RP-R6 accepted; awaiting its required recovery-design and high-risk approval gate before implementation.",
+      "id": "RP-R7a-1",
+      "title": "Recovery setup and legacy-flow containment",
+      "workType": "Security & workflow",
+      "status": "in_progress",
+      "releaseCondition": "Independent R7a gate approved. Archive, restore, and export remain unreleased.",
+      "latestTransition": "Released for recovery-key enrollment and containment of legacy backup, restore, and direct-export routes only.",
       "evidence": {
-        "label": "Remediation ledger",
-        "href": "../remediation-ledger.md"
+        "label": "R7a-1 task brief",
+        "href": "../task-briefs/RP-R7a-recovery-setup-and-containment.md"
       },
       "needsUserAction": false
     },
