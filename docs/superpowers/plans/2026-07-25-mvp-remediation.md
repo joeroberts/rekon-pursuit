@@ -85,7 +85,7 @@
 
 **Files:** Add versioned encrypted archive/recovery-key services, manifest/catalog storage, restore-as-new-workspace UI, and focused recovery tests.
 
-**Scope:** Enroll and verify a user-held, non-resettable, non-escrowed recovery key; bind it to authenticated archive metadata; generate authenticated encrypted archives with manifest verification; default export to encrypted; require warning and final destination/filename review for unencrypted export; restore verifies then creates a new workspace rather than replacing the active one.
+**Scope:** Enroll and verify a user-held, non-resettable, non-escrowed recovery key; bind it to authenticated archive metadata; generate authenticated encrypted archives with manifest verification; show per-backup creation, recoverability, and fixed 30-day expiry plus retained-backup deletion disclosure; default export to encrypted; require warning and final destination/filename review for unencrypted export; restore verifies then creates a new workspace rather than replacing the active one.
 
 **Acceptance:** A portable archive restores into a separate workspace using the recovery key; export choices and warnings are truthful; no secrets are exported.
 
@@ -93,7 +93,7 @@
 
 **Files:** Modify backup catalogue, deletion views, purge service/UI, and focused lifecycle tests.
 
-**Scope:** Show creation and 30-day expiry; disclose retained deleted data; purge app-managed retained backups by regenerate/verify/remove with truthful partial-failure state and dedicated confirmation.
+**Scope:** Remove expired backups and purge app-managed retained backups by regenerate/verify/remove with truthful partial-failure state and dedicated confirmation. R7a already shows truthful creation/expiry/recoverability and retained-deletion disclosure.
 
 **Acceptance:** Expiry and purge status survive relaunch; a failed purge is never reported as complete.
 

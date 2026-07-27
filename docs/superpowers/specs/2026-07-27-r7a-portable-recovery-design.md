@@ -3,7 +3,9 @@
 **Status:** Proposed for independent R7a gate review  
 **Scope:** Recovery-key enrollment, encrypted portable backup/archive creation,
 restore to a new local workspace, encrypted-default export, and warned
-unencrypted export. Retention expiry and purge are explicitly R7b.
+unencrypted export. R7a also shows per-backup creation, recoverability, and
+fixed 30-day expiry, plus the retained-backup deletion disclosure. Expiry
+removal and purge are explicitly R7b.
 
 ## Decision
 
@@ -30,35 +32,60 @@ their retention, deletion, or export rules.
    again. The key is held only for that operation, then discarded. After a
    matching re-entry, the app writes a temporary archive/envelope/manifest,
    verifies all artifacts, then atomically promotes the backup catalogue entry.
+   The catalogue shows its creation time, fixed expiry, and verification/
+   recoverability status.
 5. **Restore encrypted backup** always opens a restore wizard. It asks for the
    recovery key, validates the archive, and creates a new workspace directory
    with fresh database and signing keys. It never replaces the current
    workspace; switching to the restored workspace is a separate final action.
-6. **Export** starts on encrypted export. A user who selects unencrypted
-   export sees the accepted disclosure and must review exact categories,
-   filename, and destination. Any change returns the flow to review.
+6. **Export** starts on encrypted export. It requires recovery enrollment and
+   operation-time key re-entry, then writes a selected-category logical export
+   sealed with the same recovery-key envelope format. It is an encrypted export
+   artifact, not a backup catalogue entry and not a workspace-restore command.
+   A user who selects unencrypted export sees the accepted disclosure and must
+   review exact categories, filename, and destination. Any change returns the
+   flow to review.
+7. When deleting an item, the app states that existing encrypted recovery
+   backups may retain it until the displayed expiry or a future purge. R7b owns
+   expiry removal and purge, not this truthful visibility.
 
 ## Archive and trust boundary
 
 - Use only Apple platform cryptography: `SecRandomCopyBytes`, CryptoKit
   HKDF-SHA256, AES-GCM, SHA-256, and Curve25519 signing. No custom cipher,
   KDF, file format, or third-party crypto dependency is introduced.
-- Each archive receives a random backup content key. The archive package is
-  AES-GCM sealed with that key; its plaintext contains the versioned manifest,
-  encrypted SQLCipher workspace payload, and only the selected document
-  metadata allowed by current MVP boundaries.
+- Each archive receives a random content key. The source workspace is read
+  while open and serialized into a versioned logical snapshot; the raw
+  SQLCipher database file and its database key are never archived. The archive
+  package AES-GCM seals that snapshot plus only the selected document metadata
+  allowed by current MVP boundaries. Restore imports the logical snapshot into
+  a freshly keyed destination SQLCipher workspace.
+- A minimal outer header is readable before decryption and contains only the
+  archive ID, format version, per-archive salt, manifest hash, envelope,
+  manifest signature, signing public key, archive checksum, and versioned
+  metadata needed to validate the package. It contains no raw user data,
+  recovery secret, database key, or full local path. The full manifest remains
+  inside the encrypted package and must hash to the authenticated header value.
 - The recovery key is combined with a per-backup random salt through
   HKDF-SHA256 to derive a wrapping key. A recovery envelope AES-GCM seals the
   content key and binds it to the backup ID, archive format version, and
-  manifest hash as authenticated associated data.
+  outer-header manifest hash as authenticated associated data.
 - The manifest contains only IDs, versions, creation/expiry timestamps,
   checksums, deleted-material inventory summary, recovery-envelope hash, and
   signing-public-key fingerprint. It contains no recovery secret, database
   key, OAuth token, plaintext backup key, full local path, or raw user data.
-- A workspace-held Curve25519 signing key signs the manifest. On same-Mac
-  restore its public-key fingerprint must match the locally held verification
-  key. On a clean Mac, successful recovery-key envelope validation is the
-  portability trust root; the restored workspace immediately creates fresh
+- A workspace-held Curve25519 signing key signs the manifest hash plus the
+  canonical outer-header fields (excluding the signature field itself). The
+  complete signing public key travels in the authenticated outer header; its
+  fingerprint is duplicated in the encrypted manifest. On the
+  source Mac, the archive ID and public-key fingerprint must match the local
+  backup catalogue before restore. A complete archive/envelope pair from a
+  different workspace is never silently treated as the current workspace.
+  On a clean Mac, the app verifies the signature with the header public key,
+  validates the recovery envelope, then presents backup ID, creation time, and
+  fingerprint for explicit user confirmation before importing. Substituting
+  any header, envelope, archive, signature, or verification key breaks a
+  binding and is rejected. A restored workspace immediately creates fresh
   database and signing keys and requires new recovery enrollment for future
   portable backups.
 
@@ -78,9 +105,13 @@ their retention, deletion, or export rules.
 - Unencrypted export records safe metadata only: export type, selected
   categories, destination class, confirmation fingerprint, and outcome. It
   records neither exported contents nor a full path.
-- R7a does not implement automatic expiry removal, deleted-data disclosure,
-  backup rewriting, or purge. Those remain R7b and must not be implied by the
-  R7a UI.
+- R7a does not implement automatic expiry removal, backup rewriting, or purge.
+  Those remain R7b. R7a does persist and display the truthful 30-day expiry
+  and retained-backup deletion disclosure required by ADR-001.
+- Existing same-Mac backup/restore and direct CSV-export routes are contained
+  before the new recovery flow is exposed. They are not presented as portable
+  recovery and must not replace an active workspace. R7a operates only on a
+  ready active workspace and never changes the preserved legacy folder.
 
 ## Focused acceptance evidence
 
@@ -96,10 +127,13 @@ their retention, deletion, or export rules.
   or destination change.
 - Redaction inspection proves that secrets, keys, raw content, and full paths
   do not enter archives' visible metadata, activity, diagnostics, or fixtures.
+- Header-before-unwrapping verification covers malformed/tampered headers,
+  archive-envelope swaps, substituted signing keys, and header/manifest-hash
+  disagreement. Same-Mac mismatches reject; a clean-Mac valid but different
+  archive requires explicit confirmation.
 
 ## Explicitly out of scope
 
-- R7b expiry display, retained-deletion disclosure, backup purge/rewrite, and
-  physical-deletion claims.
+- R7b expiry removal, backup purge/rewrite, and physical-deletion claims.
 - Gmail, Calendar, AI, cloud sync, document editing, and a release/notarized
   distribution workflow.
