@@ -1369,7 +1369,12 @@ final class WorkspaceViewModel: ObservableObject {
     private func compensationDraftValue(_ value: String) throws -> Double? {
         let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return nil }
-        guard let parsed = Double(value) else { throw WorkspaceStoreError.invalidCompensation }
+        let numericValue = value.hasPrefix("$") ? String(value.dropFirst()) : value
+        let amountPattern = "^-?(?:(?:\\d{1,3}(?:,\\d{3})+)|\\d+)(?:\\.\\d+)?$"
+        guard numericValue.range(of: amountPattern, options: .regularExpression) != nil,
+              let parsed = Double(numericValue.replacingOccurrences(of: ",", with: "")) else {
+            throw WorkspaceStoreError.invalidCompensation
+        }
         return parsed
     }
 

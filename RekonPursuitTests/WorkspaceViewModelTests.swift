@@ -199,6 +199,23 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents(), [])
     }
 
+    func testCreateAcceptsUSDFormattedCompensationAmounts() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
+
+        model.start()
+        model.title = "Product Manager"
+        model.company = "Rekon Labs"
+        model.compensationMinimum = "$285,000"
+        model.compensationMaximum = "$385,000"
+        model.createOpportunity()
+
+        let saved = try XCTUnwrap(store.opportunities().first)
+        XCTAssertEqual(saved.compensationMinimum, 285_000)
+        XCTAssertEqual(saved.compensationMaximum, 385_000)
+        XCTAssertNil(model.addOpportunitySaveError)
+    }
+
     func testSuccessfulCreateUpdatesVisibleLocalCount() throws {
         let store = try makeStore()
         let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
