@@ -153,6 +153,45 @@ final class PortableArchiveTests: XCTestCase {
         XCTAssertEqual(fixture.bookmarks.stopCount(for: archive.bookmark), 2)
     }
 
+    func testExpiryUnlinkFailureRestoresArchiveAndLeavesRetryableState() async throws {
+        let fixture = try makeExpiryFixture()
+        defer { fixture.cleanup() }
+        let archive = try seedExpiryArchive(
+            in: fixture,
+            named: "unlink-failure.rekonarchive",
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200)
+        )
+        fixture.clock.set(archive.row.expiresAt)
+        let unlinkAttempts = ExpiryTestCounter()
+        let liveOperations = PortableArchiveExpiryFileOperations.live
+        try fixture.installWorker(
+            fileOperations: liveOperations.replacingUnlink { url in
+                guard unlinkAttempts.incrementAndGet() > 1 else {
+                    throw PortableArchiveExpiryError.ioFailure
+                }
+                try liveOperations.unlinkTarget(url)
+            }
+        )
+
+        let first = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+        let firstRow = try XCTUnwrap(first.first)
+
+        XCTAssertEqual(firstRow.lifecycleState, .expiredRetryable)
+        XCTAssertEqual(firstRow.lastExpiryOutcome, .ioFailure)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: archive.url.path))
+        XCTAssertTrue(try fixture.store.activityEvents().allSatisfy {
+            $0.kind != "portable_backup_expired_removed"
+        })
+
+        let retry = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+
+        XCTAssertTrue(retry.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: archive.url.path))
+        XCTAssertEqual(try fixture.store.activityEvents().filter {
+            $0.kind == "portable_backup_expired_removed"
+        }.count, 1)
+    }
+
     func testExpiryNeverUnlinksSymlinkReplacementOrIdentityChangedTarget() async throws {
         let fixture = try makeExpiryFixture()
         defer { fixture.cleanup() }
@@ -286,6 +325,32 @@ final class PortableArchiveTests: XCTestCase {
         )
         var malformed = try Data(contentsOf: archiveURL)
         malformed.replaceSubrange(30..<38, with: Data(repeating: 0x7f, count: 8))
+
+        XCTAssertThrowsError(try PortableArchiveService.verifyPublicBinding(data: malformed))
+    }
+
+    func testPublicBindingRejectsNearMaximumRawTimestampsWithoutTrapping() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("archive-near-max-time-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let archiveURL = root.appendingPathComponent("near-max.rekonarchive")
+        _ = try PortableArchiveService.writeAndVerify(
+            snapshot: emptyCanonicalSnapshot(),
+            recoveryKey: RecoveryKey.generate(),
+            signingKey: .init(),
+            archiveID: UUID(),
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200),
+            to: archiveURL
+        )
+
+        func bytes(for value: Int64) -> Data {
+            var bigEndian = UInt64(bitPattern: value).bigEndian
+            return withUnsafeBytes(of: &bigEndian) { Data($0) }
+        }
+
+        var malformed = try Data(contentsOf: archiveURL)
+        malformed.replaceSubrange(30..<38, with: bytes(for: Int64.max - 1))
+        malformed.replaceSubrange(38..<46, with: bytes(for: Int64.max))
 
         XCTAssertThrowsError(try PortableArchiveService.verifyPublicBinding(data: malformed))
     }
