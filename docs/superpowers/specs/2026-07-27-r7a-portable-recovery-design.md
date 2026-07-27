@@ -12,8 +12,11 @@ removal and purge are explicitly R7b.
 R7a uses an app-generated, user-held 256-bit recovery key. Rekon Pursuit shows
 the key once as grouped Base32 text plus a checksum, and requires the user to
 re-enter it before enrollment completes. The app never writes the key to a
-file, clipboard, database, manifest, activity event, diagnostics, or backup;
-there is no reset, escrow, support override, or cloud recovery path. A
+file, database, manifest, activity event, diagnostics, or backup. The user may
+explicitly copy the one-time displayed key to the macOS clipboard after a clear
+warning that other apps or clipboard history can retain it; the app never
+automatically copies or clears it. There is no reset, escrow, support override,
+or cloud recovery path. A
 verified enrollment stores only a versioned, one-way key fingerprint so the
 app can reject a different key later; it does not retain the key itself.
 

@@ -15,8 +15,11 @@ as usable recovery/export commands.
 ## Approved boundary
 
 - Generate one 256-bit recovery key with platform cryptographic randomness.
-  Show grouped Base32 plus checksum exactly once; do not write it to the
-  clipboard, a file, activity, diagnostics, fixtures, database, or Keychain.
+  Show grouped Base32 plus checksum exactly once. The user may explicitly copy
+  it to the macOS clipboard after a warning that clipboard history or other
+  apps can retain it; Rekon Pursuit never automatically copies or clears it.
+  Do not write it to a file, activity, diagnostics, fixtures, database, or
+  Keychain.
 - Require complete re-entry before enrollment. Store only a versioned,
   one-way enrollment fingerprint in the encrypted workspace store and
   non-secret enrollment state. Cancel, mismatch, malformed input, invalid
@@ -68,8 +71,9 @@ archive.
   an existing enrollment remains enabled and unchanged.
 - The encrypted workspace store may retain only the opaque versioned
   enrollment fingerprint. Activity, diagnostics, fixtures, UI copy,
-  clipboard/files, manifests, and exports contain neither that fingerprint nor
-  any raw key/Base32 display value; no surface contains a path.
+  manifests, and exports contain neither that fingerprint nor any raw
+  key/Base32 display value; no surface contains a path. The one user-initiated
+  clipboard copy is the sole exception and must show its retention warning.
 - The old same-Mac backup, replace-in-place restore, and direct CSV-export
   controls are unreachable from the active UI; existing local material remains
   untouched.
