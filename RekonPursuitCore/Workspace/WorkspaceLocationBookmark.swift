@@ -251,8 +251,7 @@ struct DocumentReferenceBookmarkStore {
             return "application/pdf"
         case "docx":
             guard data.starts(with: Data([0x50, 0x4b, 0x03, 0x04])),
-                  data.range(of: Data("[Content_Types].xml".utf8)) != nil,
-                  data.range(of: Data("word/document.xml".utf8)) != nil else { throw DocumentReferenceBookmarkError.unsupportedType }
+                  containsRequiredDOCXEntries(in: data) else { throw DocumentReferenceBookmarkError.unsupportedType }
             return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         default:
             throw DocumentReferenceBookmarkError.unsupportedType
@@ -270,5 +269,63 @@ struct DocumentReferenceBookmarkStore {
         let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         if let expectedHash, let expectedByteCount, (hash != expectedHash || size != expectedByteCount) { throw DocumentReferenceBookmarkError.mismatch }
         return (contentType, hash, size)
+    }
+
+    /// Confirms DOCX package members from ZIP central-directory records. We do
+    /// not extract or inspect document contents.
+    private static func containsRequiredDOCXEntries(in data: Data) -> Bool {
+        let endOfCentralDirectorySignature: UInt32 = 0x06054b50
+        let centralDirectorySignature: UInt32 = 0x02014b50
+        let minimumEOCDLength = 22
+        guard data.count >= minimumEOCDLength else { return false }
+
+        let searchStart = max(0, data.count - (minimumEOCDLength + 65_535))
+        var eocdOffset: Int?
+        for offset in stride(from: data.count - minimumEOCDLength, through: searchStart, by: -1) {
+            if readLE32(from: data, at: offset) == endOfCentralDirectorySignature {
+                eocdOffset = offset
+                break
+            }
+        }
+        guard let eocdOffset else { return false }
+
+        let entryCount = Int(readLE16(from: data, at: eocdOffset + 10))
+        let centralDirectorySize = Int(readLE32(from: data, at: eocdOffset + 12))
+        let centralDirectoryOffset = Int(readLE32(from: data, at: eocdOffset + 16))
+        guard centralDirectoryOffset >= 0,
+              centralDirectorySize >= 0,
+              centralDirectoryOffset <= data.count,
+              centralDirectorySize <= data.count - centralDirectoryOffset else { return false }
+
+        let centralDirectoryEnd = centralDirectoryOffset + centralDirectorySize
+        var cursor = centralDirectoryOffset
+        var names = Set<String>()
+        for _ in 0..<entryCount {
+            let fixedRecordLength = 46
+            guard cursor <= centralDirectoryEnd - fixedRecordLength,
+                  readLE32(from: data, at: cursor) == centralDirectorySignature else { return false }
+
+            let nameLength = Int(readLE16(from: data, at: cursor + 28))
+            let extraLength = Int(readLE16(from: data, at: cursor + 30))
+            let commentLength = Int(readLE16(from: data, at: cursor + 32))
+            let nextCursor = cursor + fixedRecordLength + nameLength + extraLength + commentLength
+            guard nextCursor <= centralDirectoryEnd else { return false }
+            if let name = String(data: data[(cursor + fixedRecordLength)..<(cursor + fixedRecordLength + nameLength)], encoding: .utf8) {
+                names.insert(name)
+            }
+            cursor = nextCursor
+        }
+        return names.contains("[Content_Types].xml") && names.contains("word/document.xml")
+    }
+
+    private static func readLE16(from data: Data, at offset: Int) -> UInt16 {
+        UInt16(data[offset]) | (UInt16(data[offset + 1]) << 8)
+    }
+
+    private static func readLE32(from data: Data, at offset: Int) -> UInt32 {
+        UInt32(data[offset])
+            | (UInt32(data[offset + 1]) << 8)
+            | (UInt32(data[offset + 2]) << 16)
+            | (UInt32(data[offset + 3]) << 24)
     }
 }

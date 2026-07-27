@@ -1490,6 +1490,32 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.documentReferences(forOpportunityID: opportunity.id).first?.bookmarkData, Data([0x01, 0x02]))
     }
 
+    func testVersionTwentyTwoDocumentReferenceMigrationRequiresRelinkWithoutRetainingBookmarkData() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        let currentStore = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test")
+        let opportunity = try currentStore.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        _ = try currentStore.recordDocumentReference(RecordDocumentReference(
+            opportunityID: opportunity.id,
+            kind: .resume,
+            filename: "resume.pdf",
+            contentType: "application/pdf",
+            sourceHash: String(repeating: "c", count: 64),
+            byteCount: 2_048,
+            bookmarkData: Data([0x01, 0x02])
+        ))
+        try database.execute("ALTER TABLE document_references DROP COLUMN bookmark_data")
+        try database.execute("ALTER TABLE document_references DROP COLUMN availability")
+        try database.execute("DELETE FROM migration_history WHERE version = 23")
+        try database.execute("UPDATE schema_migrations SET version = 22")
+
+        let migratedStore = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test")
+        let reference = try XCTUnwrap(migratedStore.documentReferences(forOpportunityID: opportunity.id).first)
+
+        XCTAssertEqual(try migratedStore.schemaVersion(), 23)
+        XCTAssertNil(reference.bookmarkData)
+        XCTAssertEqual(reference.availability, .relinkRequired)
+    }
+
     func testRemovingDocumentReferenceClearsStoredBookmarkAndRecordsRedactedActivity() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))

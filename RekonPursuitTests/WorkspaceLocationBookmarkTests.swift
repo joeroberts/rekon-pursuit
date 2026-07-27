@@ -18,8 +18,13 @@ final class WorkspaceLocationBookmarkTests: XCTestCase {
     }
 
     func testDocumentReferenceValidationRequiresDOCXPackageEntries() throws {
-        XCTAssertThrowsError(try DocumentReferenceBookmarkStore.validateContents(Data([0x50, 0x4b, 0x03, 0x04]), pathExtension: "docx"))
-        let docx = Data([0x50, 0x4b, 0x03, 0x04]) + Data("[Content_Types].xml word/document.xml".utf8)
+        let genericZIP = zipArchive(entries: ["note.txt": Data("[Content_Types].xml word/document.xml".utf8)])
+        XCTAssertThrowsError(try DocumentReferenceBookmarkStore.validateContents(genericZIP, pathExtension: "docx"))
+
+        let docx = zipArchive(entries: [
+            "[Content_Types].xml": Data("<Types/>".utf8),
+            "word/document.xml": Data("<w:document/>".utf8)
+        ])
         XCTAssertEqual(try DocumentReferenceBookmarkStore.validateContents(docx, pathExtension: "docx"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
     }
 
@@ -246,6 +251,68 @@ private final class BookmarkFixture {
 private enum BookmarkFixtureError: Error {
     case unresolvable
     case persistenceFailed
+}
+
+private func zipArchive(entries: [String: Data]) -> Data {
+    var archive = Data()
+    var centralDirectory = Data()
+    var offset = 0
+
+    for (name, contents) in entries.sorted(by: { $0.key < $1.key }) {
+        let nameBytes = Data(name.utf8)
+        archive.appendLE(0x04034b50, width: 4)
+        archive.appendLE(20, width: 2)
+        archive.appendLE(0, width: 2)
+        archive.appendLE(0, width: 2)
+        archive.appendLE(0, width: 2)
+        archive.appendLE(0, width: 2)
+        archive.appendLE(0, width: 4)
+        archive.appendLE(UInt32(contents.count), width: 4)
+        archive.appendLE(UInt32(contents.count), width: 4)
+        archive.appendLE(UInt16(nameBytes.count), width: 2)
+        archive.appendLE(0, width: 2)
+        archive.append(nameBytes)
+        archive.append(contents)
+
+        centralDirectory.appendLE(0x02014b50, width: 4)
+        centralDirectory.appendLE(20, width: 2)
+        centralDirectory.appendLE(20, width: 2)
+        centralDirectory.appendLE(0, width: 2)
+        centralDirectory.appendLE(0, width: 2)
+        centralDirectory.appendLE(0, width: 2)
+        centralDirectory.appendLE(0, width: 2)
+        centralDirectory.appendLE(0, width: 4)
+        centralDirectory.appendLE(UInt32(contents.count), width: 4)
+        centralDirectory.appendLE(UInt32(contents.count), width: 4)
+        centralDirectory.appendLE(UInt16(nameBytes.count), width: 2)
+        centralDirectory.appendLE(0, width: 2)
+        centralDirectory.appendLE(0, width: 2)
+        centralDirectory.appendLE(0, width: 2)
+        centralDirectory.appendLE(0, width: 2)
+        centralDirectory.appendLE(0, width: 4)
+        centralDirectory.appendLE(UInt32(offset), width: 4)
+        centralDirectory.append(nameBytes)
+        offset = archive.count
+    }
+
+    let centralOffset = archive.count
+    archive.append(centralDirectory)
+    archive.appendLE(0x06054b50, width: 4)
+    archive.appendLE(0, width: 2)
+    archive.appendLE(0, width: 2)
+    archive.appendLE(UInt16(entries.count), width: 2)
+    archive.appendLE(UInt16(entries.count), width: 2)
+    archive.appendLE(UInt32(centralDirectory.count), width: 4)
+    archive.appendLE(UInt32(centralOffset), width: 4)
+    archive.appendLE(0, width: 2)
+    return archive
+}
+
+private extension Data {
+    mutating func appendLE<T: FixedWidthInteger>(_ value: T, width: Int) {
+        var littleEndian = value.littleEndian
+        Swift.withUnsafeBytes(of: &littleEndian) { append(contentsOf: $0.prefix(width)) }
+    }
 }
 
 @MainActor
