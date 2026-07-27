@@ -543,7 +543,7 @@ final class WorkspaceViewModel: ObservableObject {
         var canonicalEmployers: [String: String] = [:]
         for opportunity in opportunities {
             let employer = opportunity.company.trimmingCharacters(in: .whitespacesAndNewlines)
-            let normalized = employer.lowercased()
+            let normalized = normalizedEmployerName(employer)
             if !employer.isEmpty, canonicalEmployers[normalized] == nil {
                 canonicalEmployers[normalized] = employer
             }
@@ -554,16 +554,18 @@ final class WorkspaceViewModel: ObservableObject {
     var filteredContactEmployerSuggestions: [String] {
         let query = contactEmployerSearch.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return [] }
+        let normalizedQuery = normalizedEmployerName(query)
         return Array(contactEmployerSuggestions
-            .filter { $0.localizedCaseInsensitiveContains(query) }
+            .filter { normalizedEmployerName($0).contains(normalizedQuery) }
             .prefix(6))
     }
 
     var contactEmployerAddCandidate: String? {
         let query = contactEmployerSearch.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return nil }
+        let normalizedQuery = normalizedEmployerName(query)
         let hasExactMatch = contactEmployerSuggestions.contains {
-            $0.compare(query, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+            normalizedEmployerName($0) == normalizedQuery
         }
         return hasExactMatch ? nil : query
     }
@@ -743,7 +745,10 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func selectContactEmployer(_ employer: String) {
-        contactEmployer = employer.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedEmployer = employer.trimmingCharacters(in: .whitespacesAndNewlines)
+        contactEmployer = contactEmployerSuggestions.first {
+            normalizedEmployerName($0) == normalizedEmployerName(trimmedEmployer)
+        } ?? trimmedEmployer
         contactEmployerSearch = contactEmployer
         isAddingNewContactEmployer = false
     }
@@ -1509,6 +1514,11 @@ final class WorkspaceViewModel: ObservableObject {
 
     private func actionDraftTitle(type: OpportunityActionType, customText: String) -> String {
         type == .other ? customText.trimmingCharacters(in: .whitespacesAndNewlines) : (type == .noAction ? "" : type.rawValue)
+    }
+
+    private func normalizedEmployerName(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
     }
 
     private func urlWarning(for value: String) -> String? {

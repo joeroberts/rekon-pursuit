@@ -1024,6 +1024,7 @@ final class WorkspaceViewModelTests: XCTestCase {
         for company in ["Albatross", "Almanac", "Alpha", "Alpine", "Altana", "Alto", "Altruist", "Beta"] {
             _ = try store.create(CreateOpportunity(title: "Director", company: company))
         }
+        _ = try store.create(CreateOpportunity(title: "Director", company: "Café Labs"))
         let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
 
         model.start()
@@ -1032,6 +1033,10 @@ final class WorkspaceViewModelTests: XCTestCase {
 
         model.contactEmployerSearch = "al"
         XCTAssertEqual(model.filteredContactEmployerSuggestions, ["Albatross", "Almanac", "Alpha", "Alpine", "Altana", "Alto"])
+
+        model.contactEmployerSearch = "cafe labs"
+        XCTAssertEqual(model.filteredContactEmployerSuggestions, ["Café Labs"])
+        XCTAssertNil(model.contactEmployerAddCandidate)
     }
 
     func testContactEmployerTypeaheadAddsOnlyANonmatchingTypedEmployer() throws {
