@@ -79,10 +79,14 @@ their retention, deletion, or export rules.
   contains the manifest hash, signing-public-key fingerprint, archive checksum,
   and fixed header fields, but excludes the envelope and signature fields so it
   is non-circular and can be verified before trusting the header key.
-- The manifest contains only IDs, versions, creation/expiry timestamps,
-  checksums, deleted-material inventory summary, recovery-envelope hash, and
-  signing-public-key fingerprint. It contains no recovery secret, database
-  key, OAuth token, plaintext backup key, full local path, or raw user data.
+- The manifest binds the logical snapshot only: archive ID, creation timestamp,
+  and SHA-256 of the canonical snapshot bytes. It contains no recovery-envelope
+  hash, payload/archive checksum, or signing-public-key fingerprint; those
+  values are bound directly by the signed canonical header commitment. It
+  contains no recovery secret, database key, OAuth token, plaintext backup key,
+  full local path, or raw user data. Privacy-minimized deletion inventory
+  remains inside the authenticated encrypted snapshot and can be derived only
+  after successful package verification and decryption.
 - A workspace-held Curve25519 signing key signs the manifest hash plus the
   canonical outer-header fields (excluding the signature field itself). The
   complete signing public key travels in the authenticated outer header; its

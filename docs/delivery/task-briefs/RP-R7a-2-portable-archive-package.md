@@ -60,10 +60,13 @@ switch to, export from, purge, rewrite, or remove an archive.
    recovery envelope, signing public key/fingerprint, and signature. It
    contains no user content, full local path, recovery key, database key, or
    plaintext content key.
-4. The encrypted manifest contains only IDs, versions, timestamps, checksums,
-   recovery-envelope hash, signing-key fingerprint, and privacy-minimized
-   retained-deletion inventory summary. The signing key signs the manifest hash
-   plus the defined signature preimage. The public key travels in the header.
+4. The encrypted manifest binds the logical snapshot only. It contains the
+   archive ID, creation timestamp, and SHA-256 of the canonical snapshot bytes.
+   It does not contain an envelope hash, payload/archive checksum, or signing-key
+   fingerprint: those values are already bound directly by the signed header
+   commitment. The signing key signs the defined signature preimage, which
+   includes the manifest hash through that commitment. The public key travels
+   in the header.
 5. A workspace-scoped Curve25519 signing key is created on first archive and
    retained in the Data Protection Keychain. It is not a recovery key and is
    never exported. Its service is
@@ -123,14 +126,19 @@ format has no optional fields in v1.
    format version, and SHA-256(manifest bytes). The manifest/snapshot lengths
    are bounded to 8 MiB and 480 MiB respectively and their sum must exactly
    match the plaintext length.
-5. Manifest and snapshot use the same deterministic length-prefixed value
-   codec: tag (`UInt8`), byte length (`UInt32`), then raw bytes, with strings
-   encoded as unnormalised UTF-8 and absent optionals represented by tag zero
-   and zero length. Maps/tables are emitted in the fixed order below; rows are
-   ordered by their primary-key tuple using bytewise UTF-8 comparison. Dates
-   are signed Unix milliseconds. Floating compensation values are encoded as
-   IEEE-754 binary64 big-endian; no textual number representation is allowed.
-   This preserves entered text without locale-dependent transformation.
+5. Manifest v1 is exactly 63 bytes: `RPMAN01` (7 ASCII bytes), archive ID
+   (16), created-at Unix milliseconds (`Int64`, 8), then SHA-256 of the
+   canonical snapshot bytes (32). Its archive ID and created-at value must
+   equal the authenticated header fields. The manifest contains no envelope
+   hash, payload/archive checksum, or signing-key fingerprint. Snapshot values
+   use the deterministic length-prefixed codec: tag (`UInt8`), byte length
+   (`UInt32`), then raw bytes, with strings encoded as unnormalised UTF-8 and
+   absent optionals represented by tag zero and zero length. Maps/tables are
+   emitted in the fixed order below; rows are ordered by their primary-key
+   tuple using bytewise UTF-8 comparison. Dates are signed Unix milliseconds.
+   Floating compensation values are encoded as IEEE-754 binary64 big-endian;
+   no textual number representation is allowed. This preserves entered text
+   without locale-dependent transformation.
 6. Snapshot v1 contains, in this exact table order, only rows associated with
    active opportunities or active contacts: `opportunities`,
    `task_reminders`, `opportunity_stage_history`,
