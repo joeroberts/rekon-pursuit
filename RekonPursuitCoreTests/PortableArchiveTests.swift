@@ -5,6 +5,35 @@ import XCTest
 
 @MainActor
 final class PortableArchiveTests: XCTestCase {
+    func testPortableArchiveCatalogueMigrationDefaultsExistingRowsToVerified() throws {
+        let fixture = try makeStoreAtVersion26(withArchiveCatalogueRow: true)
+        defer {
+            try? fixture.store.close()
+            removeDatabase(at: fixture.databaseURL)
+        }
+
+        let catalogue = try fixture.store.portableArchiveCatalogue()
+
+        XCTAssertEqual(catalogue.count, 1)
+        XCTAssertEqual(catalogue.first?.lifecycleState, .verified)
+        XCTAssertEqual(catalogue.first?.lastExpiryOutcome, PortableArchiveExpiryOutcome.none)
+    }
+
+    func testPortableArchiveCatalogueRejectsUnknownLifecycleState() throws {
+        let fixture = try makeStoreAtVersion26(withArchiveCatalogueRow: true)
+        defer {
+            try? fixture.store.close()
+            removeDatabase(at: fixture.databaseURL)
+        }
+        try fixture.database.execute(
+            "UPDATE portable_archive_catalogue SET lifecycle_state = 'unrecognized_state'"
+        )
+
+        XCTAssertThrowsError(try fixture.store.portableArchiveCatalogue()) { error in
+            XCTAssertEqual(error as? WorkspaceStoreError, .unexpectedDatabaseValue)
+        }
+    }
+
     func testRestoreOutcomeDoesNotExposeCandidateFilesystemRoot() {
         let outcome = RestoredWorkspaceCandidate(candidateID: UUID(), archiveID: UUID())
 
@@ -1290,6 +1319,35 @@ final class PortableArchiveTests: XCTestCase {
         for candidate in [url, URL(fileURLWithPath: url.path + "-wal"), URL(fileURLWithPath: url.path + "-shm")] {
             try? FileManager.default.removeItem(at: candidate)
         }
+    }
+
+    private func makeStoreAtVersion26(withArchiveCatalogueRow: Bool) throws -> (store: WorkspaceStore, database: EncryptedDatabase, databaseURL: URL) {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-catalogue-v26-\(UUID().uuidString).sqlite")
+        let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 7, count: 32))
+        _ = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
+        if withArchiveCatalogueRow {
+            try database.execute(
+                "INSERT INTO portable_archive_catalogue (archive_id, destination_bookmark, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                values: [
+                    .text("00000000-0000-0000-0000-000000000001"),
+                    .blob(Data([0x01])),
+                    .text("archive.rekonarchive"),
+                    .integer(1),
+                    .real(1_704_067_200),
+                    .real(1_706_659_200),
+                    .text("Verified"),
+                    .blob(Data(repeating: 0x02, count: 32)),
+                    .blob(Data(repeating: 0x03, count: 32))
+                ]
+            )
+        }
+        try database.execute("ALTER TABLE portable_archive_catalogue DROP COLUMN lifecycle_state")
+        try database.execute("ALTER TABLE portable_archive_catalogue DROP COLUMN last_expiry_outcome")
+        try database.execute("UPDATE schema_migrations SET version = 26")
+        try database.execute("DELETE FROM migration_history WHERE version = 27")
+
+        return (try WorkspaceStore(database: database, actorID: "test", correlationID: "test"), database, databaseURL)
     }
 
     private func snapshotRows(_ snapshot: Data, named expectedName: String) throws -> [SnapshotRow] {

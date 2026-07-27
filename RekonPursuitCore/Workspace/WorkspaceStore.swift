@@ -825,11 +825,32 @@ final class WorkspaceStore {
     }
 
     func portableArchiveCatalogue() throws -> [PortableArchiveCatalogueRow] {
+        try portableArchiveCatalogueRows()
+    }
+
+    func portableArchiveCatalogueRows() throws -> [PortableArchiveCatalogueRow] {
         try synchronized {
-            try database.rows("SELECT archive_id, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint FROM portable_archive_catalogue ORDER BY created_at DESC, archive_id DESC").compactMap { row in
-                guard row.count == 8, case let .text(id) = row[0], let archiveID = UUID(uuidString: id), case let .text(filename) = row[1], case let .integer(version) = row[2], case let .real(createdAt) = row[3], case let .real(expiresAt) = row[4], case let .text(state) = row[5], case let .blob(checksum) = row[6], case let .blob(fingerprint) = row[7] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
-                return PortableArchiveCatalogueRow(archiveID: archiveID, displayFilename: filename, formatVersion: Int(version), createdAt: Date(timeIntervalSince1970: createdAt), expiresAt: Date(timeIntervalSince1970: expiresAt), verificationState: state, ciphertextChecksum: checksum, signingKeyFingerprint: fingerprint)
-            }
+            try portableArchiveCatalogueRowsLocked()
+        }
+    }
+
+    func updatePortableArchiveCatalogueLifecycle(
+        archiveID: UUID,
+        lifecycleState: PortableArchiveLifecycleState,
+        lastExpiryOutcome: PortableArchiveExpiryOutcome
+    ) throws {
+        try synchronized {
+            try database.execute(
+                "UPDATE portable_archive_catalogue SET lifecycle_state = ?, last_expiry_outcome = ? WHERE archive_id = ?",
+                values: [.text(lifecycleState.rawValue), .text(lastExpiryOutcome.rawValue), .text(archiveID.uuidString)]
+            )
+        }
+    }
+
+    private func portableArchiveCatalogueRowsLocked() throws -> [PortableArchiveCatalogueRow] {
+        try database.rows("SELECT archive_id, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint, lifecycle_state, last_expiry_outcome FROM portable_archive_catalogue ORDER BY created_at DESC, archive_id DESC").compactMap { row in
+            guard row.count == 10, case let .text(id) = row[0], let archiveID = UUID(uuidString: id), case let .text(filename) = row[1], case let .integer(version) = row[2], case let .real(createdAt) = row[3], case let .real(expiresAt) = row[4], case let .text(verificationState) = row[5], case let .blob(checksum) = row[6], case let .blob(fingerprint) = row[7], case let .text(lifecycleStateText) = row[8], case let .text(lastExpiryOutcomeText) = row[9], let lifecycleState = PortableArchiveLifecycleState(rawValue: lifecycleStateText), let lastExpiryOutcome = PortableArchiveExpiryOutcome(rawValue: lastExpiryOutcomeText) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+            return PortableArchiveCatalogueRow(archiveID: archiveID, displayFilename: filename, formatVersion: Int(version), createdAt: Date(timeIntervalSince1970: createdAt), expiresAt: Date(timeIntervalSince1970: expiresAt), verificationState: verificationState, ciphertextChecksum: checksum, signingKeyFingerprint: fingerprint, lifecycleState: lifecycleState, lastExpiryOutcome: lastExpiryOutcome)
         }
     }
 
