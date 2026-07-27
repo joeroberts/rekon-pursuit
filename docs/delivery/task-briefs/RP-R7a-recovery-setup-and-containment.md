@@ -18,9 +18,11 @@ as usable recovery/export commands.
   Show grouped Base32 plus checksum exactly once; do not write it to the
   clipboard, a file, activity, diagnostics, fixtures, database, or Keychain.
 - Require complete re-entry before enrollment. Store only a versioned,
-  one-way enrollment fingerprint and non-secret enrollment state. Cancel,
-  mismatch, malformed input, invalid checksum, or persistence failure leaves
-  enrollment disabled and preserves prior state.
+  one-way enrollment fingerprint in the encrypted workspace store and
+  non-secret enrollment state. Cancel, mismatch, malformed input, invalid
+  checksum, or persistence failure creates no partial or replacement record:
+  it leaves a previously unenrolled workspace disabled and a prior enrollment
+  unchanged.
 - Key material exists only in operation memory. Creating a later archive or
   encrypted export will require a fresh key entry; neither operation is part
   of this task.
@@ -53,7 +55,9 @@ includes archive ID, format version, **per-archive salt**, manifest hash,
 signing-public-key fingerprint, archive checksum, and fixed header fields. It
 excludes envelope and signature fields to avoid circular encoding. That
 commitment is authenticated associated data for recovery-key envelope unwrap;
-this task does not create it or any archive.
+the later signature preimage covers the finalized envelope and all canonical
+header fields except its own signature. This task does not create it or any
+archive.
 
 ## Focused acceptance evidence
 
@@ -61,8 +65,10 @@ this task does not create it or any archive.
   after relaunch without retaining the raw key.
 - Cancellation, mismatch, malformed/checksum-invalid re-entry, and injected
   persistence failure leave no enabled state or partial record.
-- Redaction inspection of store, activity, diagnostics, and fixtures finds no
-  raw key, Base32 display value, fingerprint, clipboard/file write, or path.
+- The encrypted workspace store may retain only the opaque versioned
+  enrollment fingerprint. Activity, diagnostics, fixtures, UI copy,
+  clipboard/files, manifests, and exports contain neither that fingerprint nor
+  any raw key/Base32 display value; no surface contains a path.
 - The old same-Mac backup, replace-in-place restore, and direct CSV-export
   controls are unreachable from the active UI; existing local material remains
   untouched.
