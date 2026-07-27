@@ -749,6 +749,7 @@ private struct ContactsView: View {
     @ObservedObject var model: WorkspaceViewModel; let open: (Opportunity) -> Void; let delete: (Contact) -> Void
     @State private var relationshipContextExpanded = false
     @State private var notesExpanded = false
+    @State private var showsOpportunityRelationships = false
 
     var body: some View {
         ScrollView {
@@ -864,42 +865,62 @@ private struct ContactsView: View {
                     }
                 }
                 if model.selectedContact != nil {
-                    GroupBox("Employer opportunities") {
-                        if model.contactEmployer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text("Choose or add an employer to show its active tracked opportunities.").foregroundStyle(.secondary)
-                        } else if model.selectedContactEmployerOpportunities.isEmpty {
-                            Text("No active tracked opportunities use this employer.").foregroundStyle(.secondary)
-                        } else {
-                            Text("Choose Link to create a relationship; viewing an employer never links records automatically.")
-                                .font(.caption).foregroundStyle(.secondary)
-                            ForEach(model.selectedContactEmployerOpportunities, id: \.id) { opportunity in
-                                HStack {
-                                    Button("\(opportunity.title) · \(opportunity.company)") { open(opportunity) }
-                                    Spacer()
-                                    if model.selectedContactOpportunities.contains(where: { $0.id == opportunity.id }) {
-                                        Button("Unlink") { model.unlinkSelectedContact(from: opportunity) }
-                                    } else {
-                                        Button("Link") { model.linkSelectedContact(to: opportunity) }
-                                    }
-                                }
-                            }
-                        }
+                    Button("Manage linked opportunities (\(model.selectedContactOpportunities.count))") {
+                        showsOpportunityRelationships = true
                     }
-                    if !model.selectedContactOpportunities.isEmpty {
-                        GroupBox("Linked opportunities") {
-                            ForEach(model.selectedContactOpportunities, id: \.id) { opportunity in
-                                HStack {
-                                    Button("\(opportunity.title) · \(opportunity.company)") { open(opportunity) }
-                                    Spacer()
-                                    Button("Unlink") { model.unlinkSelectedContact(from: opportunity) }
-                                }
-                            }
-                        }
-                    }
+                    .accessibilityIdentifier("manage-contact-opportunities")
                 }
             }
             .padding(28).frame(maxWidth: 920, alignment: .leading)
         }
+        .sheet(isPresented: $showsOpportunityRelationships) {
+            ContactOpportunityManagementSheet(model: model, open: open)
+        }
+    }
+}
+
+private struct ContactOpportunityManagementSheet: View {
+    @ObservedObject var model: WorkspaceViewModel
+    let open: (Opportunity) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Linked opportunities").font(.title2.bold())
+            if model.selectedContactOpportunities.isEmpty {
+                Text("This contact is not linked to an opportunity yet.").foregroundStyle(.secondary)
+            } else {
+                ForEach(model.selectedContactOpportunities, id: \.id) { opportunity in
+                    HStack {
+                        Button("\(opportunity.title) · \(opportunity.company)") { open(opportunity) }
+                        Spacer()
+                        Button("Unlink") { model.unlinkSelectedContact(from: opportunity) }
+                    }
+                }
+            }
+
+            if !model.contactEmployer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !model.selectedContactUnlinkedEmployerOpportunities.isEmpty {
+                Divider()
+                Text("Other opportunities at \(model.contactEmployer)").font(.headline)
+                Text("Link only the opportunities this person is connected to.")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(model.selectedContactUnlinkedEmployerOpportunities, id: \.id) { opportunity in
+                    HStack {
+                        Button("\(opportunity.title) · \(opportunity.company)") { open(opportunity) }
+                        Spacer()
+                        Button("Link") { model.linkSelectedContact(to: opportunity) }
+                    }
+                }
+            }
+
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 560)
     }
 }
 

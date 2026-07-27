@@ -1014,6 +1014,7 @@ final class WorkspaceViewModelTests: XCTestCase {
 
         model.linkSelectedContact(to: first)
         XCTAssertEqual(model.selectedContactOpportunities.map(\.id), [first.id])
+        XCTAssertEqual(model.selectedContactUnlinkedEmployerOpportunities.map(\.id), [second.id])
 
         model.unlinkSelectedContact(from: first)
         XCTAssertEqual(model.selectedContactOpportunities, [])

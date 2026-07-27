@@ -168,6 +168,10 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var selectedContactInteractions: [ContactInteraction] = []
     @Published private(set) var selectedContactOpportunities: [Opportunity] = []
     @Published private(set) var selectedContactEmployerOpportunities: [Opportunity] = []
+    var selectedContactUnlinkedEmployerOpportunities: [Opportunity] {
+        let linkedIDs = Set(selectedContactOpportunities.map(\.id))
+        return selectedContactEmployerOpportunities.filter { !linkedIDs.contains($0.id) }
+    }
     @Published private(set) var selectedContactLastTouch: Date?
     @Published private(set) var selectedContactNextTouch: Date?
     @Published var reconciliationOutcome: ReconciliationOutcome = .stillOpen
