@@ -29,6 +29,7 @@ This project uses independent subagents as its default delivery model. The prima
 ## Guardrails
 
 - Never reuse an Implementer as the reviewer or verifier of its own work.
+- For any owner-facing macOS app handoff, build with the configured Debug signing identity; never launch a `CODE_SIGNING_ALLOWED=NO` build when the workflow uses the Data Protection Keychain.
 - Do not run parallel agents against the same subsystem or shared files without an explicit integration plan.
 - No feature UI is complete without persistence, activity/audit evidence, non-happy-path behavior, and acceptance tests.
 - Keep a durable progress ledger with completed tasks, reviews, test evidence, open risks, decisions, and gate status.
