@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "RP-R7a-1",
-  "nextEligibleTaskId": null,
+  "activeTaskId": null,
+  "nextEligibleTaskId": "RP-R7a-2",
   "tasks": [
     {
       "id": "RP-R0",
@@ -176,12 +176,25 @@
       "id": "RP-R7a-1",
       "title": "Recovery setup and legacy-flow containment",
       "workType": "Security & workflow",
-      "status": "in_progress",
-      "releaseCondition": "Independent R7a gate approved. Archive, restore, and export remain unreleased.",
-      "latestTransition": "Released for recovery-key enrollment and containment of legacy backup, restore, and direct-export routes only.",
+      "status": "accepted",
+      "releaseCondition": "Accepted after independent review and product-owner verification of setup, copy, and relaunch persistence.",
+      "latestTransition": "Product owner verified the explicit clipboard copy refinement and recovery-key setup flow.",
       "evidence": {
         "label": "R7a-1 task brief",
         "href": "../task-briefs/RP-R7a-recovery-setup-and-containment.md"
+      },
+      "needsUserAction": false
+    },
+    {
+      "id": "RP-R7a-2",
+      "title": "Portable archive snapshot and authenticated package",
+      "workType": "Data lifecycle",
+      "status": "next_up",
+      "releaseCondition": "Requires its own archive-format task brief and independent high-risk gate; no restore or export release.",
+      "latestTransition": "R7a-1 accepted; archive package planning is next.",
+      "evidence": {
+        "label": "R7a recovery design",
+        "href": "../../superpowers/specs/2026-07-27-r7a-portable-recovery-design.md"
       },
       "needsUserAction": false
     },
