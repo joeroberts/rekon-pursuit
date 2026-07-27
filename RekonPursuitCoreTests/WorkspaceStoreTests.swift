@@ -216,6 +216,27 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
 
+    func testVersionTwentyMigrationRetainsLegacyCompensationAndActionText() throws {
+        let database = try makeVersionTwentyDatabase(at: databaseURL)
+        let legacyAction = "  Ask Morgan for a referral  "
+        try database.execute(
+            "INSERT INTO opportunities (id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes, compensation, location, work_arrangement, application_date, response_state, stage_changed_at, deleted_at) VALUES ('legacy-opportunity', 'Legacy role', 'Rekon Labs', ?, 'Saved', ?, NULL, '', '', '', '150k base', NULL, 'Not specified', NULL, 'No response recorded', ?, NULL)",
+            values: [.real(now.timeIntervalSince1970), .text(legacyAction), .real(now.timeIntervalSince1970)]
+        )
+
+        try WorkspaceMigrations.apply(to: database)
+
+        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(21)]])
+        let migrated = try XCTUnwrap(try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test").opportunities().first)
+        XCTAssertEqual(migrated.compensation, "150k base")
+        XCTAssertNil(migrated.compensationMinimum)
+        XCTAssertNil(migrated.compensationMaximum)
+        XCTAssertNil(migrated.compensationPayPeriod)
+        XCTAssertEqual(migrated.nextAction, legacyAction)
+        XCTAssertEqual(migrated.actionType, .other)
+        XCTAssertEqual(migrated.actionCustomText, legacyAction)
+    }
+
     func testFailedVersionTwentyMigrationKeepsVersionNineteenRowsAndVerifiedSnapshot() throws {
         let database = try makeVersionNineteenDatabase(at: databaseURL)
 
@@ -451,6 +472,31 @@ final class WorkspaceStoreTests: XCTestCase {
 
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
+    }
+
+    func testUpdateRejectsPersistedMalformedOrHostlessJobURLsWithoutWriting() throws {
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
+        let store = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test")
+
+        for (index, url) in ["https://", "https:///role"].enumerated() {
+            let opportunity = try store.create(CreateOpportunity(title: "Product Manager \(index)", company: "Rekon Labs"))
+            try database.execute("UPDATE opportunities SET job_url = ? WHERE id = ?", values: [.text(url), .text(opportunity.id)])
+            let baselineActivity = try store.activityEvents()
+
+            XCTAssertThrowsError(try store.updateOpportunity(
+                id: opportunity.id, title: "Renamed \(index)", company: opportunity.company,
+                stage: opportunity.stage, nextAction: opportunity.nextAction, dueAt: opportunity.dueAt,
+                jobURL: url, jobDescription: opportunity.jobDescription, notes: opportunity.notes,
+                compensation: opportunity.compensation, location: opportunity.location,
+                workArrangement: opportunity.workArrangement, applicationDate: opportunity.applicationDate,
+                responseState: opportunity.responseState, stageChangedAt: opportunity.stageChangedAt
+            ))
+
+            let saved = try XCTUnwrap(store.opportunities().first(where: { $0.id == opportunity.id }))
+            XCTAssertEqual(saved.title, opportunity.title)
+            XCTAssertEqual(saved.jobURL, url)
+            XCTAssertEqual(try store.activityEvents(), baselineActivity)
+        }
     }
 
     func testCreateDefaultsApplicationDateToItsCreationDate() throws {
@@ -703,6 +749,19 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.contacts(forOpportunityID: first.id), [contact])
         XCTAssertEqual(try store.sameEmployerContacts(forOpportunityID: second.id), [contact])
         XCTAssertEqual(try store.activityEvents().last?.contactID, contact.id)
+    }
+
+    func testOpportunitiesForContactDecodeStructuredOpportunityFields() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(
+            title: "Product Manager", company: "Rekon Labs",
+            compensationMinimum: 125_000, compensationMaximum: 150_000, compensationPayPeriod: .year,
+            actionType: .other, actionCustomText: "Ask Morgan for a referral"
+        ))
+        let contact = try store.createContact(CreateContact(name: "Alex Morgan", employer: "Rekon Labs"))
+        try store.linkContact(contactID: contact.id, toOpportunityID: opportunity.id)
+
+        XCTAssertEqual(try store.opportunities(forContactID: contact.id), [opportunity])
     }
 
     func testContactUpdateUnlinkAndDeletionAreSafeAndRedacted() throws {
@@ -1405,6 +1464,18 @@ final class WorkspaceStoreTests: XCTestCase {
         try database.execute("INSERT INTO reconciliation_results (id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status) VALUES ('result-v19', 'legacy-opportunity', 'https://jobs.example.com/role', ?, 'Needs manual review', 'Ambiguous', 'manual review', 'Medium', 'Existing R4 evidence', '', NULL, NULL, NULL, NULL)", values: [.real(now.timeIntervalSince1970)])
         try database.execute("INSERT INTO migration_history (version, checksum) VALUES (19, ?)", values: [.text(WorkspaceMigrations.versionNineteenChecksum)])
         try database.execute("UPDATE schema_migrations SET version = 19")
+        return database
+    }
+
+    private func makeVersionTwentyDatabase(at url: URL) throws -> EncryptedDatabase {
+        let database = try EncryptedDatabase.open(url: url, key: key)
+        _ = try WorkspaceStore(database: database, now: now, actorID: "fixture", correlationID: "fixture")
+        try database.execute("ALTER TABLE opportunities RENAME TO opportunities_v21")
+        try database.execute("CREATE TABLE opportunities (id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, company TEXT NOT NULL, created_at REAL NOT NULL, stage TEXT NOT NULL DEFAULT 'Saved', next_action TEXT NOT NULL DEFAULT '', due_at REAL, job_url TEXT NOT NULL DEFAULT '', job_description TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', compensation TEXT, location TEXT, work_arrangement TEXT NOT NULL DEFAULT 'Not specified', application_date REAL, response_state TEXT NOT NULL DEFAULT 'No response recorded', stage_changed_at REAL, deleted_at REAL)")
+        try database.execute("INSERT INTO opportunities (id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes, compensation, location, work_arrangement, application_date, response_state, stage_changed_at, deleted_at) SELECT id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes, compensation, location, work_arrangement, application_date, response_state, stage_changed_at, deleted_at FROM opportunities_v21")
+        try database.execute("DROP TABLE opportunities_v21")
+        try database.execute("DELETE FROM migration_history WHERE version = 21")
+        try database.execute("UPDATE schema_migrations SET version = 20")
         return database
     }
 }

@@ -336,7 +336,7 @@ final class WorkspaceStore {
     ) throws {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let company = company.trimmingCharacters(in: .whitespacesAndNewlines)
-        let nextAction = nextAction.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nextAction = typedActionEdited ? nextAction.trimmingCharacters(in: .whitespacesAndNewlines) : nextAction
         guard !title.isEmpty, !company.isEmpty else { throw WorkspaceStoreError.invalidOpportunity }
         guard !structuredCompensationEdited || isValidCompensation(minimum: compensationMinimum, maximum: compensationMaximum) else { throw WorkspaceStoreError.invalidCompensation }
         let commandNow = clock()
@@ -345,7 +345,7 @@ final class WorkspaceStore {
             guard try isActiveOpportunity(id) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
             guard let current = try database.rows(opportunitySelect + " FROM opportunities WHERE id = ? AND deleted_at IS NULL", values: [.text(id)]).first.map(opportunity(from:)) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
             let jobURL = jobURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard isValidJobURL(jobURL) || jobURL == current.jobURL else { throw WorkspaceStoreError.invalidOpportunityURL }
+            guard isValidJobURL(jobURL) else { throw WorkspaceStoreError.invalidOpportunityURL }
             let action = typedActionEdited ? resolvedAction(type: actionType, customText: actionCustomText, legacyText: "") : resolvedAction(type: nil, customText: nil, legacyText: nextAction)
             let effectiveNextAction = action.title
             let currentStage = try activeOpportunityStage(id: id)
@@ -477,7 +477,7 @@ final class WorkspaceStore {
     func opportunities(forContactID contactID: String) throws -> [Opportunity] {
         try synchronized {
             guard try isActiveContact(contactID) else { return [] }
-            return try database.rows("SELECT opportunities.id, opportunities.title, opportunities.company, opportunities.created_at, opportunities.stage, opportunities.next_action, opportunities.due_at, opportunities.job_url, opportunities.job_description, opportunities.notes, opportunities.compensation, opportunities.location, opportunities.work_arrangement, opportunities.application_date, opportunities.response_state, opportunities.stage_changed_at FROM opportunities JOIN contact_opportunities ON opportunities.id = contact_opportunities.opportunity_id WHERE contact_opportunities.contact_id = ? AND opportunities.deleted_at IS NULL ORDER BY opportunities.company, opportunities.title, opportunities.id", values: [.text(contactID)]).map(opportunity(from:))
+            return try database.rows(opportunitySelect + " FROM opportunities JOIN contact_opportunities ON opportunities.id = contact_opportunities.opportunity_id WHERE contact_opportunities.contact_id = ? AND opportunities.deleted_at IS NULL ORDER BY opportunities.company, opportunities.title, opportunities.id", values: [.text(contactID)]).map(opportunity(from:))
         }
     }
 

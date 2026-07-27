@@ -667,18 +667,64 @@ final class WorkspaceViewModelTests: XCTestCase {
         model.start()
         model.title = "Product Manager"
         model.company = "Rekon Labs"
-        model.nextAction = "Send follow-up"
+        model.actionType = .other
+        model.actionCustomText = "Send follow-up"
         model.hasDueDate = true
         model.createOpportunity()
 
         model.open(model.needsAttention[0])
         model.selectedTitle = "Senior Product Manager"
-        model.selectedNextAction = "Prepare recruiter call"
+        model.selectedActionType = .other
+        model.selectedActionCustomText = "Prepare recruiter call"
         model.saveSelectedOpportunity()
 
         XCTAssertEqual(model.opportunities.first?.title, "Senior Product Manager")
         XCTAssertEqual(model.needsAttention.first?.title, "Prepare recruiter call")
         XCTAssertEqual(model.activityEvents.last?.kind, "opportunity_updated")
+    }
+
+    func testSavingOverviewWithoutEditingStructuredCompensationPreservesLegacyText() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(
+            title: "Product Manager", company: "Rekon Labs", compensation: "150k base"
+        ))
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
+
+        model.start()
+        model.select(opportunity)
+        model.selectedNotes = "Met the recruiter."
+        model.saveSelectedOpportunity()
+
+        let saved = try XCTUnwrap(store.opportunities().first)
+        XCTAssertEqual(saved.notes, "Met the recruiter.")
+        XCTAssertEqual(saved.compensation, "150k base")
+        XCTAssertNil(saved.compensationMinimum)
+        XCTAssertNil(saved.compensationMaximum)
+        XCTAssertNil(saved.compensationPayPeriod)
+    }
+
+    func testSavingOverviewWithoutEditingActionControlsPreservesLegacyActionText() throws {
+        let databaseURL = FileManager.default.temporaryDirectory.appendingPathComponent("rekon-view-model-\(UUID().uuidString).sqlite")
+        let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 5, count: 32))
+        let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        let legacyAction = "  Ask Morgan for a referral  "
+        try database.execute(
+            "UPDATE opportunities SET next_action = ?, action_type = ?, action_custom_text = ? WHERE id = ?",
+            values: [.text(legacyAction), .text(OpportunityActionType.other.rawValue), .text(legacyAction), .text(opportunity.id)]
+        )
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
+
+        model.start()
+        model.select(opportunity)
+        model.selectedNotes = "Met the recruiter."
+        model.saveSelectedOpportunity()
+
+        let saved = try XCTUnwrap(store.opportunities().first)
+        XCTAssertEqual(saved.notes, "Met the recruiter.")
+        XCTAssertEqual(saved.nextAction, legacyAction)
+        XCTAssertEqual(saved.actionType, .other)
+        XCTAssertEqual(saved.actionCustomText, legacyAction)
     }
 
     func testOpenQueueActionSelectsOpportunityAndRecordsActivity() throws {
@@ -687,7 +733,8 @@ final class WorkspaceViewModelTests: XCTestCase {
         model.start()
         model.title = "Product Manager"
         model.company = "Rekon Labs"
-        model.nextAction = "Send follow-up"
+        model.actionType = .other
+        model.actionCustomText = "Send follow-up"
         model.createOpportunity()
 
         model.open(try XCTUnwrap(model.needsAttention.first))
@@ -777,7 +824,8 @@ final class WorkspaceViewModelTests: XCTestCase {
         model.start()
         model.title = "Product Manager"
         model.company = "Rekon Labs"
-        model.nextAction = "Send follow-up"
+        model.actionType = .other
+        model.actionCustomText = "Send follow-up"
         model.hasDueDate = true
         model.dueAt = Date(timeIntervalSince1970: 1_704_067_200)
         model.createOpportunity()
@@ -797,7 +845,8 @@ final class WorkspaceViewModelTests: XCTestCase {
         model.start()
         model.title = "Product Manager"
         model.company = "Rekon Labs"
-        model.nextAction = "Send follow-up"
+        model.actionType = .other
+        model.actionCustomText = "Send follow-up"
         model.createOpportunity()
         let task = try XCTUnwrap(model.needsAttention.first)
 

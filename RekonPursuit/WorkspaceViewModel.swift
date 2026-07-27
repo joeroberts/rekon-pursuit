@@ -114,9 +114,16 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var selectedJobDescription = ""
     @Published var selectedNotes = ""
     @Published var selectedCompensation = ""
-    @Published var selectedCompensationMinimum = ""
-    @Published var selectedCompensationMaximum = ""
-    @Published var selectedCompensationPayPeriod: CompensationPayPeriod = .year
+    @Published var selectedCompensationMinimum = "" {
+        didSet { markSelectedStructuredCompensationEdited() }
+    }
+    @Published var selectedCompensationMaximum = "" {
+        didSet { markSelectedStructuredCompensationEdited() }
+    }
+    @Published var selectedCompensationPayPeriod: CompensationPayPeriod = .year {
+        didSet { markSelectedStructuredCompensationEdited() }
+    }
+    @Published private(set) var selectedStructuredCompensationEdited = false
     @Published var selectedLocation = ""
     @Published var selectedWorkArrangement: WorkArrangement = .notSpecified
     @Published var selectedApplicationDate = Date.now
@@ -126,8 +133,13 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var selectedStageChangedAt = Date.now
     @Published var selectedStage: PipelineStage = .saved
     @Published var selectedNextAction = ""
-    @Published var selectedActionType: OpportunityActionType = .noAction
-    @Published var selectedActionCustomText = ""
+    @Published var selectedActionType: OpportunityActionType = .noAction {
+        didSet { markSelectedTypedActionEdited() }
+    }
+    @Published var selectedActionCustomText = "" {
+        didSet { markSelectedTypedActionEdited() }
+    }
+    @Published private(set) var selectedTypedActionEdited = false
     @Published var selectedDueAt = Date.now
     @Published var selectedHasDueDate = false
     @Published var contactName = ""
@@ -189,6 +201,7 @@ final class WorkspaceViewModel: ObservableObject {
     private var externalWorkspaceLease: WorkspaceAccessLease?
     private var stagedRestoreURL: URL?
     private var publicURLCheckTasks: [String: Task<Void, Never>] = [:]
+    private var isLoadingSelectedOpportunity = false
 
     init(
         openWorkspace: @escaping () throws -> WorkspaceOpenState,
@@ -582,7 +595,9 @@ final class WorkspaceViewModel: ObservableObject {
     func saveSelectedOpportunity() {
         guard let store = readyStore(), !selectedOpportunityID.isEmpty else { return }
         do {
-            let actionTitle = actionDraftTitle(type: selectedActionType, customText: selectedActionCustomText)
+            let actionTitle = selectedTypedActionEdited
+                ? actionDraftTitle(type: selectedActionType, customText: selectedActionCustomText)
+                : selectedNextAction
             try store.updateOpportunity(
                 id: selectedOpportunityID,
                 title: selectedTitle,
@@ -597,7 +612,7 @@ final class WorkspaceViewModel: ObservableObject {
                 compensationMinimum: compensationDraftValue(selectedCompensationMinimum),
                 compensationMaximum: compensationDraftValue(selectedCompensationMaximum),
                 compensationPayPeriod: selectedCompensationMinimum.isEmpty && selectedCompensationMaximum.isEmpty ? nil : selectedCompensationPayPeriod,
-                structuredCompensationEdited: true,
+                structuredCompensationEdited: selectedStructuredCompensationEdited,
                 location: selectedLocation,
                 workArrangement: selectedWorkArrangement,
                 applicationDate: selectedHasApplicationDate ? selectedApplicationDate : nil,
@@ -606,7 +621,7 @@ final class WorkspaceViewModel: ObservableObject {
                 stageChangedAt: selectedStageChangedAt,
                 actionType: selectedActionType,
                 actionCustomText: selectedActionCustomText,
-                typedActionEdited: true
+                typedActionEdited: selectedTypedActionEdited
             )
             refreshCounts()
             statusMessage = "Opportunity updated locally."
@@ -1281,6 +1296,12 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     private func loadSelectedOpportunity() {
+        isLoadingSelectedOpportunity = true
+        defer {
+            isLoadingSelectedOpportunity = false
+            selectedStructuredCompensationEdited = false
+            selectedTypedActionEdited = false
+        }
         guard let opportunity = opportunities.first(where: { $0.id == selectedOpportunityID }) else {
             selectedTitle = ""
             selectedCompany = ""
@@ -1348,6 +1369,16 @@ final class WorkspaceViewModel: ObservableObject {
 
     private func compensationDraftText(_ value: Double) -> String {
         value.rounded() == value ? String(Int(value)) : String(value)
+    }
+
+    private func markSelectedStructuredCompensationEdited() {
+        guard !isLoadingSelectedOpportunity else { return }
+        selectedStructuredCompensationEdited = true
+    }
+
+    private func markSelectedTypedActionEdited() {
+        guard !isLoadingSelectedOpportunity else { return }
+        selectedTypedActionEdited = true
     }
 
     private func actionDraftTitle(type: OpportunityActionType, customText: String) -> String {
