@@ -146,8 +146,11 @@ final class WorkspaceViewModelTests: XCTestCase {
                 return true
             },
             endAccess: { url in tracker.stoppedURLs.append(url) },
-            verify: { _, _ in throw PortableArchiveRestoreError.restoreFailed },
-            restore: { _ in throw PortableArchiveRestoreError.restoreFailed }
+            verify: { _, _ in throw RestoreSentinelError.untrustedInput },
+            restore: { _ in
+                XCTFail("Restore must not begin when archive verification fails.")
+                throw PortableArchiveRestoreError.restoreFailed
+            }
         )
         let model = WorkspaceViewModel(
             openWorkspace: { .ready(store) },
@@ -163,10 +166,96 @@ final class WorkspaceViewModelTests: XCTestCase {
 
         XCTAssertEqual(model.portableArchiveRestoreState, .failed(.verificationFailed))
         XCTAssertEqual(model.statusMessage, "The archive could not be verified. The current workspace was not changed.")
+        XCTAssertFalse(model.statusMessage.localizedCaseInsensitiveContains("sentinel"))
+        XCTAssertFalse(model.statusMessage.localizedCaseInsensitiveContains("untrusted"))
         XCTAssertEqual(tracker.stoppedURLs, [archiveURL])
 
         model.dismissPortableArchiveRestoreFailure()
         XCTAssertEqual(model.portableArchiveRestoreState, .idle)
+    }
+
+    func testPostConfirmationFailureUsesSafeStageThenDismissAndRetryReleasesEachScopeOnce() async throws {
+        let store = try makeStore()
+        let existing = try store.create(CreateOpportunity(title: "Current role", company: "Example"))
+        let archiveURL = URL(fileURLWithPath: "/private/tmp/post-confirmation.rekonarchive")
+        let recoveryKey = try RecoveryKey.generate()
+        let verified = makeVerifiedPortableArchive()
+        let tracker = PortableArchiveRestoreTestTracker()
+        let restoreAttempts = PortableArchiveRestoreAttemptCounter()
+        let dependencies = PortableArchiveRestoreDependencies(
+            chooseArchive: { archiveURL },
+            beginAccess: { url in tracker.startedURLs.append(url); return true },
+            endAccess: { url in tracker.stoppedURLs.append(url) },
+            verify: { _, _ in verified },
+            restore: { _ in
+                if await restoreAttempts.next() == 1 {
+                    throw PortableArchiveRestoreError.postConfirmationFailure(.preparing)
+                }
+                return RestoredWorkspaceCandidate(candidateID: UUID(), archiveID: verified.archiveID)
+            }
+        )
+        let model = WorkspaceViewModel(
+            openWorkspace: { .ready(store) },
+            createWorkspace: { store },
+            portableArchiveRestore: dependencies,
+            separateLocalWorkspace: .disabledForTesting
+        )
+        model.start()
+
+        model.choosePortableArchiveForRestore()
+        model.verifyPortableArchiveForRestore(recoveryKey.displayValue)
+        while model.portableArchiveRestoreState != .awaitingConfirmation(verified) { await Task.yield() }
+        model.confirmPortableArchiveRestore()
+        while model.isRestoringPortableArchive { await Task.yield() }
+
+        XCTAssertEqual(model.portableArchiveRestoreState, .failed(.postConfirmation(.preparing)))
+        XCTAssertEqual(model.statusMessage, "The restored workspace could not be prepared. The current workspace was not changed.")
+        XCTAssertEqual(try store.opportunities().map(\.id), [existing.id])
+        XCTAssertEqual(tracker.startedURLs, [archiveURL])
+        XCTAssertEqual(tracker.stoppedURLs, [archiveURL])
+
+        model.dismissPortableArchiveRestoreFailure()
+        model.choosePortableArchiveForRestore()
+        model.verifyPortableArchiveForRestore(recoveryKey.displayValue)
+        while model.portableArchiveRestoreState != .awaitingConfirmation(verified) { await Task.yield() }
+        model.confirmPortableArchiveRestore()
+        while model.isRestoringPortableArchive { await Task.yield() }
+
+        XCTAssertEqual(model.portableArchiveRestoreState, .ready(verified.archiveID))
+        XCTAssertEqual(tracker.startedURLs, [archiveURL, archiveURL])
+        XCTAssertEqual(tracker.stoppedURLs, [archiveURL, archiveURL])
+    }
+
+    func testCleanupPendingRestoreFailureStaysSafeAndNeverBecomesReady() async throws {
+        let store = try makeStore()
+        let archiveURL = URL(fileURLWithPath: "/private/tmp/cleanup-pending.rekonarchive")
+        let recoveryKey = try RecoveryKey.generate()
+        let verified = makeVerifiedPortableArchive()
+        let tracker = PortableArchiveRestoreTestTracker()
+        let dependencies = PortableArchiveRestoreDependencies(
+            chooseArchive: { archiveURL },
+            beginAccess: { url in tracker.startedURLs.append(url); return true },
+            endAccess: { url in tracker.stoppedURLs.append(url) },
+            verify: { _, _ in verified },
+            restore: { _ in throw PortableArchiveRestoreError.candidateCleanupPending }
+        )
+        let model = WorkspaceViewModel(
+            openWorkspace: { .ready(store) },
+            createWorkspace: { store },
+            portableArchiveRestore: dependencies,
+            separateLocalWorkspace: .disabledForTesting
+        )
+        model.start()
+
+        model.choosePortableArchiveForRestore()
+        model.verifyPortableArchiveForRestore(recoveryKey.displayValue)
+        while model.portableArchiveRestoreState != .awaitingConfirmation(verified) { await Task.yield() }
+        model.confirmPortableArchiveRestore()
+        while model.isRestoringPortableArchive { await Task.yield() }
+
+        XCTAssertEqual(model.portableArchiveRestoreState, .failed(.cleanupPending))
+        XCTAssertEqual(model.statusMessage, "Restore cleanup is pending. The current workspace was not changed.")
+        XCTAssertEqual(tracker.stoppedURLs, [archiveURL])
     }
 
     func testCancellingAwaitedPortableArchiveVerificationReleasesScopeExactlyOnceAfterWorkerFinishes() async throws {
@@ -1894,6 +1983,14 @@ private final class PortableArchiveRestoreTestTracker {
     var stoppedURLs: [URL] = []
 }
 
+private enum RestoreSentinelError: LocalizedError {
+    case untrustedInput
+
+    var errorDescription: String? {
+        "sentinel verifier failure for /private/tmp/untrusted.rekonarchive"
+    }
+}
+
 private actor PortableArchiveRestoreTestGate {
     private var continuations: [CheckedContinuation<Void, Never>] = []
     private var blockedCount = 0
@@ -1910,6 +2007,15 @@ private actor PortableArchiveRestoreTestGate {
     func releaseOne() {
         guard !continuations.isEmpty else { return }
         continuations.removeFirst().resume()
+    }
+}
+
+private actor PortableArchiveRestoreAttemptCounter {
+    private var count = 0
+
+    func next() -> Int {
+        count += 1
+        return count
     }
 }
 

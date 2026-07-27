@@ -220,6 +220,40 @@ final class PortableArchiveTests: XCTestCase {
         }
     }
 
+    func testPostConfirmationReservationFailureUsesTypedSafePreparingStage() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-typed-reservation-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let recoveryKey = try RecoveryKey.generate()
+        let archiveURL = root.appendingPathComponent("archive.rekonarchive")
+        let verified = try PortableArchiveService.writeAndVerify(
+            snapshot: emptyCanonicalSnapshot(), recoveryKey: recoveryKey, signingKey: .init(), archiveID: UUID(),
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200), to: archiveURL
+        )
+        let worker = PortableArchiveRestoreWorker(restoreService: PortableArchiveRestoreService(
+            candidatesRoot: root.appendingPathComponent("candidates"),
+            candidateKeyStore: FailingRestoreRegistryKeyStore(),
+            workspaceKeyStoreForCandidate: InMemoryRestoreWorkspaceKeys().store,
+            signingIdentityStore: InMemoryRestoreCandidateSigningIdentityStore()
+        ))
+
+        do {
+            _ = try await worker.restore(.init(
+                archiveURL: archiveURL,
+                recoveryKey: recoveryKey,
+                confirmation: .init(archiveID: verified.archiveID, createdAt: verified.createdAt, signingKeyFingerprint: verified.signingKeyFingerprint)
+            ))
+            XCTFail("A post-confirmation reservation failure must not escape as an untyped error.")
+        } catch let error as PortableArchiveRestoreError {
+            guard case .postConfirmationFailure(.preparing) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertFalse((error.errorDescription ?? "").contains("injected"))
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("candidates").path))
+    }
+
     func testCleanupDoesNotMarkCandidateUnavailableUntilSigningIdentityReadbackIsAbsent() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("restore-signing-readback-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

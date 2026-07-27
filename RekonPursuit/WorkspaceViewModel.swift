@@ -32,6 +32,7 @@ nonisolated enum PortableArchiveRestoreFailure: Equatable {
     case invalidRecoveryKey
     case verificationFailed
     case cleanupPending
+    case postConfirmation(PortableArchiveRestoreFailureStage)
     case restoreFailed
 
     var message: String {
@@ -42,6 +43,19 @@ nonisolated enum PortableArchiveRestoreFailure: Equatable {
             return "The archive could not be verified. The current workspace was not changed."
         case .cleanupPending:
             return "Restore cleanup is pending. The current workspace was not changed."
+        case let .postConfirmation(stage):
+            switch stage {
+            case .preparing:
+                return "The restored workspace could not be prepared. The current workspace was not changed."
+            case .securing:
+                return "The restored workspace could not be secured. The current workspace was not changed."
+            case .finalizing:
+                return "The restored workspace could not be finalized. The current workspace was not changed."
+            case .checking:
+                return "The restored workspace could not be checked. The current workspace was not changed."
+            case .recording:
+                return "The restored workspace could not be recorded. The current workspace was not changed."
+            }
         case .restoreFailed:
             return "The archive could not be restored. The current workspace was not changed."
         }
@@ -1270,8 +1284,15 @@ final class WorkspaceViewModel: ObservableObject {
             } catch {
                 guard let self else { return }
                 let failure: PortableArchiveRestoreFailure
-                if case .candidateCleanupPending = error as? PortableArchiveRestoreError {
-                    failure = .cleanupPending
+                if let restoreError = error as? PortableArchiveRestoreError {
+                    switch restoreError {
+                    case .candidateCleanupPending:
+                        failure = .cleanupPending
+                    case let .postConfirmationFailure(stage):
+                        failure = .postConfirmation(stage)
+                    case .confirmationRequired, .catalogueMismatch, .restoreFailed:
+                        failure = .restoreFailed
+                    }
                 } else {
                     failure = .restoreFailed
                 }

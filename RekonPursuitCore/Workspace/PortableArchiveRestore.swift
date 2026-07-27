@@ -9,6 +9,17 @@ nonisolated struct PortableArchiveRestoreConfirmation: Equatable, Sendable {
     let signingKeyFingerprint: Data
 }
 
+/// Closed, post-confirmation lifecycle classifications. These are deliberately
+/// not persisted and never expose a filesystem location, key, archive, or
+/// candidate identity.
+nonisolated enum PortableArchiveRestoreFailureStage: Equatable, Sendable {
+    case preparing
+    case securing
+    case finalizing
+    case checking
+    case recording
+}
+
 nonisolated struct RestoredWorkspaceCandidate: Equatable, Sendable {
     let candidateID: UUID
     let archiveID: UUID
@@ -37,6 +48,7 @@ nonisolated enum PortableArchiveRestoreError: Error, LocalizedError, Sendable {
     case confirmationRequired
     case catalogueMismatch
     case candidateCleanupPending
+    case postConfirmationFailure(PortableArchiveRestoreFailureStage)
     case restoreFailed
 
     var errorDescription: String? {
@@ -47,6 +59,19 @@ nonisolated enum PortableArchiveRestoreError: Error, LocalizedError, Sendable {
             return "This archive does not match the local recovery catalogue. No workspace was created."
         case .candidateCleanupPending:
             return "A prior restore candidate needs cleanup before another restore can start."
+        case let .postConfirmationFailure(stage):
+            switch stage {
+            case .preparing:
+                return "The restored workspace could not be prepared. The current workspace was not changed."
+            case .securing:
+                return "The restored workspace could not be secured. The current workspace was not changed."
+            case .finalizing:
+                return "The restored workspace could not be finalized. The current workspace was not changed."
+            case .checking:
+                return "The restored workspace could not be checked. The current workspace was not changed."
+            case .recording:
+                return "The restored workspace could not be recorded. The current workspace was not changed."
+            }
         case .restoreFailed:
             return "The archive could not be restored. The current workspace and selected archive were not changed."
         }
@@ -307,6 +332,7 @@ nonisolated final class PortableArchiveRestoreService: @unchecked Sendable {
         let stagingRoot = candidateRoot.appendingPathComponent(".staging", isDirectory: true)
         let keyStore = workspaceKeyStoreForCandidate(candidateID)
         var reserved = false
+        var lifecycleStage: PortableArchiveRestoreFailureStage = .preparing
 
         do {
             try registry.reserve(candidateID: candidateID, archiveID: contents.archive.archiveID)
@@ -318,11 +344,14 @@ nonisolated final class PortableArchiveRestoreService: @unchecked Sendable {
                 snapshot: contents.snapshot,
                 failIfInjected: failIfInjected
             )
+            lifecycleStage = .securing
             try signingIdentityStore.createAndVerify(for: candidateID)
             try registry.markKeyAndRootCreated(candidateID: candidateID)
+            lifecycleStage = .finalizing
             try FileManager.default.createDirectory(at: candidateRoot, withIntermediateDirectories: true)
             try FileManager.default.moveItem(at: stagingRoot.appendingPathComponent("workspace.sqlite"), to: candidateRoot.appendingPathComponent("workspace.sqlite"))
             try failIfInjected(.afterPromotion)
+            lifecycleStage = .checking
             let databaseKey = try requireCandidateDatabaseKey(keyStore)
             let reopened = try EncryptedDatabase.open(url: candidateRoot.appendingPathComponent("workspace.sqlite"), key: databaseKey, createIfMissing: false)
             try WorkspaceMigrations.apply(to: reopened)
@@ -330,6 +359,7 @@ nonisolated final class PortableArchiveRestoreService: @unchecked Sendable {
             try failIfInjected(.afterReopen)
             try reopened.checkpointAndClose()
             try? FileManager.default.removeItem(at: stagingRoot)
+            lifecycleStage = .recording
             try failIfInjected(.beforeReady)
             try registry.markReady(candidateID: candidateID)
             return RestoredWorkspaceCandidate(candidateID: candidateID, archiveID: contents.archive.archiveID)
@@ -337,7 +367,7 @@ nonisolated final class PortableArchiveRestoreService: @unchecked Sendable {
             if reserved {
                 try cleanupCandidate(candidateID: candidateID, root: candidateRoot, keyStore: keyStore, originalFailure: error)
             }
-            throw error is PortableArchiveRestoreError ? error : PortableArchiveRestoreError.restoreFailed
+            throw postConfirmationFailure(for: error, stage: lifecycleStage)
         }
     }
 
@@ -380,6 +410,25 @@ nonisolated final class PortableArchiveRestoreService: @unchecked Sendable {
     private func failIfInjected(_ point: PortableArchiveRestoreFaultPoint) throws {
         guard injectedFault == point else { return }
         throw RestoreCandidateLifecycleFault(point: point)
+    }
+
+    private func postConfirmationFailure(
+        for error: Error,
+        stage: PortableArchiveRestoreFailureStage
+    ) -> PortableArchiveRestoreError {
+        if let restoreError = error as? PortableArchiveRestoreError {
+            switch restoreError {
+            case .candidateCleanupPending:
+                return .candidateCleanupPending
+            case .confirmationRequired, .catalogueMismatch:
+                return restoreError
+            case .postConfirmationFailure:
+                return restoreError
+            case .restoreFailed:
+                return .postConfirmationFailure(stage)
+            }
+        }
+        return .postConfirmationFailure(stage)
     }
 
     private func failureCategory(for error: Error) -> RestoreCandidateRecord.FailureCategory {
