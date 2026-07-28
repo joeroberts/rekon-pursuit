@@ -21,10 +21,9 @@ The delivery principle is **vertical slices over isolated screens**: each slice 
 
 ### Shipped MVP boundaries
 
-- All MVP data remains local by default. CSV export is intentionally unencrypted and warns before export.
-- Backup/restore works only on the same Mac through its Keychain; portable/cross-Mac recovery and purge are deferred.
-- Reconciliation is manual and local: the app records a user-reviewed URL, outcome, and evidence. It never changes the opportunity stage automatically.
-- PDF/DOCX references retain filename, size, hash, and final-sent metadata only; the app does not copy, parse, edit, send, or upload files.
+- All MVP data remains local by default. The accepted R1 lifecycle work adds authenticated portable archive and restore-as-new-workspace recovery, encrypted-default logical export, automatic archive expiry, and verified-replacement retained-data purge; it does not add cloud storage.
+- Reconciliation retains explicit user control: an accepted user-initiated, bounded public-URL check records the outcome and evidence, while a user still confirms any opportunity-stage closure. There is no automatic stage change.
+- PDF/DOCX references support durable attach, open, verification, and moved-file relink while preserving the source file. The app does not copy, parse, edit, send, or upload files.
 - AI execution, Gmail, Calendar, research, document generation/editing, interview tooling, and offer tooling are not part of this release.
 
 ## Architecture that spans every release
@@ -230,7 +229,7 @@ The M0–M5 work below describes how the MVP was planned and built. It is retain
 | M2 — Daily tracker | B | Offline opportunity workspace, pipeline, next actions, and deterministic Needs attention loop work together | Historical — implemented in shipped MVP |
 | M3 — Contacts and interactions | C | Offline contacts, interactions, and opportunity links work together | Historical — implemented in shipped MVP |
 | M4 — Safe bulk capture | D | Import map/validate/duplicate-choice/report flow has no silent overwrite | Historical — implemented subset in shipped MVP |
-| M5 — Reconciliation, MVP hardening, and release readiness | E + F | Evidence-to-decision reconciliation, lifecycle/export boundaries, accessibility, and release readiness satisfy the local MVP criteria | Historical — implemented subset in shipped MVP; stabilization is current |
+| M5 — Reconciliation, MVP hardening, and release readiness | E + F | Evidence-to-decision reconciliation, lifecycle/export boundaries, accessibility, and release readiness satisfy the local MVP criteria | Historical — implemented subset in shipped MVP; Post-MVP refinement is the active planned phase |
 | M6 — Privacy and AI foundation | G | Accepted routing, consent, local ledger, and budget contracts before any AI feature or connected workflow | Future — not started |
 | M7 — Connected workflow | H | Permissioned Gmail/Calendar workflow, confidence/manual-review classification, accepted follow-up tasks, and explicit approvals | Future — not started |
 | M8 — Documents and research | I | Full document versioning and sourced AI/research workflow | Future — not started |
