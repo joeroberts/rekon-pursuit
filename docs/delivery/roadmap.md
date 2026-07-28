@@ -150,6 +150,17 @@ For a small team, one person may hold multiple roles, but the accountability bou
 
 **Acceptance checkpoint:** Run the full MVP acceptance suite on a clean workspace and a migrated fixture workspace. Verify export contains the expected local records and provenance while confidential data handling follows the approved policy. Validate keyboard-only use of queue, import, record, and confirmation surfaces. Search activity events by time, opportunity, event type, and completion state without displaying raw sensitive content. Search the empty/read-only AI ledger by its supported fields; verify its explicit empty state, that it creates no network activity or entries, and that DOCX/PDF attachments retain their hashes and metadata without processing.
 
+### Post-remediation UX refinement queue
+
+These are planned product refinements, not active remediation work. They must not
+change the current delivery dashboard or release order until separately planned
+and released.
+
+| ID | Refinement | Intended outcome |
+| --- | --- | --- |
+| `UX-D11` | Split the existing **Activity & AI** destination into **Logs** and **AI ledger** tabs while retaining the same sidebar entry. | Each ledger has its own working area; neither search/filter surface is permanently stacked below the other. No AI execution, network capability, or new ledger data is introduced. |
+| `UX-D12` | Refine local log search beyond token-only matching. | Preserve the current safe multi-word fallback, then add predictable phrase/ordered-term behavior and a clear way to target an exact event label or identifier so queries such as `CSV import row 2 created` do not also return rows 20, 21, and 22. Define ranking, matching, and empty-state behavior before implementation. |
+
 ### Workstream G — Privacy and AI foundation (Phase 2a)
 
 **Objective:** Establish the privacy, routing, consent, and ledger contracts required before any AI feature or connected workflow.
