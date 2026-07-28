@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "activeTaskId": null,
-  "nextEligibleTaskId": "RP-R10",
+  "nextEligibleTaskId": "RP-R7b-2",
   "tasks": [
     {
       "id": "RP-R0",
@@ -264,6 +264,19 @@
       "needsUserAction": false
     },
     {
+      "id": "RP-R7b-2",
+      "title": "Purge deleted data from retained backups",
+      "workType": "Data lifecycle",
+      "status": "next_up",
+      "releaseCondition": "Requires its own approved destructive-purge brief and Architecture/Security, TPM, QA, and Delivery gates; it must rebuild and verify a replacement before removing any predecessor archive.",
+      "latestTransition": "Restored to the active remediation queue after R9 acceptance: ADR-001 makes the explicit purge/rebuild flow an accepted lifecycle requirement, not deferred polish.",
+      "evidence": {
+        "label": "ADR-001 lifecycle decision",
+        "href": "../../architecture/adr/ADR-001-local-data-lifecycle.md"
+      },
+      "needsUserAction": false
+    },
+    {
       "id": "RP-R8",
       "title": "Searchable local AI ledger",
       "workType": "Observability",
@@ -293,9 +306,9 @@
       "id": "RP-R10",
       "title": "Clean-state remediation acceptance",
       "workType": "Acceptance",
-      "status": "next_up",
-      "releaseCondition": "Release after RP-R1a through RP-R9 and UX-R1/UX-R2 are accepted.",
-      "latestTransition": "Next eligible after RP-R9 product-owner acceptance; requires its own final acceptance plan and release gate.",
+      "status": "backlog",
+      "releaseCondition": "Release only after RP-R7b-2 and all prior remediation work are accepted; this is final candidate acceptance, not a way to defer accepted lifecycle work.",
+      "latestTransition": "Moved back to Backlog after delivery review found RP-R7b-2 purge/rebuild is still an accepted, unreleased lifecycle requirement.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
