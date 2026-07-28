@@ -137,6 +137,41 @@ class DashboardContractTests(unittest.TestCase):
         self.assertNotIn("</script", payload.lower())
         self.assertIn(r"\u003c/script\u003e", payload)
 
+    def test_render_starts_on_active_phase_and_embeds_all_phases(self):
+        page = renderer.render_dashboard(valid_status())
+        self.assertIn('id="phase-selector"', page)
+        self.assertIn('data-active-phase="post_mvp_refinement"', page)
+        self.assertIn('value="post_mvp_refinement" selected', page)
+        self.assertIn('id="dashboard-data" type="application/json"', page)
+        self.assertIn('"remediation_r1"', page)
+        self.assertIn('"post_mvp_refinement"', page)
+        self.assertIn('Post-MVP refinement', page)
+
+    def test_render_initially_contains_only_active_phase_cards(self):
+        page = renderer.render_dashboard(valid_status())
+        self.assertIn('>Tabs<', page)
+        self.assertNotIn('>Acceptance<', page)
+
+    def test_render_scopes_initial_summary_to_active_phase(self):
+        page = renderer.render_dashboard(valid_status())
+        self.assertIn('id="summary-accepted">0<', page)
+        self.assertIn('id="summary-backlog">1<', page)
+        self.assertIn('No task in progress', page)
+        self.assertIn('No successor eligible', page)
+
+    def test_render_keeps_file_local_contract(self):
+        page = renderer.render_dashboard(valid_status())
+        self.assertIn('<meta http-equiv="refresh" content="30">', page)
+        forbidden = (
+            'fetch(', 'XMLHttpRequest', 'WebSocket', 'localStorage',
+            'sessionStorage', 'indexedDB', 'document.cookie',
+            'history.pushState', 'history.replaceState',
+        )
+        for forbidden_surface in forbidden:
+            with self.subTest(forbidden_surface=forbidden_surface):
+                self.assertNotIn(forbidden_surface, page)
+        self.assertIn('phaseSelector.addEventListener("change"', page)
+
     def test_detail_page_includes_phase_label_heading_and_compatible_fragment(self):
         status = valid_status()
         dashboard = renderer.render_dashboard(status)
