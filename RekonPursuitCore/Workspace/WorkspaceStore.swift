@@ -2,6 +2,25 @@ import CryptoKit
 import Foundation
 import Darwin
 
+nonisolated private final class PortableArchiveExpiryClock: @unchecked Sendable {
+    private let value: () -> Date
+
+    init(_ value: @escaping () -> Date) {
+        self.value = value
+    }
+
+    func now() -> Date {
+        value()
+    }
+}
+
+nonisolated private final class WorkspaceSynchronizationLock: @unchecked Sendable {
+    private let value = NSLock()
+
+    func lock() { value.lock() }
+    func unlock() { value.unlock() }
+}
+
 final class WorkspaceStore {
     private let database: EncryptedDatabase
     private let clock: () -> Date
@@ -10,8 +29,9 @@ final class WorkspaceStore {
     private let correlationID: String
     private let failBeforeActivityInsert: Bool
     private let portableArchiveWorker: any PortableArchiveWorking
+    private let portableArchiveExpiryWorker: any PortableArchiveExpiryWorking
     private let protectedExportWorker: ProtectedExportWorker
-    private let lock = NSLock()
+    private let lock = WorkspaceSynchronizationLock()
     private let reconciliationResultSelect = "SELECT id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status, check_operation_id, method, checker_version, http_status, mime_type, declared_bytes, received_bytes, content_sha256, response_date, last_modified, etag, retry_after, redirect_target_redacted, evidence_excerpt, redacted_error_code"
 
     init(
@@ -24,10 +44,17 @@ final class WorkspaceStore {
         failBeforeActivityInsert: Bool = false,
         archiveSigningKeyStore: any ArchiveSigningKeyStoring = ArchiveSigningKeyStore(),
         portableArchiveWorker: (any PortableArchiveWorking)? = nil,
+        portableArchiveExpiryWorker: (any PortableArchiveExpiryWorking)? = nil,
         protectedExportWorker: ProtectedExportWorker? = nil
     ) throws {
+        let resolvedClock: () -> Date
+        if let now {
+            resolvedClock = { now }
+        } else {
+            resolvedClock = clock
+        }
         self.database = database
-        self.clock = now.map { fixedNow in { fixedNow } } ?? clock
+        self.clock = resolvedClock
         self.nextIdentifier = nextIdentifier
         self.actorID = actorID
         self.correlationID = correlationID
@@ -35,6 +62,12 @@ final class WorkspaceStore {
         self.portableArchiveWorker = portableArchiveWorker ?? PortableArchiveWorker(
             configuration: database.portableArchiveConnectionConfiguration(),
             signingKeyStore: archiveSigningKeyStore
+        )
+        let expiryClock = PortableArchiveExpiryClock(resolvedClock)
+        self.portableArchiveExpiryWorker = portableArchiveExpiryWorker ?? PortableArchiveExpiryWorker(
+            configuration: database.portableArchiveConnectionConfiguration(),
+            now: expiryClock.now,
+            actorID: actorID
         )
         self.protectedExportWorker = protectedExportWorker ?? ProtectedExportWorker(
             configuration: database.portableArchiveConnectionConfiguration()
@@ -825,11 +858,37 @@ final class WorkspaceStore {
     }
 
     func portableArchiveCatalogue() throws -> [PortableArchiveCatalogueRow] {
+        try portableArchiveCatalogueRows()
+    }
+
+    func portableArchiveCatalogueRows() throws -> [PortableArchiveCatalogueRow] {
         try synchronized {
-            try database.rows("SELECT archive_id, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint FROM portable_archive_catalogue ORDER BY created_at DESC, archive_id DESC").compactMap { row in
-                guard row.count == 8, case let .text(id) = row[0], let archiveID = UUID(uuidString: id), case let .text(filename) = row[1], case let .integer(version) = row[2], case let .real(createdAt) = row[3], case let .real(expiresAt) = row[4], case let .text(state) = row[5], case let .blob(checksum) = row[6], case let .blob(fingerprint) = row[7] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
-                return PortableArchiveCatalogueRow(archiveID: archiveID, displayFilename: filename, formatVersion: Int(version), createdAt: Date(timeIntervalSince1970: createdAt), expiresAt: Date(timeIntervalSince1970: expiresAt), verificationState: state, ciphertextChecksum: checksum, signingKeyFingerprint: fingerprint)
-            }
+            try portableArchiveCatalogueRowsLocked()
+        }
+    }
+
+    func runPortableArchiveExpiryServiceOpportunity() async throws -> [PortableArchiveCatalogueRow] {
+        try await portableArchiveExpiryWorker.run()
+        return try synchronized { try portableArchiveCatalogueRowsLocked() }
+    }
+
+    func updatePortableArchiveCatalogueLifecycle(
+        archiveID: UUID,
+        lifecycleState: PortableArchiveLifecycleState,
+        lastExpiryOutcome: PortableArchiveExpiryOutcome
+    ) throws {
+        try synchronized {
+            try database.execute(
+                "UPDATE portable_archive_catalogue SET lifecycle_state = ?, last_expiry_outcome = ? WHERE archive_id = ?",
+                values: [.text(lifecycleState.rawValue), .text(lastExpiryOutcome.rawValue), .text(archiveID.uuidString)]
+            )
+        }
+    }
+
+    private func portableArchiveCatalogueRowsLocked() throws -> [PortableArchiveCatalogueRow] {
+        try database.rows("SELECT archive_id, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint, lifecycle_state, last_expiry_outcome FROM portable_archive_catalogue ORDER BY created_at DESC, archive_id DESC").compactMap { row in
+            guard row.count == 10, case let .text(id) = row[0], let archiveID = UUID(uuidString: id), case let .text(filename) = row[1], case let .integer(version) = row[2], case let .real(createdAt) = row[3], case let .real(expiresAt) = row[4], case let .text(verificationState) = row[5], case let .blob(checksum) = row[6], case let .blob(fingerprint) = row[7], case let .text(lifecycleStateText) = row[8], case let .text(lastExpiryOutcomeText) = row[9], let lifecycleState = PortableArchiveLifecycleState(rawValue: lifecycleStateText), let lastExpiryOutcome = PortableArchiveExpiryOutcome(rawValue: lastExpiryOutcomeText) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+            return PortableArchiveCatalogueRow(archiveID: archiveID, displayFilename: filename, formatVersion: Int(version), createdAt: Date(timeIntervalSince1970: createdAt), expiresAt: Date(timeIntervalSince1970: expiresAt), verificationState: verificationState, ciphertextChecksum: checksum, signingKeyFingerprint: fingerprint, lifecycleState: lifecycleState, lastExpiryOutcome: lastExpiryOutcome)
         }
     }
 
@@ -846,6 +905,30 @@ final class WorkspaceStore {
             createdAt: clock(),
             actorID: actorID,
             correlationID: correlationID
+        )
+        return try await portableArchiveWorker.createArchive(request)
+    }
+
+    func createManagedPortableArchive(recoveryKey: RecoveryKey) async throws -> PortableArchiveCatalogueRow {
+        let archiveID = UUID()
+        let relativePath = "\(archiveID.uuidString.lowercased()).rekonarchive"
+        let root = database.portableArchiveConnectionConfiguration().url
+            .deletingLastPathComponent()
+            .appendingPathComponent("portable-archives", isDirectory: true)
+        try synchronized {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            var metadata = stat()
+            guard Darwin.lstat(root.path, &metadata) == 0,
+                  (metadata.st_mode & S_IFMT) == S_IFDIR,
+                  (metadata.st_mode & S_IFLNK) == 0 else {
+                throw PortableArchiveError.destinationUnavailable
+            }
+            guard Darwin.chmod(root.path, S_IRWXU) == 0 else { throw PortableArchiveError.destinationUnavailable }
+        }
+        let request = PortableArchiveRequest(
+            recoveryKey: recoveryKey, destinationURL: root.appendingPathComponent(relativePath),
+            archiveID: archiveID, temporaryID: UUID(), activityID: nextIdentifier(), createdAt: clock(),
+            actorID: actorID, correlationID: correlationID, managedRelativePath: relativePath
         )
         return try await portableArchiveWorker.createArchive(request)
     }
@@ -995,9 +1078,17 @@ final class WorkspaceStore {
     }
 
     private func synchronized<T>(_ work: () throws -> T) throws -> T {
-        lock.lock()
-        defer { lock.unlock() }
+        acquireWorkspaceLock()
+        defer { releaseWorkspaceLock() }
         return try work()
+    }
+
+    private func acquireWorkspaceLock() {
+        lock.lock()
+    }
+
+    private func releaseWorkspaceLock() {
+        lock.unlock()
     }
 
     private func activeTaskOpportunityID(_ taskID: String) throws -> String {

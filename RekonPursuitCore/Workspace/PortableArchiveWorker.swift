@@ -16,6 +16,7 @@ nonisolated struct PortableArchiveRequest: Sendable {
     let createdAt: Date
     let actorID: String
     let correlationID: String
+    var managedRelativePath: String? = nil
 }
 
 /// Archive assembly stays inside the app container. The user-selected path is used only
@@ -254,7 +255,7 @@ actor PortableArchiveWorker: PortableArchiveWorking {
                         throw PortableArchiveError.archiveMayRemainAfterOutputFailure
                     }
                     try database.execute(
-                        "INSERT INTO portable_archive_catalogue (archive_id, destination_bookmark, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint) VALUES (?, ?, ?, ?, ?, ?, 'Verified', ?, ?)",
+                        "INSERT INTO portable_archive_catalogue (archive_id, destination_bookmark, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint, storage_class, managed_relative_path) VALUES (?, ?, ?, ?, ?, ?, 'Verified', ?, ?, ?, ?)",
                         values: [
                             .text(request.archiveID.uuidString),
                             .blob(bookmark),
@@ -263,7 +264,9 @@ actor PortableArchiveWorker: PortableArchiveWorking {
                             .real(catalogue.createdAt.timeIntervalSince1970),
                             .real(catalogue.expiresAt.timeIntervalSince1970),
                             .blob(package.ciphertextChecksum),
-                            .blob(package.signingKeyFingerprint)
+                            .blob(package.signingKeyFingerprint),
+                            .text(request.managedRelativePath == nil ? "external" : "managed"),
+                            request.managedRelativePath.map(DatabaseValue.text) ?? .null
                         ]
                     )
                     try insertActivity(

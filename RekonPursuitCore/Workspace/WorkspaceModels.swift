@@ -90,6 +90,29 @@ enum RecoveryKeyError: Error { case randomnessUnavailable, invalidLength }
 struct RecoveryEnrollmentState: Equatable { let isEnabled: Bool }
 struct RecoveryEnrollmentRecord: Equatable { let fingerprint: String, enrolledAt: Date }
 
+nonisolated enum PortableArchiveLifecycleState: String, Equatable, Sendable {
+    case verified = "Verified"
+    case expiredPendingRemoval = "expired_pending_removal"
+    case expiredRetryable = "expired_retryable"
+    case expiredBlocked = "expired_blocked"
+    case expiredMissing = "expired_missing"
+    case expiredManualRemovalRequired = "expired_manual_removal_required"
+    case expiredPrepared = "expired_prepared"
+    case expiredQuarantined = "expired_quarantined"
+}
+
+nonisolated enum PortableArchiveExpiryOutcome: String, Equatable, Sendable {
+    case none
+    case scopeUnavailable
+    case targetMissing
+    case targetUnsafe
+    case identityMismatch
+    case archiveMismatch
+    case ioFailure
+    case removed
+    case manualRemovalRequired = "manual_removal_required"
+}
+
 nonisolated struct PortableArchiveCatalogueRow: Equatable, Sendable {
     let archiveID: UUID
     let displayFilename: String
@@ -99,6 +122,32 @@ nonisolated struct PortableArchiveCatalogueRow: Equatable, Sendable {
     let verificationState: String
     let ciphertextChecksum: Data
     let signingKeyFingerprint: Data
+    let lifecycleState: PortableArchiveLifecycleState
+    let lastExpiryOutcome: PortableArchiveExpiryOutcome
+
+    init(
+        archiveID: UUID,
+        displayFilename: String,
+        formatVersion: Int,
+        createdAt: Date,
+        expiresAt: Date,
+        verificationState: String,
+        ciphertextChecksum: Data,
+        signingKeyFingerprint: Data,
+        lifecycleState: PortableArchiveLifecycleState = .verified,
+        lastExpiryOutcome: PortableArchiveExpiryOutcome = .none
+    ) {
+        self.archiveID = archiveID
+        self.displayFilename = displayFilename
+        self.formatVersion = formatVersion
+        self.createdAt = createdAt
+        self.expiresAt = expiresAt
+        self.verificationState = verificationState
+        self.ciphertextChecksum = ciphertextChecksum
+        self.signingKeyFingerprint = signingKeyFingerprint
+        self.lifecycleState = lifecycleState
+        self.lastExpiryOutcome = lastExpiryOutcome
+    }
 }
 
 nonisolated struct VerifiedPortableArchive: Equatable, Sendable {

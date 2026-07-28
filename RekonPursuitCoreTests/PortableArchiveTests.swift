@@ -1,10 +1,706 @@
 import CryptoKit
+import Darwin
 import Foundation
 import XCTest
 @testable import RekonPursuit
 
 @MainActor
 final class PortableArchiveTests: XCTestCase {
+    func testPortableArchiveCatalogueMigrationDefaultsExistingRowsToVerified() throws {
+        let fixture = try makeStoreAtVersion26(withArchiveCatalogueRow: true)
+        defer {
+            try? fixture.store.close()
+            removeDatabase(at: fixture.databaseURL)
+        }
+
+        let catalogue = try fixture.store.portableArchiveCatalogue()
+
+        XCTAssertEqual(catalogue.count, 1)
+        XCTAssertEqual(catalogue.first?.lifecycleState, .verified)
+        XCTAssertEqual(catalogue.first?.lastExpiryOutcome, PortableArchiveExpiryOutcome.none)
+        XCTAssertEqual(try fixture.store.schemaVersion(), 30)
+        let columns = Set(try fixture.database.rows("PRAGMA table_info(portable_archive_catalogue)").compactMap { row -> String? in
+            guard row.count > 1, case let .text(name) = row[1] else { return nil }
+            return name
+        })
+        XCTAssertTrue(columns.isSuperset(of: [
+            "storage_class", "managed_relative_path", "expiry_token", "expiry_revision",
+            "expiry_quarantine_relative_path", "expiry_expected_device", "expiry_expected_inode"
+        ]))
+        let migrationVersions = try fixture.database.rows("SELECT version FROM migration_history WHERE version >= 27 ORDER BY version")
+            .compactMap { row -> Int? in
+                guard case let .integer(version)? = row.first else { return nil }
+                return Int(version)
+            }
+        XCTAssertEqual(migrationVersions, [27, 28, 29, 30])
+    }
+
+    func testPortableArchiveCatalogueRejectsUnknownLifecycleState() throws {
+        let fixture = try makeStoreAtVersion26(withArchiveCatalogueRow: true)
+        defer {
+            try? fixture.store.close()
+            removeDatabase(at: fixture.databaseURL)
+        }
+        try fixture.database.execute(
+            "UPDATE portable_archive_catalogue SET lifecycle_state = 'unrecognized_state'"
+        )
+
+        XCTAssertThrowsError(try fixture.store.portableArchiveCatalogue()) { error in
+            XCTAssertEqual(error as? WorkspaceStoreError, .unexpectedDatabaseValue)
+        }
+    }
+
+    func testExpiryAtBoundaryRemovesOnlyVerifiedMatchingRegularArchive() async throws {
+        let fixture = try makeExpiryFixture()
+        defer { fixture.cleanup() }
+        let createdAt = Date(timeIntervalSince1970: 1_704_067_200)
+        let due = try seedExpiryArchive(in: fixture, named: "due.rekonarchive", createdAt: createdAt)
+        let future = try seedExpiryArchive(
+            in: fixture,
+            named: "future.rekonarchive",
+            createdAt: createdAt.addingTimeInterval(60)
+        )
+        let liveOperations = PortableArchiveExpiryFileOperations.live
+        let pendingStates = ExpiryTestValues<String>()
+        let pendingDatabase = ExpiryTestDatabase(fixture.database)
+        try fixture.installWorker(
+            fileOperations: liveOperations.replacingUnlink { url in
+                let rows = try pendingDatabase.rows(
+                    "SELECT lifecycle_state FROM portable_archive_catalogue WHERE archive_id = ?",
+                    values: [.text(due.row.archiveID.uuidString)]
+                )
+                if case let .text(state)? = rows.first?.first {
+                    pendingStates.append(state)
+                }
+                try liveOperations.unlinkTarget(url)
+            }
+        )
+
+        fixture.clock.set(due.row.expiresAt.addingTimeInterval(-0.001))
+        let beforeBoundary = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+
+        XCTAssertEqual(Set(beforeBoundary.map(\.archiveID)), Set([due.row.archiveID, future.row.archiveID]))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: due.url.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: future.url.path))
+        XCTAssertTrue(pendingStates.values.isEmpty)
+
+        fixture.clock.set(due.row.expiresAt)
+        let atBoundary = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+        let removalActivity = try fixture.store.activityEvents().filter {
+            $0.kind == "portable_backup_expired_removed"
+        }
+
+        XCTAssertEqual(atBoundary.map(\.archiveID), [future.row.archiveID])
+        XCTAssertEqual(pendingStates.values, [PortableArchiveLifecycleState.expiredQuarantined.rawValue])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: due.url.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: future.url.path))
+        XCTAssertEqual(removalActivity.count, 1)
+        XCTAssertEqual(removalActivity.first?.correlationID, due.row.archiveID.uuidString)
+        XCTAssertEqual(fixture.bookmarks.resolveCount(for: due.bookmark), 0)
+        XCTAssertEqual(fixture.bookmarks.stopCount(for: due.bookmark), 0)
+        XCTAssertEqual(fixture.bookmarks.resolveCount(for: future.bookmark), 0)
+    }
+
+    func testExpiryRetryAfterIOFailureIsIdempotentAndRecordsNoDuplicateRemoval() async throws {
+        let fixture = try makeExpiryFixture()
+        defer { fixture.cleanup() }
+        let archive = try seedExpiryArchive(
+            in: fixture,
+            named: "retry.rekonarchive",
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200)
+        )
+        fixture.clock.set(archive.row.expiresAt)
+        let readAttempts = ExpiryTestCounter()
+        let liveOperations = PortableArchiveExpiryFileOperations.live
+        try fixture.installWorker(
+            fileOperations: liveOperations.replacingRead { descriptor in
+                guard readAttempts.incrementAndGet() > 1 else {
+                    throw PortableArchiveExpiryError.ioFailure
+                }
+                return try liveOperations.readDescriptor(descriptor)
+            }
+        )
+
+        let firstCatalogue = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+
+        XCTAssertEqual(firstCatalogue.first?.archiveID, archive.row.archiveID)
+        XCTAssertEqual(firstCatalogue.first?.lifecycleState, .expiredRetryable)
+        XCTAssertEqual(firstCatalogue.first?.lastExpiryOutcome, .ioFailure)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: archive.url.path))
+        XCTAssertTrue(try fixture.store.activityEvents().allSatisfy {
+            $0.kind != "portable_backup_expired_removed"
+        })
+        XCTAssertEqual(fixture.bookmarks.resolveCount(for: archive.bookmark), 0)
+        XCTAssertEqual(fixture.bookmarks.stopCount(for: archive.bookmark), 0)
+
+        try fixture.store.close()
+        let reopenedDatabase = try EncryptedDatabase.open(
+            url: fixture.databaseURL,
+            key: fixture.databaseKey,
+            createIfMissing: false
+        )
+        let reopenedWorker = PortableArchiveExpiryWorker(
+            configuration: reopenedDatabase.portableArchiveConnectionConfiguration(),
+            now: fixture.clock.value,
+            bookmarkResolver: fixture.bookmarks.resolve,
+            actorID: "expiry-test",
+            activityID: { "expiry-retry-removal" }
+        )
+        let reopenedStore = try WorkspaceStore(
+            database: reopenedDatabase,
+            clock: fixture.clock.value,
+            actorID: "expiry-test",
+            correlationID: "ordinary-correlation",
+            portableArchiveExpiryWorker: reopenedWorker
+        )
+        defer { try? reopenedStore.close() }
+
+        let retryCatalogue = try await reopenedStore.runPortableArchiveExpiryServiceOpportunity()
+        let removalActivity = try reopenedStore.activityEvents().filter {
+            $0.kind == "portable_backup_expired_removed"
+        }
+
+        XCTAssertTrue(retryCatalogue.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: archive.url.path))
+        XCTAssertEqual(removalActivity.count, 1)
+        XCTAssertEqual(removalActivity.first?.correlationID, archive.row.archiveID.uuidString)
+        XCTAssertEqual(fixture.bookmarks.resolveCount(for: archive.bookmark), 0)
+        XCTAssertEqual(fixture.bookmarks.stopCount(for: archive.bookmark), 0)
+    }
+
+    func testExpiryNeverRenamesOrDeletesExternalArchive() async throws {
+        let fixture = try makeExpiryFixture()
+        defer { fixture.cleanup() }
+        let archive = try seedExpiryArchive(
+            in: fixture,
+            named: "external.rekonarchive",
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200),
+            storageClass: "external"
+        )
+        fixture.clock.set(archive.row.expiresAt)
+
+        let catalogue = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+        let retained = try XCTUnwrap(catalogue.first)
+
+        XCTAssertEqual(retained.lifecycleState, .expiredManualRemovalRequired)
+        XCTAssertEqual(retained.lastExpiryOutcome, .manualRemovalRequired)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: archive.url.path))
+        XCTAssertTrue(try fixture.store.activityEvents().allSatisfy {
+            $0.kind != "portable_backup_expired_removed"
+        })
+    }
+
+    func testExpiryUnlinkFailureKeepsQuarantinedArchiveForDurableRerun() async throws {
+        let fixture = try makeExpiryFixture()
+        defer { fixture.cleanup() }
+        let archive = try seedExpiryArchive(
+            in: fixture,
+            named: "unlink-failure.rekonarchive",
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200)
+        )
+        fixture.clock.set(archive.row.expiresAt)
+        let unlinkAttempts = ExpiryTestCounter()
+        let liveOperations = PortableArchiveExpiryFileOperations.live
+        try fixture.installWorker(
+            fileOperations: liveOperations.replacingUnlink { url in
+                guard unlinkAttempts.incrementAndGet() > 1 else {
+                    throw PortableArchiveExpiryError.ioFailure
+                }
+                try liveOperations.unlinkTarget(url)
+            }
+        )
+
+        let first = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+        let firstRow = try XCTUnwrap(first.first)
+
+        XCTAssertEqual(firstRow.lifecycleState, .expiredRetryable)
+        XCTAssertEqual(firstRow.lastExpiryOutcome, .ioFailure)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: archive.url.path))
+        let quarantineURLs = try FileManager.default.contentsOfDirectory(
+            at: fixture.root.appendingPathComponent("portable-archives/quarantine"),
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertEqual(quarantineURLs.count, 1)
+        XCTAssertTrue(try fixture.store.activityEvents().allSatisfy {
+            $0.kind != "portable_backup_expired_removed"
+        })
+
+        let retry = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+
+        XCTAssertTrue(retry.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: archive.url.path))
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(
+            at: fixture.root.appendingPathComponent("portable-archives/quarantine"),
+            includingPropertiesForKeys: nil
+        ).isEmpty)
+        XCTAssertEqual(try fixture.store.activityEvents().filter {
+            $0.kind == "portable_backup_expired_removed"
+        }.count, 1)
+    }
+
+    func testExpiryRecoversAfterMoveBeforeQuarantineTransitionIsPersisted() async throws {
+        let fixture = try makeExpiryFixture()
+        defer { fixture.cleanup() }
+        let archive = try seedExpiryArchive(
+            in: fixture,
+            named: "interrupted-move.rekonarchive",
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200)
+        )
+        fixture.clock.set(archive.row.expiresAt)
+        let token = UUID().uuidString.lowercased()
+        let quarantineRelativePath = "quarantine/\(archive.row.archiveID.uuidString.lowercased()).\(token).pending"
+        try fixture.database.execute(
+            "UPDATE portable_archive_catalogue SET lifecycle_state = 'expired_prepared', expiry_token = ?, expiry_quarantine_relative_path = ?, expiry_revision = 1 WHERE archive_id = ?",
+            values: [.text(token), .text(quarantineRelativePath), .text(archive.row.archiveID.uuidString)]
+        )
+        let quarantineDirectory = fixture.root.appendingPathComponent("portable-archives/quarantine", isDirectory: true)
+        try FileManager.default.createDirectory(at: quarantineDirectory, withIntermediateDirectories: true)
+        let quarantineURL = fixture.root.appendingPathComponent("portable-archives/\(quarantineRelativePath)")
+        try FileManager.default.moveItem(at: archive.url, to: quarantineURL)
+
+        try fixture.store.close()
+        let reopenedDatabase = try EncryptedDatabase.open(
+            url: fixture.databaseURL,
+            key: fixture.databaseKey,
+            createIfMissing: false
+        )
+        let reopenedWorker = PortableArchiveExpiryWorker(
+            configuration: reopenedDatabase.portableArchiveConnectionConfiguration(),
+            now: fixture.clock.value,
+            bookmarkResolver: fixture.bookmarks.resolve,
+            actorID: "expiry-test",
+            activityID: { "interrupted-move-removal" }
+        )
+        let reopenedStore = try WorkspaceStore(
+            database: reopenedDatabase,
+            clock: fixture.clock.value,
+            actorID: "expiry-test",
+            correlationID: "ordinary-correlation",
+            portableArchiveExpiryWorker: reopenedWorker
+        )
+        defer { try? reopenedStore.close() }
+
+        let catalogue = try await reopenedStore.runPortableArchiveExpiryServiceOpportunity()
+
+        XCTAssertTrue(catalogue.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: archive.url.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: quarantineURL.path))
+        XCTAssertEqual(try reopenedStore.activityEvents().filter {
+            $0.kind == "portable_backup_expired_removed"
+        }.count, 1)
+    }
+
+    func testExpiryNeverUnlinksSymlinkReplacementOrIdentityChangedTarget() async throws {
+        let fixture = try makeExpiryFixture()
+        defer { fixture.cleanup() }
+        let createdAt = Date(timeIntervalSince1970: 1_704_067_200)
+        let symlinkBackingURL = fixture.root.appendingPathComponent("symlink-backing.rekonarchive")
+        let symlinkURL = fixture.root.appendingPathComponent("symlink-target.rekonarchive")
+        let symlinkArchive = try seedExpiryArchive(
+            in: fixture,
+            named: "symlink-backing.rekonarchive",
+            createdAt: createdAt,
+            bookmarkTargetURL: symlinkURL,
+            storageClass: "external"
+        )
+        try FileManager.default.createSymbolicLink(
+            at: symlinkURL,
+            withDestinationURL: symlinkBackingURL
+        )
+        let changedArchive = try seedExpiryArchive(
+            in: fixture,
+            named: "identity-changed.rekonarchive",
+            createdAt: createdAt
+        )
+        fixture.clock.set(symlinkArchive.row.expiresAt)
+        let unlinkCount = ExpiryTestCounter()
+        let liveOperations = PortableArchiveExpiryFileOperations.live
+        try fixture.installWorker(
+            fileOperations: liveOperations
+                .replacingTargetMetadata { url in
+                    let metadata = try liveOperations.targetMetadata(url)
+                    guard url == changedArchive.url else { return metadata }
+                    return PortableArchiveExpiryFileMetadata(
+                        identity: .init(
+                            device: metadata.identity.device,
+                            inode: metadata.identity.inode &+ 1
+                        ),
+                        isRegular: true,
+                        isSymbolicLink: false
+                    )
+                }
+                .replacingUnlink { url in
+                    _ = unlinkCount.incrementAndGet()
+                    try liveOperations.unlinkTarget(url)
+                }
+        )
+
+        let catalogue = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+        let symlinkState = try XCTUnwrap(catalogue.first { $0.archiveID == symlinkArchive.row.archiveID })
+        let changedState = try XCTUnwrap(catalogue.first { $0.archiveID == changedArchive.row.archiveID })
+
+        XCTAssertEqual(symlinkState.lifecycleState, .expiredManualRemovalRequired)
+        XCTAssertEqual(symlinkState.lastExpiryOutcome, .manualRemovalRequired)
+        XCTAssertEqual(changedState.lifecycleState, .expiredBlocked)
+        XCTAssertEqual(changedState.lastExpiryOutcome, .identityMismatch)
+        XCTAssertEqual(unlinkCount.value, 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: symlinkURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: symlinkBackingURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: changedArchive.url.path))
+        XCTAssertTrue(try fixture.store.activityEvents().allSatisfy {
+            $0.kind != "portable_backup_expired_removed"
+        })
+    }
+
+    func testExpiryNeverDeletesReplacementInstalledAfterIdentityCheck() async throws {
+        let fixture = try makeExpiryFixture()
+        defer { fixture.cleanup() }
+        let archive = try seedExpiryArchive(
+            in: fixture,
+            named: "last-moment-replacement.rekonarchive",
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200)
+        )
+        let replacement = Data("replacement-must-survive".utf8)
+        let liveOperations = PortableArchiveExpiryFileOperations.live
+        let swapped = ExpiryTestCounter()
+        try fixture.installWorker(
+            fileOperations: liveOperations.replacingTargetMetadata { url in
+                let metadata = try liveOperations.targetMetadata(url)
+                guard url == archive.url, swapped.incrementAndGet() == 1 else {
+                    return metadata
+                }
+                try FileManager.default.removeItem(at: url)
+                try replacement.write(to: url)
+                return try liveOperations.targetMetadata(url)
+            }
+        )
+        fixture.clock.set(archive.row.expiresAt)
+
+        let catalogue = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+        let retained = try XCTUnwrap(catalogue.first)
+
+        XCTAssertEqual(retained.lifecycleState, .expiredBlocked)
+        XCTAssertEqual(retained.lastExpiryOutcome, .identityMismatch)
+        XCTAssertEqual(try Data(contentsOf: archive.url), replacement)
+        XCTAssertTrue(try fixture.store.activityEvents().allSatisfy {
+            $0.kind != "portable_backup_expired_removed"
+        })
+    }
+
+    func testExpiryRejectsCatalogueExpiryThatDiffersFromSignedBinding() async throws {
+        let fixture = try makeExpiryFixture()
+        defer { fixture.cleanup() }
+        let archive = try seedExpiryArchive(
+            in: fixture,
+            named: "expiry-binding-mismatch.rekonarchive",
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200),
+            catalogueExpiresAt: Date(timeIntervalSince1970: 1_704_067_200 + 30 * 24 * 60 * 60 - 1)
+        )
+        fixture.clock.set(archive.row.expiresAt)
+
+        let catalogue = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+        let retained = try XCTUnwrap(catalogue.first)
+
+        XCTAssertEqual(retained.lifecycleState, .expiredBlocked)
+        XCTAssertEqual(retained.lastExpiryOutcome, .archiveMismatch)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: archive.url.path))
+        XCTAssertTrue(try fixture.store.activityEvents().allSatisfy {
+            $0.kind != "portable_backup_expired_removed"
+        })
+    }
+
+    func testPublicBindingRejectsExtremeHeaderTimestampWithoutTrapping() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("archive-extreme-time-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let archiveURL = root.appendingPathComponent("extreme.rekonarchive")
+        _ = try PortableArchiveService.writeAndVerify(
+            snapshot: emptyCanonicalSnapshot(),
+            recoveryKey: RecoveryKey.generate(),
+            signingKey: .init(),
+            archiveID: UUID(),
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200),
+            to: archiveURL
+        )
+        var malformed = try Data(contentsOf: archiveURL)
+        malformed.replaceSubrange(30..<38, with: Data(repeating: 0x7f, count: 8))
+
+        XCTAssertThrowsError(try PortableArchiveService.verifyPublicBinding(data: malformed))
+    }
+
+    func testPublicBindingRejectsNearMaximumRawTimestampsWithoutTrapping() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("archive-near-max-time-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let archiveURL = root.appendingPathComponent("near-max.rekonarchive")
+        _ = try PortableArchiveService.writeAndVerify(
+            snapshot: emptyCanonicalSnapshot(),
+            recoveryKey: RecoveryKey.generate(),
+            signingKey: .init(),
+            archiveID: UUID(),
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200),
+            to: archiveURL
+        )
+
+        func bytes(for value: Int64) -> Data {
+            var bigEndian = UInt64(bitPattern: value).bigEndian
+            return withUnsafeBytes(of: &bigEndian) { Data($0) }
+        }
+
+        var malformed = try Data(contentsOf: archiveURL)
+        malformed.replaceSubrange(30..<38, with: bytes(for: Int64.max - 1))
+        malformed.replaceSubrange(38..<46, with: bytes(for: Int64.max))
+
+        XCTAssertThrowsError(try PortableArchiveService.verifyPublicBinding(data: malformed))
+    }
+
+    func testExpiryMissingOrUnavailableTargetKeepsCatalogueWithoutRemovalActivity() async throws {
+        let fixture = try makeExpiryFixture()
+        defer { fixture.cleanup() }
+        let createdAt = Date(timeIntervalSince1970: 1_704_067_200)
+        let missing = try seedExpiryArchive(
+            in: fixture,
+            named: "missing.rekonarchive",
+            createdAt: createdAt
+        )
+        try FileManager.default.removeItem(at: missing.url)
+        let unavailable = try seedExpiryArchive(
+            in: fixture,
+            named: "scope-unavailable.rekonarchive",
+            createdAt: createdAt,
+            storageClass: "external"
+        )
+        fixture.bookmarks.makeUnavailable(unavailable.bookmark)
+        fixture.clock.set(missing.row.expiresAt)
+
+        let catalogue = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+        let missingState = try XCTUnwrap(catalogue.first { $0.archiveID == missing.row.archiveID })
+        let unavailableState = try XCTUnwrap(catalogue.first { $0.archiveID == unavailable.row.archiveID })
+
+        XCTAssertEqual(missingState.lifecycleState, .expiredMissing)
+        XCTAssertEqual(missingState.lastExpiryOutcome, .targetMissing)
+        XCTAssertEqual(unavailableState.lifecycleState, .expiredManualRemovalRequired)
+        XCTAssertEqual(unavailableState.lastExpiryOutcome, .manualRemovalRequired)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unavailable.url.path))
+        XCTAssertTrue(try fixture.store.activityEvents().allSatisfy {
+            $0.kind != "portable_backup_expired_removed"
+        })
+    }
+
+    func testExpiryMismatchOfSignatureArchiveIDFingerprintOrChecksumNeverUnlinks() async throws {
+        let fixture = try makeExpiryFixture()
+        defer { fixture.cleanup() }
+        let createdAt = Date(timeIntervalSince1970: 1_704_067_200)
+        let signature = try seedExpiryArchive(
+            in: fixture,
+            named: "signature-mismatch.rekonarchive",
+            createdAt: createdAt
+        )
+        var signatureMutation = try Data(contentsOf: signature.url)
+        signatureMutation[267] ^= 0x01
+        try signatureMutation.write(to: signature.url)
+        let archiveID = try seedExpiryArchive(
+            in: fixture,
+            named: "id-mismatch.rekonarchive",
+            createdAt: createdAt,
+            catalogueArchiveID: UUID()
+        )
+        let fingerprint = try seedExpiryArchive(
+            in: fixture,
+            named: "fingerprint-mismatch.rekonarchive",
+            createdAt: createdAt,
+            catalogueFingerprint: Data(repeating: 0x41, count: 32)
+        )
+        let checksum = try seedExpiryArchive(
+            in: fixture,
+            named: "checksum-mismatch.rekonarchive",
+            createdAt: createdAt,
+            catalogueChecksum: Data(repeating: 0x42, count: 32)
+        )
+        fixture.clock.set(signature.row.expiresAt)
+        let unlinkCount = ExpiryTestCounter()
+        let liveOperations = PortableArchiveExpiryFileOperations.live
+        try fixture.installWorker(
+            fileOperations: liveOperations.replacingUnlink { url in
+                _ = unlinkCount.incrementAndGet()
+                try liveOperations.unlinkTarget(url)
+            }
+        )
+
+        let catalogue = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+
+        XCTAssertEqual(unlinkCount.value, 0)
+        XCTAssertEqual(Set(catalogue.map(\.archiveID)), Set([
+            signature.row.archiveID,
+            archiveID.row.archiveID,
+            fingerprint.row.archiveID,
+            checksum.row.archiveID
+        ]))
+        for row in catalogue {
+            XCTAssertEqual(row.lifecycleState, .expiredBlocked)
+            XCTAssertEqual(row.lastExpiryOutcome, .archiveMismatch)
+        }
+        for url in [signature.url, archiveID.url, fingerprint.url, checksum.url] {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        }
+        XCTAssertTrue(try fixture.store.activityEvents().allSatisfy {
+            $0.kind != "portable_backup_expired_removed"
+        })
+    }
+
+    func testExpiryRejectsNoncanonicalManagedLocatorWithoutTouchingArchive() async throws {
+        let fixture = try makeExpiryFixture()
+        defer { fixture.cleanup() }
+        let archive = try seedExpiryArchive(
+            in: fixture,
+            named: "canonical-locator.rekonarchive",
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200)
+        )
+        try fixture.database.execute(
+            "UPDATE portable_archive_catalogue SET managed_relative_path = ? WHERE archive_id = ?",
+            values: [.text("unexpected.rekonarchive"), .text(archive.row.archiveID.uuidString)]
+        )
+        fixture.clock.set(archive.row.expiresAt)
+
+        let catalogue = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+        let retained = try XCTUnwrap(catalogue.first { $0.archiveID == archive.row.archiveID })
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: archive.url.path))
+        XCTAssertEqual(retained.lifecycleState, .expiredBlocked)
+        XCTAssertEqual(retained.lastExpiryOutcome, .targetUnsafe)
+        XCTAssertTrue(try fixture.store.activityEvents().allSatisfy {
+            $0.kind != "portable_backup_expired_removed"
+        })
+    }
+
+    func testExpiryRejectsMalformedQuarantineTokenWithoutTouchingArchive() async throws {
+        let fixture = try makeExpiryFixture()
+        defer { fixture.cleanup() }
+        let archive = try seedExpiryArchive(
+            in: fixture,
+            named: "malformed-token.rekonarchive",
+            createdAt: Date(timeIntervalSince1970: 1_704_067_200)
+        )
+        let malformedToken = "../../outside"
+        let malformedRelativePath = "quarantine/\(archive.row.archiveID.uuidString.lowercased()).\(malformedToken).pending"
+        try fixture.database.execute(
+            "UPDATE portable_archive_catalogue SET lifecycle_state = 'expired_prepared', expiry_token = ?, expiry_quarantine_relative_path = ?, expiry_revision = 1 WHERE archive_id = ?",
+            values: [.text(malformedToken), .text(malformedRelativePath), .text(archive.row.archiveID.uuidString)]
+        )
+        fixture.clock.set(archive.row.expiresAt)
+
+        let catalogue = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+        let retained = try XCTUnwrap(catalogue.first { $0.archiveID == archive.row.archiveID })
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: archive.url.path))
+        XCTAssertEqual(retained.lifecycleState, .expiredBlocked)
+        XCTAssertEqual(retained.lastExpiryOutcome, .targetUnsafe)
+        XCTAssertTrue(try fixture.store.activityEvents().allSatisfy {
+            $0.kind != "portable_backup_expired_removed"
+        })
+    }
+
+    func testExpiryStateAndActivityRemainRedacted() async throws {
+        let fixture = try makeExpiryFixture()
+        defer { fixture.cleanup() }
+        let active = try fixture.store.create(CreateOpportunity(title: "Active role", company: "Example"))
+        let activeContact = try fixture.store.createContact(CreateContact(name: "Active person"))
+        let recoveryKey = try RecoveryKey.generate()
+        try fixture.store.enroll(recoveryKey: recoveryKey)
+        let protectedExport = try seedProtectedExportEvidence(in: fixture)
+        let workspaceMetadata = try fixture.database.rows("SELECT key, value FROM workspace_metadata ORDER BY key")
+        let createdAt = Date(timeIntervalSince1970: 1_704_067_200)
+        let removed = try seedExpiryArchive(
+            in: fixture,
+            named: "redacted-success.rekonarchive",
+            createdAt: createdAt
+        )
+        let retained = try seedExpiryArchive(
+            in: fixture,
+            named: "redacted-retained.rekonarchive",
+            createdAt: createdAt,
+            bookmark: Data("opaque-bookmark-sensitive-bytes".utf8),
+            storageClass: "external"
+        )
+        fixture.bookmarks.makeUnavailable(retained.bookmark)
+        fixture.clock.set(removed.row.expiresAt)
+        let archivePayload = try Data(contentsOf: removed.url).base64EncodedString()
+
+        let catalogue = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+        let retainedRow = try XCTUnwrap(catalogue.first { $0.archiveID == retained.row.archiveID })
+        let activities = try fixture.store.activityEvents()
+        let categoryText = [
+            retainedRow.lifecycleState.rawValue,
+            retainedRow.lastExpiryOutcome.rawValue
+        ].joined(separator: "|")
+        let activityText = activities.map {
+            [$0.id, $0.kind, $0.actorID, $0.correlationID].joined(separator: "|")
+        }.joined(separator: "\n")
+        let forbiddenValues = [
+            retained.url.path,
+            String(decoding: retained.bookmark, as: UTF8.self),
+            "recovery-key-text-must-not-persist",
+            archivePayload
+        ]
+
+        XCTAssertEqual(retainedRow.lifecycleState, .expiredManualRemovalRequired)
+        XCTAssertEqual(retainedRow.lastExpiryOutcome, .manualRemovalRequired)
+        XCTAssertEqual(activities.filter { $0.kind == "portable_backup_expired_removed" }.count, 1)
+        XCTAssertEqual(
+            activities.first { $0.kind == "portable_backup_expired_removed" }?.correlationID,
+            removed.row.archiveID.uuidString
+        )
+        XCTAssertEqual(try fixture.store.opportunities().map(\.id), [active.id])
+        XCTAssertEqual(try fixture.store.contacts().map(\.id), [activeContact.id])
+        XCTAssertTrue(try fixture.store.recoveryEnrollmentState().isEnabled)
+        XCTAssertEqual(try fixture.database.rows("SELECT key, value FROM workspace_metadata ORDER BY key"), workspaceMetadata)
+        XCTAssertEqual(try fixture.database.rows("SELECT export_id, outcome FROM protected_export_events"), protectedExport)
+        for forbidden in forbiddenValues {
+            XCTAssertFalse(categoryText.contains(forbidden))
+            XCTAssertFalse(activityText.contains(forbidden))
+        }
+    }
+
+    func testExpiryActivityTransactionFailureLeavesRetryableThenRecordsMissingWithoutRemovalActivity() async throws {
+        let fixture = try makeExpiryFixture()
+        defer { fixture.cleanup() }
+        let active = try fixture.store.create(CreateOpportunity(title: "Active role", company: "Example"))
+        let activeContact = try fixture.store.createContact(CreateContact(name: "Active person"))
+        let recoveryKey = try RecoveryKey.generate()
+        try fixture.store.enroll(recoveryKey: recoveryKey)
+        let protectedExport = try seedProtectedExportEvidence(in: fixture)
+        let workspaceMetadata = try fixture.database.rows("SELECT key, value FROM workspace_metadata ORDER BY key")
+        let archive = try seedExpiryArchive(in: fixture, named: "activity-failure.rekonarchive", createdAt: Date(timeIntervalSince1970: 1_704_067_200))
+        fixture.clock.set(archive.row.expiresAt)
+        try fixture.installWorker(activityWriter: { _, _, _, _, _ in
+            throw PortableArchiveExpiryError.ioFailure
+        })
+
+        let first = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+        let firstRow = try XCTUnwrap(first.first)
+        XCTAssertEqual(firstRow.lifecycleState, .expiredRetryable)
+        XCTAssertEqual(firstRow.lastExpiryOutcome, .ioFailure)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: archive.url.path))
+        XCTAssertTrue(try fixture.store.activityEvents().allSatisfy { $0.kind != "portable_backup_expired_removed" })
+        XCTAssertEqual(try fixture.store.opportunities().map(\.id), [active.id])
+        XCTAssertEqual(try fixture.store.contacts().map(\.id), [activeContact.id])
+        XCTAssertTrue(try fixture.store.recoveryEnrollmentState().isEnabled)
+        XCTAssertEqual(try fixture.database.rows("SELECT key, value FROM workspace_metadata ORDER BY key"), workspaceMetadata)
+        XCTAssertEqual(try fixture.database.rows("SELECT export_id, outcome FROM protected_export_events"), protectedExport)
+
+        try fixture.installWorker()
+        let second = try await fixture.store.runPortableArchiveExpiryServiceOpportunity()
+        let secondRow = try XCTUnwrap(second.first)
+        XCTAssertEqual(secondRow.lifecycleState, .expiredMissing)
+        XCTAssertEqual(secondRow.lastExpiryOutcome, .targetMissing)
+        XCTAssertTrue(try fixture.store.activityEvents().allSatisfy { $0.kind != "portable_backup_expired_removed" })
+        XCTAssertEqual(try fixture.store.opportunities().map(\.id), [active.id])
+        XCTAssertEqual(try fixture.store.contacts().map(\.id), [activeContact.id])
+        XCTAssertTrue(try fixture.store.recoveryEnrollmentState().isEnabled)
+        XCTAssertEqual(try fixture.database.rows("SELECT key, value FROM workspace_metadata ORDER BY key"), workspaceMetadata)
+        XCTAssertEqual(try fixture.database.rows("SELECT export_id, outcome FROM protected_export_events"), protectedExport)
+    }
+
     func testRestoreOutcomeDoesNotExposeCandidateFilesystemRoot() {
         let outcome = RestoredWorkspaceCandidate(candidateID: UUID(), archiveID: UUID())
 
@@ -964,6 +1660,64 @@ final class PortableArchiveTests: XCTestCase {
         XCTAssertFalse(activity.correlationID.contains(destination.path))
     }
 
+    func testManagedArchiveCreationUsesPrivateWorkspaceStoreAndIsEligibleForExpiry() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("managed-archive-\(UUID().uuidString)", isDirectory: true)
+        let databaseURL = root.appendingPathComponent("workspace.sqlite")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 4, count: 32))
+        let createdAt = Date(timeIntervalSince1970: 1_704_067_200)
+        let store = try WorkspaceStore(
+            database: database,
+            now: createdAt,
+            actorID: "test",
+            correlationID: "managed-archive"
+        )
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+
+        let archive = try await store.createManagedPortableArchive(recoveryKey: recoveryKey)
+        let rows = try database.rows(
+            "SELECT storage_class, managed_relative_path FROM portable_archive_catalogue WHERE archive_id = ?",
+            values: [.text(archive.archiveID.uuidString)]
+        )
+        guard let row = rows.first, row.count == 2,
+              case let .text(storageClass) = row[0],
+              case let .text(relativePath) = row[1] else {
+            return XCTFail("The managed archive catalogue row is unreadable.")
+        }
+        let managedRoot = root.appendingPathComponent("portable-archives", isDirectory: true)
+        let managedURL = managedRoot.appendingPathComponent(relativePath)
+
+        var metadata = stat()
+        XCTAssertEqual(Darwin.lstat(managedRoot.path, &metadata), 0)
+        XCTAssertEqual(metadata.st_mode & (S_IRWXG | S_IRWXO), 0)
+        XCTAssertEqual(storageClass, "managed")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: managedURL.path))
+
+        try store.close()
+        let reopened = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 4, count: 32), createIfMissing: false)
+        let expiryWorker = PortableArchiveExpiryWorker(
+            configuration: reopened.portableArchiveConnectionConfiguration(),
+            now: { archive.expiresAt },
+            actorID: "test"
+        )
+        let expiryStore = try WorkspaceStore(
+            database: reopened,
+            now: archive.expiresAt,
+            actorID: "test",
+            correlationID: "managed-archive-expiry",
+            portableArchiveExpiryWorker: expiryWorker
+        )
+        defer { try? expiryStore.close() }
+
+        let afterExpiry = try await expiryStore.runPortableArchiveExpiryServiceOpportunity()
+        XCTAssertTrue(afterExpiry.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: managedURL.path))
+    }
+
     func testReadBackRejectsSnapshotRowsWithNoncanonicalColumnCount() throws {
         var snapshot = Data("RPSNAP01".utf8)
         let tableNames = [
@@ -1292,6 +2046,148 @@ final class PortableArchiveTests: XCTestCase {
         }
     }
 
+    private func makeExpiryFixture() throws -> ExpiryTestFixture {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-expiry-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let databaseURL = root.appendingPathComponent("workspace.sqlite")
+        let databaseKey = Data(repeating: 0x27, count: 32)
+        let database = try EncryptedDatabase.open(url: databaseURL, key: databaseKey)
+        let clock = ExpiryTestClock(Date(timeIntervalSince1970: 1_704_067_200))
+        let bookmarks = ExpiryTestBookmarks()
+        let worker = PortableArchiveExpiryWorker(
+            configuration: database.portableArchiveConnectionConfiguration(),
+            now: clock.value,
+            bookmarkResolver: bookmarks.resolve,
+            actorID: "expiry-test",
+            activityID: { UUID().uuidString }
+        )
+        let store = try WorkspaceStore(
+            database: database,
+            clock: clock.value,
+            actorID: "expiry-test",
+            correlationID: "ordinary-correlation",
+            portableArchiveExpiryWorker: worker
+        )
+        return ExpiryTestFixture(
+            root: root,
+            databaseURL: databaseURL,
+            databaseKey: databaseKey,
+            database: database,
+            store: store,
+            clock: clock,
+            bookmarks: bookmarks
+        )
+    }
+
+    private func seedExpiryArchive(
+        in fixture: ExpiryTestFixture,
+        named filename: String,
+        createdAt: Date,
+        bookmarkTargetURL: URL? = nil,
+        catalogueArchiveID: UUID? = nil,
+        catalogueFingerprint: Data? = nil,
+        catalogueChecksum: Data? = nil,
+        catalogueExpiresAt: Date? = nil,
+        bookmark: Data? = nil,
+        storageClass: String = "managed"
+    ) throws -> ExpirySeededArchive {
+        let managedRoot = fixture.root.appendingPathComponent("portable-archives", isDirectory: true)
+        if storageClass == "managed" {
+            try FileManager.default.createDirectory(at: managedRoot, withIntermediateDirectories: true)
+        }
+        let packageArchiveID = UUID()
+        let catalogueID = catalogueArchiveID ?? packageArchiveID
+        let url = storageClass == "managed"
+            ? managedRoot.appendingPathComponent("\(catalogueID.uuidString.lowercased()).rekonarchive")
+            : fixture.root.appendingPathComponent(filename)
+        let verified = try PortableArchiveService.writeAndVerify(
+            snapshot: emptyCanonicalSnapshot(),
+            recoveryKey: RecoveryKey.generate(),
+            signingKey: .init(),
+            archiveID: packageArchiveID,
+            createdAt: createdAt,
+            to: url
+        )
+        let row = PortableArchiveCatalogueRow(
+            archiveID: catalogueID,
+            displayFilename: filename,
+            formatVersion: Int(PortableArchiveService.formatVersion),
+            createdAt: verified.createdAt,
+            expiresAt: catalogueExpiresAt ?? verified.expiresAt,
+            verificationState: "Verified",
+            ciphertextChecksum: catalogueChecksum ?? verified.ciphertextChecksum,
+            signingKeyFingerprint: catalogueFingerprint ?? verified.signingKeyFingerprint
+        )
+        let bookmarkData = bookmark ?? Data("bookmark-\(row.archiveID.uuidString)".utf8)
+        fixture.bookmarks.register(bookmarkData, url: bookmarkTargetURL ?? url)
+        try fixture.database.execute(
+            "INSERT INTO portable_archive_catalogue (archive_id, destination_bookmark, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint, lifecycle_state, last_expiry_outcome, storage_class, managed_relative_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            values: [
+                .text(row.archiveID.uuidString),
+                .blob(bookmarkData),
+                .text(row.displayFilename),
+                .integer(Int64(row.formatVersion)),
+                .real(row.createdAt.timeIntervalSince1970),
+                .real(row.expiresAt.timeIntervalSince1970),
+                .text(row.verificationState),
+                .blob(row.ciphertextChecksum),
+                .blob(row.signingKeyFingerprint),
+                .text(row.lifecycleState.rawValue),
+                .text(row.lastExpiryOutcome.rawValue),
+                .text(storageClass),
+                storageClass == "managed" ? .text("\(catalogueID.uuidString.lowercased()).rekonarchive") : .null
+            ]
+        )
+        return ExpirySeededArchive(row: row, url: bookmarkTargetURL ?? url, bookmark: bookmarkData)
+    }
+
+    private func seedProtectedExportEvidence(in fixture: ExpiryTestFixture) throws -> [[DatabaseValue]] {
+        try fixture.database.execute(
+            "INSERT INTO protected_export_events (id, export_id, category, destination_class, confirmation_fingerprint, outcome, occurred_at) VALUES ('expiry-proof-export', 'expiry-proof-export-id', 'tracker_workspace_data', 'selected_local_folder', 'proof', 'verified', 1)"
+        )
+        return try fixture.database.rows("SELECT export_id, outcome FROM protected_export_events")
+    }
+
+    private func makeStoreAtVersion26(withArchiveCatalogueRow: Bool) throws -> (store: WorkspaceStore, database: EncryptedDatabase, databaseURL: URL) {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-catalogue-v26-\(UUID().uuidString).sqlite")
+        let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 7, count: 32))
+        _ = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
+        if withArchiveCatalogueRow {
+            try database.execute(
+                "INSERT INTO portable_archive_catalogue (archive_id, destination_bookmark, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                values: [
+                    .text("00000000-0000-0000-0000-000000000001"),
+                    .blob(Data([0x01])),
+                    .text("archive.rekonarchive"),
+                    .integer(1),
+                    .real(1_704_067_200),
+                    .real(1_706_659_200),
+                    .text("Verified"),
+                    .blob(Data(repeating: 0x02, count: 32)),
+                    .blob(Data(repeating: 0x03, count: 32))
+                ]
+            )
+        }
+        // Recreate the actual v26 catalogue shape before reopening the store. The
+        // later expiry fields must not be present or the migration's conditional
+        // column additions would be exercising a newer schema by accident.
+        try database.execute("ALTER TABLE portable_archive_catalogue DROP COLUMN lifecycle_state")
+        try database.execute("ALTER TABLE portable_archive_catalogue DROP COLUMN last_expiry_outcome")
+        try database.execute("ALTER TABLE portable_archive_catalogue DROP COLUMN storage_class")
+        try database.execute("ALTER TABLE portable_archive_catalogue DROP COLUMN managed_relative_path")
+        try database.execute("ALTER TABLE portable_archive_catalogue DROP COLUMN expiry_token")
+        try database.execute("ALTER TABLE portable_archive_catalogue DROP COLUMN expiry_revision")
+        try database.execute("ALTER TABLE portable_archive_catalogue DROP COLUMN expiry_quarantine_relative_path")
+        try database.execute("ALTER TABLE portable_archive_catalogue DROP COLUMN expiry_expected_device")
+        try database.execute("ALTER TABLE portable_archive_catalogue DROP COLUMN expiry_expected_inode")
+        try database.execute("UPDATE schema_migrations SET version = 26")
+        try database.execute("DELETE FROM migration_history WHERE version >= 27")
+
+        return (try WorkspaceStore(database: database, actorID: "test", correlationID: "test"), database, databaseURL)
+    }
+
     private func snapshotRows(_ snapshot: Data, named expectedName: String) throws -> [SnapshotRow] {
         var reader = SnapshotReader(snapshot)
         XCTAssertEqual(try reader.data(count: 8), Data("RPSNAP01".utf8))
@@ -1308,6 +2204,197 @@ final class PortableArchiveTests: XCTestCase {
         }
         XCTFail("Missing table \(expectedName)")
         return []
+    }
+}
+
+@MainActor
+private final class ExpiryTestFixture {
+    let root: URL
+    let databaseURL: URL
+    let databaseKey: Data
+    let database: EncryptedDatabase
+    private(set) var store: WorkspaceStore
+    let clock: ExpiryTestClock
+    let bookmarks: ExpiryTestBookmarks
+
+    init(
+        root: URL,
+        databaseURL: URL,
+        databaseKey: Data,
+        database: EncryptedDatabase,
+        store: WorkspaceStore,
+        clock: ExpiryTestClock,
+        bookmarks: ExpiryTestBookmarks
+    ) {
+        self.root = root
+        self.databaseURL = databaseURL
+        self.databaseKey = databaseKey
+        self.database = database
+        self.store = store
+        self.clock = clock
+        self.bookmarks = bookmarks
+    }
+
+    func installWorker(
+        fileOperations: PortableArchiveExpiryFileOperations = .live,
+        activityWriter: PortableArchiveExpiryWorker.ActivityWriter? = nil
+    ) throws {
+        let worker: PortableArchiveExpiryWorker
+        if let activityWriter {
+            worker = PortableArchiveExpiryWorker(
+                configuration: database.portableArchiveConnectionConfiguration(), now: clock.value,
+                bookmarkResolver: bookmarks.resolve, fileOperations: fileOperations, actorID: "expiry-test",
+                activityID: { UUID().uuidString }, activityWriter: activityWriter
+            )
+        } else {
+            worker = PortableArchiveExpiryWorker(
+                configuration: database.portableArchiveConnectionConfiguration(), now: clock.value,
+                bookmarkResolver: bookmarks.resolve, fileOperations: fileOperations, actorID: "expiry-test",
+                activityID: { UUID().uuidString }
+            )
+        }
+        store = try WorkspaceStore(
+            database: database,
+            clock: clock.value,
+            actorID: "expiry-test",
+            correlationID: "ordinary-correlation",
+            portableArchiveExpiryWorker: worker
+        )
+    }
+
+    func cleanup() {
+        try? store.close()
+        try? FileManager.default.removeItem(at: root)
+    }
+}
+
+private struct ExpirySeededArchive: Sendable {
+    let row: PortableArchiveCatalogueRow
+    let url: URL
+    let bookmark: Data
+}
+
+private final class ExpiryTestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: Date
+
+    init(_ current: Date) {
+        self.current = current
+    }
+
+    func set(_ value: Date) {
+        lock.lock()
+        current = value
+        lock.unlock()
+    }
+
+    func value() -> Date {
+        lock.lock()
+        defer { lock.unlock() }
+        return current
+    }
+}
+
+private final class ExpiryTestBookmarks: @unchecked Sendable {
+    private let lock = NSLock()
+    private var urls: [Data: URL] = [:]
+    private var unavailable: Set<Data> = []
+    private var resolutions: [Data: Int] = [:]
+    private var stops: [Data: Int] = [:]
+
+    func register(_ bookmark: Data, url: URL) {
+        lock.lock()
+        urls[bookmark] = url
+        lock.unlock()
+    }
+
+    func makeUnavailable(_ bookmark: Data) {
+        lock.lock()
+        unavailable.insert(bookmark)
+        lock.unlock()
+    }
+
+    func resolve(_ bookmark: Data) throws -> PortableArchiveExpiryScopedAccess {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !unavailable.contains(bookmark), let url = urls[bookmark] else {
+            throw PortableArchiveExpiryError.scopeUnavailable
+        }
+        resolutions[bookmark, default: 0] += 1
+        return PortableArchiveExpiryScopedAccess(
+            url: url,
+            stopAccessing: { [weak self] in
+                self?.recordStop(for: bookmark)
+            }
+        )
+    }
+
+    func resolveCount(for bookmark: Data) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return resolutions[bookmark, default: 0]
+    }
+
+    func stopCount(for bookmark: Data) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return stops[bookmark, default: 0]
+    }
+
+    private func recordStop(for bookmark: Data) {
+        lock.lock()
+        stops[bookmark, default: 0] += 1
+        lock.unlock()
+    }
+}
+
+private final class ExpiryTestCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    func incrementAndGet() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        count += 1
+        return count
+    }
+}
+
+private final class ExpiryTestValues<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [Value] = []
+
+    var values: [Value] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func append(_ value: Value) {
+        lock.lock()
+        storage.append(value)
+        lock.unlock()
+    }
+}
+
+private final class ExpiryTestDatabase: @unchecked Sendable {
+    private let database: EncryptedDatabase
+
+    init(_ database: EncryptedDatabase) {
+        self.database = database
+    }
+
+    func rows(
+        _ sql: String,
+        values: [DatabaseValue]
+    ) throws -> [[DatabaseValue]] {
+        try database.rows(sql, values: values)
     }
 }
 

@@ -1176,12 +1176,12 @@ private struct SettingsView: View {
         .sheet(isPresented: $isPresentingArchiveCreation) {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Create portable recovery archive").font(.title2.bold())
-                Text("Re-enter your recovery key. The archive will be encrypted and verified before it is added to this catalogue.").foregroundStyle(.secondary)
+                Text("Re-enter your recovery key. The archive will be encrypted, verified, and retained in this workspace for its 30-day recovery window.").foregroundStyle(.secondary)
                 TextField("Re-enter the complete recovery key", text: $archiveRecoveryReentry).textFieldStyle(.roundedBorder)
                 HStack {
                     Button("Cancel", role: .cancel) { isPresentingArchiveCreation = false; archiveRecoveryReentry = "" }
                     Spacer()
-                    Button("Choose destination and create") { model.createPortableArchive(reentry: archiveRecoveryReentry); isPresentingArchiveCreation = false; archiveRecoveryReentry = "" }
+                    Button("Create recovery archive") { model.createPortableArchive(reentry: archiveRecoveryReentry); isPresentingArchiveCreation = false; archiveRecoveryReentry = "" }
                         .disabled(model.isCreatingPortableArchive)
                         .keyboardShortcut(.defaultAction)
                 }
@@ -1189,6 +1189,11 @@ private struct SettingsView: View {
         }
         .sheet(isPresented: $isPresentingProtectedExport) {
             VStack(alignment: .leading, spacing: 16) {
+                if let message = model.protectedExportErrorMessage {
+                    Text(message)
+                        .foregroundStyle(.red)
+                        .accessibilityIdentifier("protected-export-error")
+                }
                 if let review = model.protectedExportReview {
                     Text("Confirm protected export").font(.title2.bold())
                     Text("A new encrypted .rekonexport file will be created. It contains your active tracker data only; document file access is excluded and requires relinking.").foregroundStyle(.secondary)
@@ -1209,14 +1214,17 @@ private struct SettingsView: View {
                     Text("Choose a destination, then review the encrypted export before it is written. Your recovery key is used only for this action.").foregroundStyle(.secondary)
                     TextField("Recovery key", text: $protectedExportReentry).textFieldStyle(.roundedBorder)
                     HStack {
-                        Button("Cancel", role: .cancel) { isPresentingProtectedExport = false; protectedExportReentry = "" }
+                        Button("Cancel", role: .cancel) { model.cancelProtectedExport(); isPresentingProtectedExport = false; protectedExportReentry = "" }
                         Spacer()
-                        Button("Choose destination and review") { model.reviewProtectedExport(reentry: protectedExportReentry); protectedExportReentry = "" }
+                        Button("Choose destination and review") { model.reviewProtectedExport(reentry: protectedExportReentry) }
                             .disabled(model.isCreatingProtectedExport)
                             .keyboardShortcut(.defaultAction)
                     }
                 }
             }.padding(24).frame(width: 540)
+                .onChange(of: model.protectedExportReview) { _, review in
+                    if review != nil { protectedExportReentry = "" }
+                }
         }
         .sheet(isPresented: Binding(
             get: {

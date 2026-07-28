@@ -2,6 +2,13 @@ import CryptoKit
 import Foundation
 import Security
 
+nonisolated struct PortableArchivePublicBinding: Equatable, Sendable {
+    let archiveID: UUID
+    let expiresAt: Date
+    let ciphertextChecksum: Data
+    let signingKeyFingerprint: Data
+}
+
 nonisolated struct PortableArchiveService {
     static let formatVersion: UInt16 = 1
     private static let magic = Data("RPARCH01".utf8)
@@ -25,7 +32,7 @@ nonisolated struct PortableArchiveService {
         let checksum = Data(SHA256.hash(data: payload))
         let publicKey = signingKey.publicKey.rawRepresentation
         let fingerprint = Data(SHA256.hash(data: publicKey))
-        let commitment = headerCommitment(archiveID: archiveID, createdAt: canonicalCreatedAt, expiresAt: expiration, salt: salt, manifestHash: manifestHash, payloadChecksum: checksum, publicKey: publicKey, fingerprint: fingerprint)
+        let commitment = headerCommitment(archiveID: archiveID, createdAtMilliseconds: createdAtMilliseconds, expiresAtMilliseconds: milliseconds(expiration), salt: salt, manifestHash: manifestHash, payloadChecksum: checksum, publicKey: publicKey, fingerprint: fingerprint)
         let wrappingKey = HKDF<SHA256>.deriveKey(inputKeyMaterial: SymmetricKey(data: recoveryKey.operationBytes), salt: salt, info: wrappingInfo, outputByteCount: 32)
         guard let envelope = try AES.GCM.seal(contentKey, using: wrappingKey, authenticating: commitment).combined else { throw PortableArchiveError.archiveInvalid }
         guard envelope.count == 60 else { throw PortableArchiveError.archiveInvalid }
@@ -64,38 +71,78 @@ nonisolated struct PortableArchiveService {
         try readVerifiedArchive(data: data, recoveryKey: recoveryKey).archive
     }
 
+    static func verifyPublicBinding(data: Data) throws -> PortableArchivePublicBinding {
+        try parsePublicArchive(data: data).binding
+    }
+
     static func readVerifiedArchive(data: Data, recoveryKey: RecoveryKey) throws -> PortableArchiveContents {
-        var reader = ArchiveReader(data)
-        guard try reader.take(8) == magic, try reader.uint16() == formatVersion, try reader.uint32() == headerLength else { throw PortableArchiveError.archiveInvalid }
-        let header = try reader.take(Int(headerLength))
-        var h = ArchiveReader(header)
-        let archiveID = try h.uuid(); let createdAt = try h.int64(); let expiresAt = try h.int64(); guard try h.byte() == 1 else { throw PortableArchiveError.archiveInvalid }
-        guard expiresAt == createdAt + 30 * 24 * 60 * 60 * 1000 else { throw PortableArchiveError.archiveInvalid }
-        let salt = try h.take(32); let manifestHash = try h.take(32); let checksum = try h.take(32); let publicKey = try h.take(32); let fingerprint = try h.take(32); let envelope = try h.take(60); let signature = try h.take(64)
-        guard h.isAtEnd, Data(SHA256.hash(data: publicKey)) == fingerprint else { throw PortableArchiveError.archiveInvalid }
-        let commitment = headerCommitment(archiveID: archiveID, createdAt: Date(timeIntervalSince1970: Double(createdAt) / 1000), expiresAt: Date(timeIntervalSince1970: Double(expiresAt) / 1000), salt: salt, manifestHash: manifestHash, payloadChecksum: checksum, publicKey: publicKey, fingerprint: fingerprint)
-        guard try Curve25519.Signing.PublicKey(rawRepresentation: publicKey).isValidSignature(signature, for: signatureDomain + commitment + envelope) else { throw PortableArchiveError.verificationFailed }
-        let payloadLength = try reader.uint64(); guard payloadLength >= 28, payloadLength <= 512 * 1024 * 1024, payloadLength == UInt64(reader.remaining) else { throw PortableArchiveError.archiveInvalid }
-        let payload = try reader.take(Int(payloadLength)); guard reader.isAtEnd, Data(SHA256.hash(data: payload)) == checksum else { throw PortableArchiveError.verificationFailed }
-        let wrapping = HKDF<SHA256>.deriveKey(inputKeyMaterial: SymmetricKey(data: recoveryKey.operationBytes), salt: salt, info: wrappingInfo, outputByteCount: 32)
-        let contentKey = try AES.GCM.open(AES.GCM.SealedBox(combined: envelope), using: wrapping, authenticating: commitment)
-        var payloadReader = ArchiveReader(try AES.GCM.open(AES.GCM.SealedBox(combined: payload), using: SymmetricKey(data: contentKey), authenticating: payloadDomain + archiveID.rawBytes + uint16Data(formatVersion) + manifestHash))
+        let parsed = try parsePublicArchive(data: data)
+        let archiveID = parsed.binding.archiveID
+        let createdAt = parsed.createdAtMilliseconds
+        let wrapping = HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: SymmetricKey(data: recoveryKey.operationBytes),
+            salt: parsed.salt,
+            info: wrappingInfo,
+            outputByteCount: 32
+        )
+        let contentKey = try AES.GCM.open(
+            AES.GCM.SealedBox(combined: parsed.envelope),
+            using: wrapping,
+            authenticating: parsed.commitment
+        )
+        var payloadReader = ArchiveReader(
+            try AES.GCM.open(
+                AES.GCM.SealedBox(combined: parsed.payload),
+                using: SymmetricKey(data: contentKey),
+                authenticating: payloadDomain + archiveID.rawBytes + uint16Data(formatVersion) + parsed.manifestHash
+            )
+        )
         guard try payloadReader.take(8) == payloadMagic else { throw PortableArchiveError.archiveInvalid }
         let manifestLength = try payloadReader.uint32(); let snapshotLength = try payloadReader.uint64()
         guard manifestLength <= 8 * 1024 * 1024, snapshotLength <= 480 * 1024 * 1024, Int(manifestLength) + Int(snapshotLength) == payloadReader.remaining else { throw PortableArchiveError.archiveInvalid }
         let manifest = try payloadReader.take(Int(manifestLength)); let snapshot = try payloadReader.take(Int(snapshotLength))
-        guard payloadReader.isAtEnd, Data(SHA256.hash(data: manifest)) == manifestHash else { throw PortableArchiveError.verificationFailed }
+        guard payloadReader.isAtEnd, Data(SHA256.hash(data: manifest)) == parsed.manifestHash else { throw PortableArchiveError.verificationFailed }
         let declaredSnapshotHash = try validateManifest(manifest, archiveID: archiveID, createdAtMilliseconds: createdAt)
         guard declaredSnapshotHash == Data(SHA256.hash(data: snapshot)) else { throw PortableArchiveError.verificationFailed }
         try validateSnapshot(snapshot)
         let archive = VerifiedPortableArchive(
             archiveID: archiveID,
             createdAt: Date(timeIntervalSince1970: Double(createdAt) / 1_000),
-            expiresAt: Date(timeIntervalSince1970: Double(expiresAt) / 1_000),
-            ciphertextChecksum: checksum,
-            signingKeyFingerprint: fingerprint
+            expiresAt: parsed.binding.expiresAt,
+            ciphertextChecksum: parsed.binding.ciphertextChecksum,
+            signingKeyFingerprint: parsed.binding.signingKeyFingerprint
         )
         return PortableArchiveContents(archive: archive, snapshot: snapshot)
+    }
+
+    private static func parsePublicArchive(data: Data) throws -> ParsedPublicArchive {
+        var reader = ArchiveReader(data)
+        guard try reader.take(8) == magic, try reader.uint16() == formatVersion, try reader.uint32() == headerLength else { throw PortableArchiveError.archiveInvalid }
+        let header = try reader.take(Int(headerLength))
+        var h = ArchiveReader(header)
+        let archiveID = try h.uuid(); let createdAt = try h.int64(); let expiresAt = try h.int64(); guard try h.byte() == 1 else { throw PortableArchiveError.archiveInvalid }
+        let (expectedExpiresAt, overflow) = createdAt.addingReportingOverflow(30 * 24 * 60 * 60 * 1000)
+        guard !overflow, expiresAt == expectedExpiresAt else { throw PortableArchiveError.archiveInvalid }
+        let salt = try h.take(32); let manifestHash = try h.take(32); let checksum = try h.take(32); let publicKey = try h.take(32); let fingerprint = try h.take(32); let envelope = try h.take(60); let signature = try h.take(64)
+        guard h.isAtEnd, Data(SHA256.hash(data: publicKey)) == fingerprint else { throw PortableArchiveError.archiveInvalid }
+        let commitment = headerCommitment(archiveID: archiveID, createdAtMilliseconds: createdAt, expiresAtMilliseconds: expiresAt, salt: salt, manifestHash: manifestHash, payloadChecksum: checksum, publicKey: publicKey, fingerprint: fingerprint)
+        guard try Curve25519.Signing.PublicKey(rawRepresentation: publicKey).isValidSignature(signature, for: signatureDomain + commitment + envelope) else { throw PortableArchiveError.verificationFailed }
+        let payloadLength = try reader.uint64(); guard payloadLength >= 28, payloadLength <= 512 * 1024 * 1024, payloadLength == UInt64(reader.remaining) else { throw PortableArchiveError.archiveInvalid }
+        let payload = try reader.take(Int(payloadLength)); guard reader.isAtEnd, Data(SHA256.hash(data: payload)) == checksum else { throw PortableArchiveError.verificationFailed }
+        return ParsedPublicArchive(
+            binding: PortableArchivePublicBinding(
+                archiveID: archiveID,
+                expiresAt: Date(timeIntervalSince1970: Double(expiresAt) / 1_000),
+                ciphertextChecksum: checksum,
+                signingKeyFingerprint: fingerprint
+            ),
+            createdAtMilliseconds: createdAt,
+            salt: salt,
+            manifestHash: manifestHash,
+            envelope: envelope,
+            commitment: commitment,
+            payload: payload
+        )
     }
 
     private static func sealPayload(manifest: Data, snapshot: Data, key: Data, archiveID: UUID, manifestHash: Data) throws -> Data {
@@ -139,12 +186,22 @@ nonisolated struct PortableArchiveService {
         guard reader.isAtEnd else { throw PortableArchiveError.archiveInvalid }
     }
 
-    private static func headerCommitment(archiveID: UUID, createdAt: Date, expiresAt: Date, salt: Data, manifestHash: Data, payloadChecksum: Data, publicKey: Data, fingerprint: Data) -> Data {
-        var data = headerDomain + magic; data.appendUInt16(formatVersion); data.appendUInt32(headerLength); data.append(archiveID.rawBytes); data.appendInt64(milliseconds(createdAt)); data.appendInt64(milliseconds(expiresAt)); data.append(1); data.append(salt); data.append(manifestHash); data.append(payloadChecksum); data.append(publicKey); data.append(fingerprint); return data
+    private static func headerCommitment(archiveID: UUID, createdAtMilliseconds: Int64, expiresAtMilliseconds: Int64, salt: Data, manifestHash: Data, payloadChecksum: Data, publicKey: Data, fingerprint: Data) -> Data {
+        var data = headerDomain + magic; data.appendUInt16(formatVersion); data.appendUInt32(headerLength); data.append(archiveID.rawBytes); data.appendInt64(createdAtMilliseconds); data.appendInt64(expiresAtMilliseconds); data.append(1); data.append(salt); data.append(manifestHash); data.append(payloadChecksum); data.append(publicKey); data.append(fingerprint); return data
     }
 
     private static func randomBytes(_ count: Int) throws -> Data { var data = Data(repeating: 0, count: count); guard data.withUnsafeMutableBytes({ SecRandomCopyBytes(kSecRandomDefault, count, $0.baseAddress!) }) == errSecSuccess else { throw PortableArchiveError.archiveInvalid }; return data }
     private static func milliseconds(_ date: Date) -> Int64 { Int64((date.timeIntervalSince1970 * 1000).rounded(.towardZero)) }
+}
+
+nonisolated private struct ParsedPublicArchive {
+    let binding: PortableArchivePublicBinding
+    let createdAtMilliseconds: Int64
+    let salt: Data
+    let manifestHash: Data
+    let envelope: Data
+    let commitment: Data
+    let payload: Data
 }
 
 nonisolated struct PortableArchiveContents: Sendable {
