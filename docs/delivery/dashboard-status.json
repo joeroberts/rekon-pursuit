@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "activePhaseId": "post_mvp_refinement",
-  "activeTaskId": null,
-  "nextEligibleTaskId": "VD2-01",
+  "activeTaskId": "VD2-01",
+  "nextEligibleTaskId": null,
   "phases": [
     {
       "id": "remediation_r1",
@@ -427,9 +427,9 @@
       "phaseId": "post_mvp_refinement",
       "title": "Visual foundation and tokens",
       "workType": "Visual foundation",
-      "status": "next_up",
+      "status": "in_progress",
       "releaseCondition": "Requires the independently approved Visual Design v2 plan and then its own review, QA, security/privacy, and product-owner acceptance before VD2-02 releases.",
-      "latestTransition": "Planning gates approved; eligible as the first dependency-safe Visual Design v2 child.",
+      "latestTransition": "Delivery released the foundation slice after independent Planning, Architect, TPM, QA, and Delivery approval.",
       "evidence": {
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"

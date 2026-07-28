@@ -176,7 +176,7 @@ pixel-copy mandate.
 
 | ID | Child card | Dependency / current state |
 | --- | --- | --- |
-| `VD2-01` | Visual foundation and tokens | **Next up** — all independent plan gates approved; no implementation released yet. |
+| `VD2-01` | Visual foundation and tokens | **In progress** — Delivery released only the governed foundation slice. |
 | `VD2-02` | App shell and navigation | Backlog — requires `VD2-01` accepted. |
 | `VD2-03` | Home redesign | Backlog — requires `VD2-02` accepted. |
 | `VD2-04` | Pipeline table and inspector | Backlog — requires `VD2-02` accepted. |
