@@ -20,8 +20,8 @@
   <main>
     <header><div class="eyebrow">Rekon Pursuit</div><h1>Delivery dashboard</h1><p class="subhead">Local operational view. This page refreshes every 30 seconds.</p></header>
     <section class="summary" aria-label="Delivery summary">
-      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">No task in progress</span></div>
-      <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">RP-R7b-2 — Purge deleted data from retained backups</span></div>
+      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">RP-R7b-2 — Purge deleted data from retained backups</span></div>
+      <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">No successor eligible</span></div>
       <div class="summary-item"><span class="summary-label">Accepted</span><span class="summary-value">22</span></div>
       <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">1</span></div>
       <div class="summary-item"><span class="summary-label">Blocked</span><span class="summary-value">0</span></div>
@@ -37,17 +37,17 @@
         </dl>
         <p class="action">No action needed</p>
         <a class="details-link" href="remediation.html#RP-R10">View task details</a>
-      </article></section><section class="lane lane-next_up"><header><h2>Next up</h2><span class="lane-count">1</span></header>
-      <article class="task-card status-next_up">
+      </article></section><section class="lane lane-next_up"><header><h2>Next up</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section><section class="lane lane-in_progress"><header><h2>In progress</h2><span class="lane-count">1</span></header>
+      <article class="task-card status-in_progress">
         <div class="card-heading"><span class="task-id">RP-R7b-2</span><span class="work-type">Data lifecycle</span></div>
         <h3>Purge deleted data from retained backups</h3>
         <dl>
           <div><dt>Release condition</dt><dd>Requires its own approved destructive-purge brief and Architecture/Security, TPM, QA, and Delivery gates; it must rebuild and verify a replacement before removing any predecessor archive.</dd></div>
-          <div><dt>Latest transition</dt><dd>Restored to the active remediation queue after R9 acceptance: ADR-001 makes the explicit purge/rebuild flow an accepted lifecycle requirement, not deferred polish.</dd></div>
+          <div><dt>Latest transition</dt><dd>Released for implementation after independent Planning, Architect, TPM, QA, Delivery, and Security/Privacy approval of the destructive-purge boundary.</dd></div>
         </dl>
         <p class="action">No action needed</p>
         <a class="details-link" href="remediation.html#RP-R7b-2">View task details</a>
-      </article></section><section class="lane lane-in_progress"><header><h2>In progress</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">22</span></header>
+      </article></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">22</span></header>
       <article class="task-card status-accepted">
         <div class="card-heading"><span class="task-id">RP-R0</span><span class="work-type">Foundation</span></div>
         <h3>Evidence-only remediation baseline</h3>

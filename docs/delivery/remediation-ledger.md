@@ -7,8 +7,8 @@
 Accepted. The wider `RP-R7a` recovery milestone, including its
 `RP-R7a-4` encrypted-default export task, and `RP-R7b-1` automatic portable
 archive expiry are Accepted. `RP-R7b-2` retained-data purge/rebuild remains
-unreleased and is now **Next up** for its own destructive-data lifecycle brief
-and high-risk gate. `RP-R8` is **Accepted** for its separate, bounded
+unreleased and is now **In progress** as the sole destructive-data lifecycle
+slice. `RP-R8` is **Accepted** for its separate, bounded
 empty-ledger surface. `RP-R9` is **Accepted** for its bounded Settings
 truthfulness pass. `RP-R10` remains Backlog as final candidate acceptance only
 after R7b-2 is accepted.
@@ -97,6 +97,17 @@ ordinary sequencing.
 | TPM | **Approved after P1 remediation** | The ledger status is reconciled and the only in-run trigger is inactive→active while a workspace is open; no timer or daemon is introduced. |
 | Product owner | **Accepted — R7b-1 only** | Verified the protected-export workflow in the opened Debug app after the final export-verification fix. The export-success confirmation window is recorded separately as deferred `UX-D10`. |
 | Delivery Manager | **Accepted — R7b-1 only** | Dashboard and ledger move R7b-1 to Accepted and `RP-R8` to Next up. R7b-2 purge/rebuild remains unreleased; no R8 implementation is released. |
+
+### RP-R7b-2 plan and release gate
+
+| Role | Decision | Evidence / boundary |
+| --- | --- | --- |
+| Planning | **Approved** | `RP-R7b-2-retained-data-purge.md` limits work to explicit purge of managed retained archives, immutable scope, verified replacement, and truthful durable outcomes. |
+| Architect | **Approved after P1 remediation** | The shared durable lease, strict expiry eligibility, and checks before promotion/removal prevent a purge from reviving or extending expired retention. |
+| QA | **Approved after P1 remediation** | Focused evidence covers invalid-key zero mutation, scope invalidation, expiry-state/lease collisions, interruption/relaunch, replacement-before-removal, and privacy redaction. |
+| Security / Privacy | **Approved after P1 remediation** | Replacements inherit the predecessor’s fixed creation/expiry times, and owner-only temporary artifacts have safe no-follow cleanup/reconciliation. |
+| TPM | **Approved** | R7b-2 is the sole dependency-safe successor and holds R10 Backlog; no unrelated work is released. |
+| Delivery Manager | **Released — R7b-2 only** | All high-risk plan gates are recorded. Move only R7b-2 to In progress; R10 remains Backlog. |
 | `RP-R8` | Empty read-only local AI ledger with time, feature, opportunity, route, model, completion, and cost filters. No AI/network/metrics execution. | Full `RP-R7a` plus accepted `RP-R7b-1`; `RP-R7b-2` is explicitly not a dependency. | **Accepted** | Every filter works at zero entries; no entry/network is produced. | Product owner accepted the empty-ledger surface and the multi-word activity-search correction. No storage, model execution, network, telemetry, metrics, or Phase 2 routing was released. `RP-R9` is next eligible for its own plan and gate only. |
 
 ### RP-R8 plan and release gate
@@ -110,7 +121,7 @@ ordinary sequencing.
 | Delivery Manager | **Released** | Canonical dashboard and ledger move R8 from Next up to In progress together. |
 | Security / Privacy | **Approved** | App-target-only view state; no AI/provider/network, raw content, persistence, metrics, telemetry, or audit entry surface. |
 | `RP-R9` | Settings exposes real recovery, expiry, deletion, export, document-reference, and ledger state; no fake integration controls. | `RP-R6`, `RP-R7b`, `RP-R8` | **Accepted** | Settings state matches stored state across relaunch. | Product owner accepted the narrow Settings pass after hands-on verification. Independent Code Review and QA approved; signed Debug build and focused lifecycle summary tests passed. Recovery/export/restore/purge behavior remains unchanged. |
-| `RP-R7b-2` | Explicitly purge logically deleted data from eligible retained managed archives: capture immutable scope, rebuild and verify a replacement, then remove only the verified predecessor; persist truthful incomplete/blocked state. | Accepted `RP-R7b-1` and an approved destructive-purge brief/gates | **Next up** | Multi-archive replacement-before-removal, cancellation/failure, durable incomplete-state, redaction, and active-content-preservation evidence. | ADR-001 accepted this requirement. It is the sole next remediation slice for planning and high-risk gates; no implementation is released. |
+| `RP-R7b-2` | Explicitly purge logically deleted data from eligible retained managed archives: capture immutable scope, rebuild and verify a replacement, then remove only the verified predecessor; persist truthful incomplete/blocked state. | Accepted `RP-R7b-1` and an approved destructive-purge brief/gates | **In progress** | Multi-archive replacement-before-removal, cancellation/failure, durable incomplete-state, redaction, and active-content-preservation evidence. | ADR-001 accepted this requirement. It is the sole released remediation slice; no adjacent lifecycle, export, restore, visual-design, or Phase 2 work is released. |
 | `RP-R10` | Clean-state, hands-on acceptance of the complete remediation candidate and package status reconciliation. | `RP-R1a`–`RP-R9`, `UX-R1`, `UX-R2`, and accepted `RP-R7b-2` | Backlog | Full user workflow evidence and independent milestone reviews. | Not eligible until R7b-2 is accepted; no implementation is released. |
 
 ### RP-R6 pre-implementation gate and release
@@ -504,6 +515,7 @@ not release R5.
 | 2026-07-28 | `RP-R9` | **Released for implementation** | R7b archive-expiry code was reconciled onto `main`; Planning, Architect, TPM, QA, and Delivery independently approved the R9 brief. Implement only truthful, persisted Settings lifecycle summaries. |
 | 2026-07-28 | `RP-R9` | **Accepted — RP-R10 Next up** | Product owner accepted the lifecycle-aware Settings screen after hands-on verification. Independent Code Review and QA found no P0/P1 findings; focused lifecycle summary verification and signed Debug build passed. RP-R10 requires its own plan and release gate. |
 | 2026-07-28 | `RP-R7b-2` / `RP-R10` | **Roadmap corrected — R7b-2 Next up; R10 Backlog** | Delivery review found that ADR-001’s accepted destructive retained-data purge/rebuild requirement was still unreleased. It is not silently deferred. R7b-2 is restored as the sole next slice for a dedicated high-risk plan and gates; R10 becomes final candidate acceptance only after it is accepted. |
+| 2026-07-28 | `RP-R7b-2` | **Released for implementation** | Planning, Architect, TPM, QA, Delivery, and Security/Privacy approved the corrected destructive-purge brief. Implement only managed-archive purge/rebuild with fixed-expiry inheritance, no-follow temporary cleanup, and failure-safe truthful state. R10 remains Backlog. |
 
 ### UX-R2-A acceptance record
 

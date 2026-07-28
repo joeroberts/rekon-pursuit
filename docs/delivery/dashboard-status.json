@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": null,
-  "nextEligibleTaskId": "RP-R7b-2",
+  "activeTaskId": "RP-R7b-2",
+  "nextEligibleTaskId": null,
   "tasks": [
     {
       "id": "RP-R0",
@@ -267,9 +267,9 @@
       "id": "RP-R7b-2",
       "title": "Purge deleted data from retained backups",
       "workType": "Data lifecycle",
-      "status": "next_up",
+      "status": "in_progress",
       "releaseCondition": "Requires its own approved destructive-purge brief and Architecture/Security, TPM, QA, and Delivery gates; it must rebuild and verify a replacement before removing any predecessor archive.",
-      "latestTransition": "Restored to the active remediation queue after R9 acceptance: ADR-001 makes the explicit purge/rebuild flow an accepted lifecycle requirement, not deferred polish.",
+      "latestTransition": "Released for implementation after independent Planning, Architect, TPM, QA, Delivery, and Security/Privacy approval of the destructive-purge boundary.",
       "evidence": {
         "label": "ADR-001 lifecycle decision",
         "href": "../../architecture/adr/ADR-001-local-data-lifecycle.md"

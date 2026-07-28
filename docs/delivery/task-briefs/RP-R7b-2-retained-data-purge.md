@@ -91,12 +91,19 @@ It does not:
    affected archive from the snapshot projection with only the captured deleted
    material excluded; retain active content and the privacy-minimized tombstone
    data required by the frozen archive contract.
-7. Write the replacement as a distinct sibling via a temporary artifact and
-   exclusive, no-follow final creation. Never overwrite or rename over the
-   predecessor. Fully verify the replacement (archive framing, signature,
-   envelope with the in-memory key, checksum, manifest/snapshot consistency,
+7. Write the replacement as a distinct sibling via an owner-only temporary
+   artifact and exclusive, no-follow final creation. Never overwrite or rename
+   over the predecessor. The replacement inherits the predecessor's original
+   `created_at` and fixed `expires_at`; rebuilding deleted material never
+   restarts or extends the 30-day retention window. Fully verify the
+   replacement (archive framing, signature, envelope with the in-memory key,
+   checksum, manifest/snapshot consistency, inherited creation/expiry values,
    required active-content preservation, and absence of the targeted deleted
-   identifiers) before adding its replacement catalogue entry.
+   identifiers) before adding its replacement catalogue entry. On every
+   non-promotion path, remove only the verified owner-only temporary artifact.
+   After interruption, deterministic reconciliation may remove only an
+   identified, no-follow temporary artifact associated with the durable job;
+   it must never follow links or remove an unverified final archive.
 8. Only after replacement catalogue promotion succeeds, re-open/recheck the
    predecessor's file identity and immutable scoped catalogue facts, then
    attempt best-effort removal. Remove its predecessor catalogue entry only
@@ -149,6 +156,9 @@ must remain readable and must not be overwritten by purge state.
   data but none of the captured deleted subject identifiers. The predecessor
   remains readable until that verification and replacement-catalogue promotion
   have succeeded.
+- A purge immediately before expiry proves the verified replacement inherits
+  the predecessor's original creation and exact fixed expiry timestamps; the
+  rebuild never creates a new retention window.
 - Cancellation before scope capture performs no work. Cancellation at temporary
   write, post-verification/predecessor-removal, and between archives leaves all
   not-yet-purged predecessors intact, discards the in-memory key, and persists
@@ -186,6 +196,12 @@ must remain readable and must not be overwritten by purge state.
   predecessor remains unless verified removal completed, both catalogue/job
   facts are truthful, no destructive work resumes without new confirmation
   and recovery-key entry, and retry is safe and idempotent.
+- Cancellation, verification/final-copy failure, and abrupt interruption at
+  temporary-artifact boundaries prove owner-only temporary artifacts are
+  either removed on the non-promotion path or safely reconciled from the
+  durable job record on relaunch. No untracked temporary archive remains in
+  the managed directory, and reconciliation never follows a link or removes
+  an unverified final archive.
 - Active workspace records, normal logical-deletion visibility/search behavior,
   and non-affected archive bytes remain unchanged. External archive bytes and
   catalogue state remain untouched.
