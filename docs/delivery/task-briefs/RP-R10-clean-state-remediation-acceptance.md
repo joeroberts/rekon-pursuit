@@ -1,6 +1,6 @@
 # RP-R10 — Clean-state remediation acceptance
 
-**State:** In progress — final clean-state owner acceptance. No new feature or package release is authorized.
+**State:** Accepted — final clean-state owner acceptance completed. No new feature or package release is authorized.
 **Depends on:** Accepted `RP-R1a` through `RP-R9`, `UX-R1`, `UX-R2`, and `RP-R7b-2`. Post-remediation UX/design work remains out of scope.
 **Blocks:** None. Acceptance confirms the complete remediation candidate; it does not release a Phase 2 capability, signing, notarization, DMG distribution, or the visual-design v2 work.
 
@@ -122,3 +122,20 @@ After the owner smoke, a fresh QA verifier and code/package reviewer confirm
 the evidence before Delivery Manager records the final decision. Their review
 is limited to whether the evidence supports the claim; it must not introduce
 new feature scope.
+
+## Final acceptance record
+
+- **Product owner:** Accepted the completed clean-state candidate, including the
+  final per-opportunity document-reference correction.
+- **Fresh QA:** Approved after seven focused workflow regressions passed,
+  including clean separate-workspace persistence, Home actions, CSV validation,
+  reconciliation routing, multi-word activity search, scoped document refresh,
+  and document opening.
+- **Code/package review:** Approved the current candidate at `88444e7` after a
+  Debug build and strict signature verification. The candidate is development
+  signed (`Apple Development: jaroberts4@gmail.com (PT7GS96H3L)`) as bundle
+  `com.rekonlabs.RekonPursuit`; it is not Developer ID signed, notarized, or a
+  DMG distribution.
+- **Delivery decision:** The remediation queue is accepted. Deferred UX polish,
+  design v2, and Phase 2 work remain separately planned and are not included
+  in this acceptance claim.

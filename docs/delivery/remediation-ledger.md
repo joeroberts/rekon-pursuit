@@ -9,8 +9,8 @@ Accepted. The wider `RP-R7a` recovery milestone, including its
 archive expiry and `RP-R7b-2` retained-data purge/rebuild are Accepted.
 `RP-R8` is **Accepted** for its separate, bounded
 empty-ledger surface. `RP-R9` is **Accepted** for its bounded Settings
-truthfulness pass. `RP-R10` is **In progress** for final clean-state owner
-acceptance. It is an evidence gate, not new implementation.
+truthfulness pass. `RP-R10` is **Accepted** as the final clean-state owner
+acceptance gate. It is an evidence gate, not new implementation.
 
 **Authority:** [dashboard-status.json](dashboard-status.json) is the canonical
 machine-readable operational view for the current remediation queue. This
@@ -121,7 +121,7 @@ ordinary sequencing.
 | Security / Privacy | **Approved** | App-target-only view state; no AI/provider/network, raw content, persistence, metrics, telemetry, or audit entry surface. |
 | `RP-R9` | Settings exposes real recovery, expiry, deletion, export, document-reference, and ledger state; no fake integration controls. | `RP-R6`, `RP-R7b`, `RP-R8` | **Accepted** | Settings state matches stored state across relaunch. | Product owner accepted the narrow Settings pass after hands-on verification. Independent Code Review and QA approved; signed Debug build and focused lifecycle summary tests passed. Recovery/export/restore/purge behavior remains unchanged. |
 | `RP-R7b-2` | Explicitly purge logically deleted data from eligible retained managed archives: capture immutable scope, rebuild and verify a replacement, then remove only the verified predecessor; persist truthful incomplete/blocked state. | Accepted `RP-R7b-1` and approved destructive-purge gates | **Accepted** | Multi-archive replacement-before-removal, cancellation/failure, durable incomplete-state, redaction, and active-content-preservation evidence. | `83d11b0`; Architect, QA, and Security re-review approved. Product owner verified the current signed Debug app exposed the purge control and completed the destructive workflow as described. |
-| `RP-R10` | Clean-state, hands-on acceptance of the complete remediation candidate and package status reconciliation. | `RP-R1a`–`RP-R9`, `UX-R1`, `UX-R2`, and accepted `RP-R7b-2` | **In progress** | Bounded owner workflow evidence, signed Debug candidate facts, and final independent review. | Final gate approved; run the six clean-state owner checks only. Acceptance is not yet claimed. |
+| `RP-R10` | Clean-state, hands-on acceptance of the complete remediation candidate and package status reconciliation. | `RP-R1a`–`RP-R9`, `UX-R1`, `UX-R2`, and accepted `RP-R7b-2` | **Accepted** | Bounded owner workflow evidence, signed Debug candidate facts, and final independent review. | Product owner accepted the candidate; fresh QA and package review approved the final evidence. |
 
 ### RP-R10 final acceptance gate
 
@@ -133,6 +133,15 @@ ordinary sequencing.
 | QA | **Approved** | Signed Debug build plus existing focused workflow regressions and the six direct owner checks are proportional; no full suite, harness, coverage target, or destructive lifecycle rerun is required. |
 | Security / Privacy | **Approved** | Use a disposable separate workspace; do not invoke restore/purge or the public-URL checker; redact paths, keys, document contents, and export material. |
 | Delivery Manager | **Released for owner acceptance** | Dashboard, ledger, and brief move R10 to In progress together. Do not claim acceptance or create a successor until the owner flow and final evidence review are complete. |
+
+### RP-R10 final acceptance record
+
+| Role | Decision | Evidence / boundary |
+| --- | --- | --- |
+| Product owner | **Accepted** | Completed the bounded clean-state workflow and accepted the per-opportunity document-reference corrective verification. |
+| Fresh QA verifier | **Approved** | Seven focused workflow regressions passed: separate-workspace persistence, Home actions, CSV validation, reconciliation routing, multi-word Activity search, scoped document refresh, and document open/lease release. No P0/P1 issue found. |
+| Fresh code/package reviewer | **Approved** | `88444e7` scopes document references to the selected opportunity; Debug build and `codesign --verify --deep --strict` passed. The candidate is development-signed Debug only, not Developer ID/notarized/DMG. |
+| Delivery Manager | **Accepted — remediation queue complete** | Dashboard, ledger, brief, and generated local page now record R10 as Accepted with no active or eligible remediation task. Deferred UX polish, visual-design v2, and Phase 2 work remain outside this claim. |
 
 ### RP-R6 pre-implementation gate and release
 
@@ -528,6 +537,7 @@ not release R5.
 | 2026-07-28 | `RP-R7b-2` | **Released for implementation** | Planning, Architect, TPM, QA, Delivery, and Security/Privacy approved the corrected destructive-purge brief. Implement only managed-archive purge/rebuild with fixed-expiry inheritance, no-follow temporary cleanup, and failure-safe truthful state. R10 remains Backlog. |
 | 2026-07-28 | `RP-R7b-2` | **Accepted — RP-R10 Next up** | Product owner verified the current signed Debug app exposed the purge control and the destructive retained-data workflow behaved as described. Architect, QA, and Security re-review approval plus focused purge-safety evidence remain recorded. R10 is eligible for its own final planning and independent gate only; no R10 implementation is released. |
 | 2026-07-28 | `RP-R10` | **Released for final clean-state owner acceptance** | Planning, Architect, TPM, QA, Delivery, and Security/Privacy approved the bounded six-step evidence flow. Build/open the existing development-signed Debug candidate, use a disposable separate workspace, and do not run restore, purge, or public-URL checking. No acceptance is claimed yet. |
+| 2026-07-28 | `RP-R10` | **Accepted — remediation queue complete** | Product owner accepted the clean-state candidate. Fresh QA verified seven focused workflows; fresh package review approved `88444e7`, the signed Debug build, and strict signature verification. No P0/P1 issue remains. Developer ID signing, notarization, DMG distribution, visual-design v2, and Phase 2 remain outside this accepted remediation scope. |
 
 ### UX-R2-A acceptance record
 
