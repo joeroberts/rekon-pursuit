@@ -136,3 +136,11 @@ class DashboardContractTests(unittest.TestCase):
         payload = renderer.script_safe_json({"title": "</script><img src=x>"})
         self.assertNotIn("</script", payload.lower())
         self.assertIn(r"\u003c/script\u003e", payload)
+
+    def test_detail_page_includes_phase_label_heading_and_compatible_fragment(self):
+        status = valid_status()
+        detail_page = renderer.render_detail_page(status)
+
+        self.assertIn("Post-MVP refinement", detail_page)
+        self.assertIn("<h1>Delivery task details</h1>", detail_page)
+        self.assertEqual(renderer.detail_href(status["tasks"][1]), "remediation.html#UX-D11")
