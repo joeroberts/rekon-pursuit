@@ -1176,6 +1176,19 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.filteredActivityEvents.map(\.kind), ["opportunity_created"])
     }
 
+    func testActivitySearchMatchesMultipleWordsInAnEventLabel() throws {
+        let store = try makeStore()
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
+        model.start()
+        model.title = "Product Manager"
+        model.company = "Rekon Labs"
+        model.createOpportunity()
+
+        model.activitySearch = "opportunity created"
+
+        XCTAssertEqual(model.filteredActivityEvents.map(\.kind), ["opportunity_created"])
+    }
+
     func testPipelineVisibilitySettingCanHideClosedOpportunities() throws {
         let store = try makeStore()
         let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
