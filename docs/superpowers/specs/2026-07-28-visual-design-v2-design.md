@@ -89,15 +89,17 @@ return safely to a valid route.
 
 Drag payloads contain only the opportunity ID. A drop target is validated
 before any command. The board calls `WorkspaceViewModel.changeStage(_:to:)`,
-which is the existing persisted transactional command. That command refreshes
+which remains the persisted transactional command but gains a typed result
+after refresh: persisted, same-stage no-op, reconciliation-blocked close,
+unavailable/deleted record, or store/refresh failure. The command refreshes
 the real workspace, records `opportunity_stage_changed`, keeps stage history,
 and preserves the reconciliation requirement for closure.
 
 The UI may animate lift/hover while dragging. It may not permanently reorder
-the local view until a successful store refresh confirms the change. A failed
-or rejected move restores the source lane, displays an actionable error, and
-creates no fabricated success evidence. Keyboard/VoiceOver stage actions are
-equivalent alternatives to drag/drop.
+the local view until the typed persisted outcome confirms the change. Every
+other outcome restores the source lane, displays its actionable accessible
+error, and creates no fabricated success evidence. Keyboard/VoiceOver stage
+actions are equivalent alternatives to drag/drop.
 
 ## Adaptive accessibility contract (ADR-VD2-04)
 
@@ -161,4 +163,3 @@ At every real delivery transition, update together:
    records this program
 4. generated `docs/delivery/dashboard/index.html` and detail HTML
 5. the SDD progress ledger and task review evidence.
-

@@ -2,8 +2,9 @@
 
 > **Execution model:** Required sub-skill: `superpowers:subagent-driven-development`.
 > Every implementation task is delivered by a fresh implementer, then independently
-> code-reviewed and QA-verified. `VD2-05` and `VD2-07` also require independent
-> security/privacy verification.
+> code-reviewed, QA-verified, and security/privacy-verified. The security/privacy
+> verification is proportional for presentation-only slices and deep for VD2-05
+> and VD2-07, but is never omitted.
 
 **Goal:** Rework the native macOS SwiftUI application to the approved Rekon
 Pursuit design system while preserving live local data, local-first recovery,
@@ -154,12 +155,17 @@ review/QA, and owner test of task action persistence.
 
 **Test first:** Case-insensitive multi-token search; stage and closed filters;
 selection/route/back behavior; empty state; inspector matching its selected
-record; saved edits and relaunch persistence.
+record; saved edits and relaunch persistence. Explicitly prove table selection
+is ephemeral: selecting a row to populate the inspector does not call
+`model.select(_)`, mutate `selectedOpportunityID`, reload a canonical draft, or
+change the current route. Only **Open details** may select and route to the
+canonical overview.
 
 **Implementation:** Build reference-inspired toolbar, table/list presentation,
 read-only inspector, board toggle boundary, responsive compact layout, and
-Open details action. The inspector is not a second editor; canonical editing
-stays in `OpportunityRoute.overview`.
+Open details action. Inspector selection is local ephemeral view state. The
+inspector is not a second editor; canonical editing stays in
+`OpportunityRoute.overview`.
 
 **Verify:** Existing import/reconcile/history routes plus focused table tests,
 independent code review/QA, and architecture selection-boundary review.
@@ -175,17 +181,22 @@ open details/save, return, and relaunch to confirm no stale selection/data.
 - Modify: `WorkspaceViewModelTests.swift`, `RekonPursuitTests.swift`,
   `RekonPursuitUITests.swift`
 
-**Test first:** Store/view-model regression tests for valid moves, same-stage
-no-op, rejected missing/closed-unconfirmed moves, store failure rollback,
-activity event, stage history, refreshed lane counts, and relaunch persistence.
-UI/manual tests cover drag, drop outside/cancel, keyboard alternative,
-VoiceOver labels, and Reduce Motion.
+**Test first:** Define a typed `StageMoveResult` at the view-model boundary,
+then add store/view-model regression tests for `.persisted`, `.noOp`,
+`.reconciliationBlocked`, `.unavailable`, and `.failed` outcomes. Cover valid
+moves, same-stage no-op, rejected missing/closed-unconfirmed moves, store or
+refresh failure rollback, activity event, stage history, refreshed lane counts,
+and relaunch persistence. UI/manual tests cover drag, drop outside/cancel,
+keyboard alternative, VoiceOver labels, and Reduce Motion.
 
 **Implementation:** Build truthful context-rich stage cards with SF-symbol or
-initial fallbacks only. Use a payload containing opportunity ID, validate target,
-and invoke only `WorkspaceViewModel.changeStage(_:to:)`. Animate drag lift and
-drop hover only; commit the lane change only after a successful source refresh.
-Show an accessible error and retain source placement on failure.
+initial fallbacks only. Introduce a structured stage-move result returned only
+after refresh; it distinguishes persisted move, same-stage no-op,
+reconciliation-blocked close, unavailable/deleted record, and store/refresh
+failure. Use a payload containing opportunity ID, validate target, and invoke
+only `WorkspaceViewModel.changeStage(_:to:)`. Animate drag lift and drop hover
+only; commit the lane change only after `.persisted`. All other outcomes retain
+source placement and expose their matching accessible error.
 
 **Verify:** Focused persistence/audit tests, full stage-move regression,
 independent code review, QA, and security/privacy verification.
@@ -256,9 +267,11 @@ at 860×600, 1100×760, default, and wide layouts.
 visible-focus review, Dynamic Type and Reduce Motion checks, and relaunch
 persistence checks for stage/contact/document/recovery flows.
 
-**Acceptance:** A separate reviewer, QA, and required security/privacy verifier
-approve. Product owner receives a concise signed Debug verification checklist
-and explicitly accepts. Only then does the Delivery Manager mark every child
-and `DESIGN-V2` Accepted and update the static dashboard/ledger/roadmap
+**Acceptance:** A separate reviewer, QA, and security/privacy verifier approve.
+Product owner receives a concise signed Debug verification checklist and
+explicitly accepts VD2-08. Every earlier child has already been accepted
+individually through its own
+`Backlog → Next up → In progress → review/QA/security → owner smoke → Accepted`
+transition before its successor released. Only then does the Delivery Manager
+marks `DESIGN-V2` Accepted and updates the static dashboard/ledger/roadmap
 together.
-
