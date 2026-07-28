@@ -26,7 +26,7 @@
       <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">1</span></div>
       <div class="summary-item"><span class="summary-label">Blocked</span><span class="summary-value">0</span></div>
     </section>
-    <section class="attention" aria-label="Attention queue"><h2>Attention queue</h2><p class="attention-empty">Nothing needs your attention.</p></section>
+    <section class="attention" aria-label="Attention queue"><h2>Attention queue</h2><ul><li><strong>RP-R7b-2:</strong> Verify the explicit Settings purge workflow in the current test app; it must remove deleted material only from a newly verified replacement archive and leave active records intact.</li></ul></section>
     <section class="board" aria-label="Delivery status board"><section class="lane lane-backlog"><header><h2>Backlog</h2><span class="lane-count">1</span></header>
       <article class="task-card status-backlog">
         <div class="card-heading"><span class="task-id">RP-R10</span><span class="work-type">Acceptance</span></div>
@@ -43,9 +43,9 @@
         <h3>Purge deleted data from retained backups</h3>
         <dl>
           <div><dt>Release condition</dt><dd>Requires its own approved destructive-purge brief and Architecture/Security, TPM, QA, and Delivery gates; it must rebuild and verify a replacement before removing any predecessor archive.</dd></div>
-          <div><dt>Latest transition</dt><dd>Released for implementation after independent Planning, Architect, TPM, QA, Delivery, and Security/Privacy approval of the destructive-purge boundary.</dd></div>
+          <div><dt>Latest transition</dt><dd>Implementation committed as 83d11b0 after Architect, QA, and Security re-review; ready for product-owner destructive-workflow verification.</dd></div>
         </dl>
-        <p class="action">No action needed</p>
+        <p class="action required">Action needed: Verify the explicit Settings purge workflow in the current test app; it must remove deleted material only from a newly verified replacement archive and leave active records intact.</p>
         <a class="details-link" href="remediation.html#RP-R7b-2">View task details</a>
       </article></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">22</span></header>
       <article class="task-card status-accepted">

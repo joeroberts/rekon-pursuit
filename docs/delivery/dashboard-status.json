@@ -269,12 +269,13 @@
       "workType": "Data lifecycle",
       "status": "in_progress",
       "releaseCondition": "Requires its own approved destructive-purge brief and Architecture/Security, TPM, QA, and Delivery gates; it must rebuild and verify a replacement before removing any predecessor archive.",
-      "latestTransition": "Released for implementation after independent Planning, Architect, TPM, QA, Delivery, and Security/Privacy approval of the destructive-purge boundary.",
+      "latestTransition": "Implementation committed as 83d11b0 after Architect, QA, and Security re-review; ready for product-owner destructive-workflow verification.",
       "evidence": {
-        "label": "ADR-001 lifecycle decision",
-        "href": "../../architecture/adr/ADR-001-local-data-lifecycle.md"
+        "label": "R7b-2 task brief",
+        "href": "../task-briefs/RP-R7b-2-retained-data-purge.md"
       },
-      "needsUserAction": false
+      "needsUserAction": true,
+      "userActionDetail": "Verify the explicit Settings purge workflow in the current test app; it must remove deleted material only from a newly verified replacement archive and leave active records intact."
     },
     {
       "id": "RP-R8",

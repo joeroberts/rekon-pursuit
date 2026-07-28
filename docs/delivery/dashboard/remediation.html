@@ -145,9 +145,9 @@
   <div class="heading"><span class="task-id">RP-R7b-2</span><span>Data lifecycle</span><span>In Progress</span></div>
   <h2>Purge deleted data from retained backups</h2>
   <dl><div><dt>Release condition</dt><dd>Requires its own approved destructive-purge brief and Architecture/Security, TPM, QA, and Delivery gates; it must rebuild and verify a replacement before removing any predecessor archive.</dd></div>
-  <div><dt>Latest transition</dt><dd>Released for implementation after independent Planning, Architect, TPM, QA, Delivery, and Security/Privacy approval of the destructive-purge boundary.</dd></div>
-  <div><dt>User action</dt><dd>No action needed</dd></div>
-  <div><dt>Evidence record</dt><dd>ADR-001 lifecycle decision</dd></div></dl>
+  <div><dt>Latest transition</dt><dd>Implementation committed as 83d11b0 after Architect, QA, and Security re-review; ready for product-owner destructive-workflow verification.</dd></div>
+  <div><dt>User action</dt><dd>Verify the explicit Settings purge workflow in the current test app; it must remove deleted material only from a newly verified replacement archive and leave active records intact.</dd></div>
+  <div><dt>Evidence record</dt><dd>R7b-2 task brief</dd></div></dl>
 </article><article id="RP-R8" class="detail status-accepted">
   <div class="heading"><span class="task-id">RP-R8</span><span>Observability</span><span>Accepted</span></div>
   <h2>Searchable local AI ledger</h2>
