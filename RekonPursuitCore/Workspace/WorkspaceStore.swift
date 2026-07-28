@@ -21,6 +21,11 @@ nonisolated private final class WorkspaceSynchronizationLock: @unchecked Sendabl
     func unlock() { value.unlock() }
 }
 
+nonisolated private struct ManagedArchivePurgeTarget: Sendable {
+    let catalogue: PortableArchiveCatalogueRow
+    let relativePath: String
+}
+
 final class WorkspaceStore {
     private let database: EncryptedDatabase
     private let clock: () -> Date
@@ -931,6 +936,107 @@ final class WorkspaceStore {
             actorID: actorID, correlationID: correlationID, managedRelativePath: relativePath
         )
         return try await portableArchiveWorker.createArchive(request)
+    }
+
+    /// Rebuilds each eligible, app-managed archive from the current active
+    /// workspace state. The snapshot encoder excludes logically deleted data,
+    /// so a verified replacement is written before the older archive is removed.
+    func purgeRetainedDeletedData(recoveryKey: RecoveryKey) async throws -> RetainedDataPurgeResult {
+        let commandNow = clock()
+        let root = managedPortableArchiveRoot()
+        let targets = try synchronized {
+            try eligibleManagedArchivePurgeTargetsLocked(after: commandNow)
+        }
+        var purgedArchiveIDs: [UUID] = []
+
+        for target in targets {
+            let predecessorURL = try managedArchiveURL(root: root, relativePath: target.relativePath)
+            let predecessorData = try Data(contentsOf: predecessorURL, options: [.mappedIfSafe])
+            let predecessor = try PortableArchiveService.readVerifiedArchive(data: predecessorData, recoveryKey: recoveryKey).archive
+            guard predecessor.archiveID == target.catalogue.archiveID,
+                  predecessor.createdAt == target.catalogue.createdAt,
+                  predecessor.expiresAt == target.catalogue.expiresAt,
+                  predecessor.ciphertextChecksum == target.catalogue.ciphertextChecksum,
+                  predecessor.signingKeyFingerprint == target.catalogue.signingKeyFingerprint else {
+                throw PortableArchiveError.verificationFailed
+            }
+
+            let replacementID = UUID()
+            let replacementRelativePath = "\(replacementID.uuidString.lowercased()).rekonarchive"
+            let replacement = try await portableArchiveWorker.createArchive(.init(
+                recoveryKey: recoveryKey,
+                destinationURL: try managedArchiveURL(root: root, relativePath: replacementRelativePath),
+                archiveID: replacementID,
+                temporaryID: UUID(),
+                activityID: nextIdentifier(),
+                createdAt: target.catalogue.createdAt,
+                actorID: actorID,
+                correlationID: correlationID,
+                managedRelativePath: replacementRelativePath
+            ))
+            guard replacement.createdAt == target.catalogue.createdAt,
+                  replacement.expiresAt == target.catalogue.expiresAt else {
+                throw PortableArchiveError.verificationFailed
+            }
+
+            try synchronized {
+                // The predecessor is an app-managed regular file proven above;
+                // do not follow a substituted symlink during the delete step.
+                var metadata = stat()
+                guard Darwin.lstat(predecessorURL.path, &metadata) == 0,
+                      (metadata.st_mode & S_IFMT) == S_IFREG else {
+                    throw PortableArchiveError.destinationUnavailable
+                }
+                guard Darwin.unlink(predecessorURL.path) == 0 else {
+                    throw PortableArchiveError.destinationUnavailable
+                }
+                try database.transaction {
+                    try database.execute(
+                        "DELETE FROM portable_archive_catalogue WHERE archive_id = ? AND storage_class = 'managed' AND managed_relative_path = ?",
+                        values: [.text(target.catalogue.archiveID.uuidString), .text(target.relativePath)]
+                    )
+                    try appendActivity(kind: "portable_backup_deleted_data_purged", opportunityID: nil, occurredAt: commandNow)
+                }
+            }
+            purgedArchiveIDs.append(target.catalogue.archiveID)
+        }
+        return RetainedDataPurgeResult(state: .complete, purgedArchiveIDs: purgedArchiveIDs)
+    }
+
+    private func managedPortableArchiveRoot() -> URL {
+        database.portableArchiveConnectionConfiguration().url
+            .deletingLastPathComponent()
+            .appendingPathComponent("portable-archives", isDirectory: true)
+    }
+
+    private func eligibleManagedArchivePurgeTargetsLocked(after now: Date) throws -> [ManagedArchivePurgeTarget] {
+        try database.rows("SELECT archive_id, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint, lifecycle_state, last_expiry_outcome, managed_relative_path FROM portable_archive_catalogue WHERE storage_class = 'managed' AND verification_state = 'Verified' AND lifecycle_state = 'Verified' AND expires_at > ? ORDER BY created_at ASC, archive_id ASC", values: [.real(now.timeIntervalSince1970)]).compactMap { row in
+            guard row.count == 11,
+                  case let .text(id) = row[0], let archiveID = UUID(uuidString: id),
+                  case let .text(filename) = row[1], case let .integer(version) = row[2],
+                  case let .real(createdAt) = row[3], case let .real(expiresAt) = row[4],
+                  case let .text(verificationState) = row[5], case let .blob(checksum) = row[6],
+                  case let .blob(fingerprint) = row[7], case let .text(lifecycleStateText) = row[8],
+                  let lifecycleState = PortableArchiveLifecycleState(rawValue: lifecycleStateText),
+                  case let .text(lastExpiryOutcomeText) = row[9],
+                  let lastExpiryOutcome = PortableArchiveExpiryOutcome(rawValue: lastExpiryOutcomeText),
+                  case let .text(relativePath) = row[10] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+            return ManagedArchivePurgeTarget(
+                catalogue: .init(archiveID: archiveID, displayFilename: filename, formatVersion: Int(version), createdAt: Date(timeIntervalSince1970: createdAt), expiresAt: Date(timeIntervalSince1970: expiresAt), verificationState: verificationState, ciphertextChecksum: checksum, signingKeyFingerprint: fingerprint, lifecycleState: lifecycleState, lastExpiryOutcome: lastExpiryOutcome),
+                relativePath: relativePath
+            )
+        }
+    }
+
+    private func managedArchiveURL(root: URL, relativePath: String) throws -> URL {
+        guard !relativePath.isEmpty,
+              !relativePath.contains("/"),
+              !relativePath.contains("\\"),
+              !relativePath.contains(".."),
+              (relativePath as NSString).pathExtension.lowercased() == "rekonarchive" else {
+            throw PortableArchiveError.destinationUnavailable
+        }
+        return root.appendingPathComponent(relativePath, isDirectory: false)
     }
 
     func reviewProtectedExport(recoveryKey: RecoveryKey, at destinationURL: URL) async throws -> ProtectedExportReview {

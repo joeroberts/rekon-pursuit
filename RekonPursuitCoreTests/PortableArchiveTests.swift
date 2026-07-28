@@ -1917,6 +1917,53 @@ final class PortableArchiveTests: XCTestCase {
         XCTAssertFalse(snapshot.contains(Data("opaque-bookmark-bytes".utf8)))
     }
 
+    func testPurgeRetainedDeletedDataRebuildsManagedArchiveWithoutDeletedOpportunity() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-purge-retained-data-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let database = try EncryptedDatabase.open(
+            url: root.appendingPathComponent("workspace.sqlite"),
+            key: Data(repeating: 0x61, count: 32)
+        )
+        let store = try WorkspaceStore(
+            database: database,
+            now: Date(timeIntervalSince1970: 1_704_067_200),
+            actorID: "purge-test",
+            correlationID: "purge-test"
+        )
+        defer { try? store.close() }
+
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+        let active = try store.create(CreateOpportunity(title: "Active role", company: "Rekon"))
+        let deleted = try store.create(CreateOpportunity(title: "Delete from archive", company: "Rekon"))
+        let predecessor = try await store.createManagedPortableArchive(recoveryKey: recoveryKey)
+        try store.deleteOpportunity(id: deleted.id)
+
+        let result = try await store.purgeRetainedDeletedData(recoveryKey: recoveryKey)
+        let catalogue = try store.portableArchiveCatalogue()
+
+        XCTAssertEqual(result.state, .complete)
+        XCTAssertEqual(result.purgedArchiveIDs, [predecessor.archiveID])
+        XCTAssertEqual(catalogue.count, 1)
+        let replacement = try XCTUnwrap(catalogue.first)
+        XCTAssertNotEqual(replacement.archiveID, predecessor.archiveID)
+        XCTAssertEqual(replacement.createdAt, predecessor.createdAt)
+        XCTAssertEqual(replacement.expiresAt, predecessor.expiresAt)
+
+        let archiveURL = root.appendingPathComponent("portable-archives/\(replacement.archiveID.uuidString.lowercased()).rekonarchive")
+        let contents = try PortableArchiveService.readVerifiedArchive(
+            data: Data(contentsOf: archiveURL),
+            recoveryKey: recoveryKey
+        )
+        let archivedOpportunityIDs = try snapshotRows(contents.snapshot, named: "opportunities")
+            .compactMap { $0.values.first?.text }
+        XCTAssertEqual(archivedOpportunityIDs, [active.id])
+        XCTAssertFalse(contents.snapshot.contains(Data("Delete from archive".utf8)))
+    }
+
     private func assertRestoreFails(_ operation: () async throws -> Void) async {
         do {
             try await operation()

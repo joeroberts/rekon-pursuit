@@ -150,6 +150,17 @@ nonisolated struct PortableArchiveCatalogueRow: Equatable, Sendable {
     }
 }
 
+/// The outcome of a deliberate retained-data purge. A completed purge may have
+/// an empty archive list when there are no eligible managed archives.
+nonisolated enum RetainedDataPurgeState: Equatable, Sendable {
+    case complete
+}
+
+nonisolated struct RetainedDataPurgeResult: Equatable, Sendable {
+    let state: RetainedDataPurgeState
+    let purgedArchiveIDs: [UUID]
+}
+
 nonisolated struct VerifiedPortableArchive: Equatable, Sendable {
     let archiveID: UUID
     let createdAt: Date
