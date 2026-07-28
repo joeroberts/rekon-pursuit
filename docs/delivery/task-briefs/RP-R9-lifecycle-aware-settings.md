@@ -1,6 +1,6 @@
 # RP-R9 — Lifecycle-aware Settings
 
-**State:** Next up — planning brief only; not released for implementation.  
+**State:** In progress — released for bounded implementation.  
 **Depends on:** RP-R6, the accepted RP-R7a recovery sequence, accepted RP-R7b-1 archive expiry, and accepted RP-R8 empty AI ledger.  
 **Does not depend on:** RP-R7b-2 retained-data purge/rebuild, which remains unreleased.  
 **Blocks:** RP-R10 final hands-on acceptance.

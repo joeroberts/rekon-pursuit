@@ -8,7 +8,7 @@ Accepted. The wider `RP-R7a` recovery milestone, including its
 `RP-R7a-4` encrypted-default export task, and `RP-R7b-1` automatic portable
 archive expiry are Accepted. `RP-R7b-2` retained-data purge/rebuild remains
 unreleased. `RP-R8` is **Accepted** for its separate, bounded empty-ledger
-surface. `RP-R9` is **Next up** for planning and release only; `RP-R10`
+surface. `RP-R9` is **In progress** for its bounded Settings truthfulness pass; `RP-R10`
 remains Backlog.
 
 **Authority:** [dashboard-status.json](dashboard-status.json) is the canonical
@@ -107,7 +107,7 @@ ordinary sequencing.
 | QA | **Approved — MVP-calibrated** | Focused pure filter checks plus one signed Debug manual smoke are proportional for this zero-entry/no-store surface; no fixture/reset harness is introduced. |
 | Delivery Manager | **Released** | Canonical dashboard and ledger move R8 from Next up to In progress together. |
 | Security / Privacy | **Approved** | App-target-only view state; no AI/provider/network, raw content, persistence, metrics, telemetry, or audit entry surface. |
-| `RP-R9` | Settings exposes real recovery, expiry, deletion, export, document-reference, and ledger state; no fake integration controls. | `RP-R6`, `RP-R7b`, `RP-R8` | **Next up** | Settings state matches stored state across relaunch. | Predecessors are accepted. It requires an approved plan and release gate; no implementation is released. |
+| `RP-R9` | Settings exposes real recovery, expiry, deletion, export, document-reference, and ledger state; no fake integration controls. | `RP-R6`, `RP-R7b`, `RP-R8` | **In progress** | Settings state matches stored state across relaunch. | R7b implementation is reconciled on `main`; Planning, Architect, TPM, QA, and Delivery approved the bounded brief. Only lifecycle summaries are released; recovery/export/restore/purge behavior remains unchanged. |
 | `RP-R10` | Clean-state, hands-on acceptance of all remediation tasks and candidate-package status reconciliation. | `RP-R1a`–`RP-R9`, `UX-R1`, `UX-R2` | Backlog | Full user workflow evidence and independent milestone reviews. | Pending every preceding task. |
 
 ### RP-R6 pre-implementation gate and release
@@ -498,6 +498,7 @@ not release R5.
 | 2026-07-27 | `RP-R7a-2` | **Released for implementation** | Planning, Architect/Security, TPM, QA, and Delivery approved the frozen v1 portable archive contract. Implement only authenticated logical-snapshot package creation, same-operation read-back verification, and the safe catalogue display. Restore, import, export, purge, expiry removal, and legacy-route access remain unreleased. |
 | 2026-07-27 | `RP-R7a-2` | **Accepted — portable archive package complete** | Product owner successfully created an archive through the app. Focused archive evidence passed six tests covering normal catalogue creation, post-create metadata failure, partial copy, destination collision, replacement detection, and failed readback. Architect, QA, and Code Review approved the final design: verified app-container staging and exclusive/no-follow final output; failed final output is never auto-deleted and is truthfully left for manual removal. Restore, import, export, purge, expiry removal, and legacy-route access remain unreleased. |
 | 2026-07-28 | `RP-R8` | **Accepted — RP-R9 Next up** | Product owner accepted the empty local AI-ledger filter surface and the focused multi-word activity-search correction. Existing independent Planning, Architect, TPM, QA, Delivery, Security/Privacy, and Code Review approvals remain the implementation evidence. `RP-R9` is eligible for planning and its own release gate only; no Settings implementation is released. |
+| 2026-07-28 | `RP-R9` | **Released for implementation** | R7b archive-expiry code was reconciled onto `main`; Planning, Architect, TPM, QA, and Delivery independently approved the R9 brief. Implement only truthful, persisted Settings lifecycle summaries. |
 
 ### UX-R2-A acceptance record
 

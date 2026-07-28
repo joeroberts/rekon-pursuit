@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": null,
-  "nextEligibleTaskId": "RP-R9",
+  "activeTaskId": "RP-R9",
+  "nextEligibleTaskId": null,
   "tasks": [
     {
       "id": "RP-R0",
@@ -280,9 +280,9 @@
       "id": "RP-R9",
       "title": "Lifecycle-aware settings",
       "workType": "Settings",
-      "status": "next_up",
-      "releaseCondition": "All document, recovery, and AI-ledger predecessors are accepted; requires its own approved plan and release gate before implementation.",
-      "latestTransition": "Became next eligible after RP-R8 acceptance; no RP-R9 implementation has been released.",
+      "status": "in_progress",
+      "releaseCondition": "Released after Planning, Architect, TPM, QA, and Delivery approval; implement only truthful Settings lifecycle summaries.",
+      "latestTransition": "Released for implementation after R7b reconciliation and independent plan gates cleared.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
