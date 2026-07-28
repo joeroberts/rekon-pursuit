@@ -88,6 +88,28 @@ class DashboardContractTests(unittest.TestCase):
         with self.assertRaises(renderer.DashboardContractError):
             self.validate(status)
 
+    def test_rejects_unknown_cross_phase_and_cyclic_task_dependencies(self):
+        unknown = valid_status()
+        unknown["tasks"][1]["dependsOnTaskIds"] = ["missing"]
+        with self.assertRaisesRegex(renderer.DashboardContractError, "unknown task"):
+            self.validate(unknown)
+
+        cross_phase = valid_status()
+        cross_phase["tasks"][1]["dependsOnTaskIds"] = ["RP-R10"]
+        with self.assertRaisesRegex(renderer.DashboardContractError, "same phase"):
+            self.validate(cross_phase)
+
+        cyclic = valid_status()
+        cyclic["tasks"].append(
+            {"id": "UX-D12", "phaseId": "post_mvp_refinement", "title": "Search",
+             "workType": "UX refinement", "status": "backlog",
+             "releaseCondition": "Planned.", "latestTransition": "Queued.",
+             "needsUserAction": False, "dependsOnTaskIds": ["UX-D11"]}
+        )
+        cyclic["tasks"][1]["dependsOnTaskIds"] = ["UX-D12"]
+        with self.assertRaisesRegex(renderer.DashboardContractError, "must not contain a cycle"):
+            self.validate(cyclic)
+
     def test_rejects_all_phase_lifecycle_invariant_failures(self):
         cases = []
 
@@ -151,6 +173,31 @@ class DashboardContractTests(unittest.TestCase):
         page = renderer.render_dashboard(valid_status())
         self.assertIn('>Tabs<', page)
         self.assertNotIn('>Acceptance<', page)
+
+    def test_render_orders_dependent_cards_after_their_prerequisites(self):
+        status = valid_status()
+        status["tasks"].append(
+            {"id": "UX-D12", "phaseId": "post_mvp_refinement", "title": "Successor",
+             "workType": "UX refinement", "status": "backlog",
+             "releaseCondition": "After Tabs.", "latestTransition": "Queued.",
+             "needsUserAction": False, "dependsOnTaskIds": ["UX-D11"]}
+        )
+        page = renderer.render_dashboard(status)
+        self.assertLess(page.index(">Tabs<"), page.index(">Successor<"))
+        self.assertIn("function orderTasksByDependency(tasks)", page)
+
+    def test_accepts_and_orders_a_forward_dependency_reference(self):
+        status = valid_status()
+        status["tasks"][1]["dependsOnTaskIds"] = ["UX-D12"]
+        status["tasks"].append(
+            {"id": "UX-D12", "phaseId": "post_mvp_refinement", "title": "Prerequisite",
+             "workType": "UX refinement", "status": "backlog",
+             "releaseCondition": "Planned.", "latestTransition": "Queued.",
+             "needsUserAction": False}
+        )
+        self.validate(status)
+        page = renderer.render_dashboard(status)
+        self.assertLess(page.index(">Prerequisite<"), page.index(">Tabs<"))
 
     def test_render_scopes_initial_summary_to_active_phase(self):
         page = renderer.render_dashboard(valid_status())

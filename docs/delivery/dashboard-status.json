@@ -448,6 +448,9 @@
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
       },
+      "dependsOnTaskIds": [
+        "VD2-01"
+      ],
       "needsUserAction": false
     },
     {
@@ -462,6 +465,9 @@
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
       },
+      "dependsOnTaskIds": [
+        "VD2-02"
+      ],
       "needsUserAction": false
     },
     {
@@ -476,6 +482,9 @@
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
       },
+      "dependsOnTaskIds": [
+        "VD2-02"
+      ],
       "needsUserAction": false
     },
     {
@@ -490,6 +499,9 @@
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
       },
+      "dependsOnTaskIds": [
+        "VD2-04"
+      ],
       "needsUserAction": false
     },
     {
@@ -504,6 +516,9 @@
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
       },
+      "dependsOnTaskIds": [
+        "VD2-02"
+      ],
       "needsUserAction": false
     },
     {
@@ -518,6 +533,9 @@
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
       },
+      "dependsOnTaskIds": [
+        "VD2-02"
+      ],
       "needsUserAction": false
     },
     {
@@ -532,6 +550,13 @@
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
       },
+      "dependsOnTaskIds": [
+        "VD2-03",
+        "VD2-04",
+        "VD2-05",
+        "VD2-06",
+        "VD2-07"
+      ],
       "needsUserAction": false
     },
     {

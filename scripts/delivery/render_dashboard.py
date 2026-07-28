@@ -85,6 +85,43 @@ def validate_local_href(value: str) -> None:
         ) from error
 
 
+def order_tasks_by_dependency(tasks: list[dict]) -> list[dict]:
+    """Return a stable topological task order within one delivery phase.
+
+    Cards without a recorded task dependency retain the canonical source order.
+    That makes legacy roadmap ordering deterministic while ensuring a dependent
+    card never appears ahead of a prerequisite in the same lane.
+    """
+    source_index = {task["id"]: index for index, task in enumerate(tasks)}
+    by_id = {task["id"]: task for task in tasks}
+    pending = {
+        task["id"]: set(task.get("dependsOnTaskIds", []))
+        for task in tasks
+    }
+    dependents: dict[str, list[str]] = {task["id"]: [] for task in tasks}
+    for task_id, dependencies in pending.items():
+        for dependency_id in dependencies:
+            dependents[dependency_id].append(task_id)
+
+    ready = sorted(
+        (task_id for task_id, dependencies in pending.items() if not dependencies),
+        key=source_index.__getitem__,
+    )
+    ordered: list[dict] = []
+    while ready:
+        task_id = ready.pop(0)
+        ordered.append(by_id[task_id])
+        for dependent_id in dependents[task_id]:
+            pending[dependent_id].remove(task_id)
+            if not pending[dependent_id]:
+                ready.append(dependent_id)
+        ready.sort(key=source_index.__getitem__)
+
+    if len(ordered) != len(tasks):
+        raise DashboardContractError("Task dependencies within a phase must not contain a cycle.")
+    return ordered
+
+
 def load_and_validate(source: Path) -> dict:
     try:
         data = json.loads(source.read_text(encoding="utf-8"))
@@ -172,6 +209,7 @@ def load_and_validate(source: Path) -> dict:
     ids: set[str] = set()
     tasks_by_phase: dict[str, list[dict]] = {phase_id: [] for phase_id in phases}
     tasks_by_id: dict[str, dict] = {}
+    task_dependency_records: list[tuple[str, str, list[object], int]] = []
     for index, task in enumerate(task_list, start=1):
         if not isinstance(task, dict):
             raise DashboardContractError(f"tasks[{index}] must be an object.")
@@ -215,6 +253,46 @@ def load_and_validate(source: Path) -> dict:
             require_string(evidence.get("label"), f"tasks[{index}].evidence.label")
             href = require_string(evidence.get("href"), f"tasks[{index}].evidence.href")
             validate_local_href(href)
+
+        dependencies = task.get("dependsOnTaskIds", [])
+        if not isinstance(dependencies, list):
+            raise DashboardContractError(
+                f"tasks[{index}].dependsOnTaskIds must be an array when present."
+            )
+        seen_dependencies: set[str] = set()
+        for dependency_index, dependency_id in enumerate(dependencies, start=1):
+            dependency_id = require_string(
+                dependency_id,
+                f"tasks[{index}].dependsOnTaskIds[{dependency_index}]",
+            )
+            if dependency_id in seen_dependencies:
+                raise DashboardContractError(
+                    f"Task {task_id!r} has duplicate dependency {dependency_id!r}."
+                )
+            seen_dependencies.add(dependency_id)
+            if dependency_id == task_id:
+                raise DashboardContractError(f"Task {task_id!r} cannot depend on itself.")
+
+        task_dependency_records.append((task_id, phase_id, dependencies, index))
+
+    for task_id, phase_id, dependencies, task_index in task_dependency_records:
+        for dependency_index, dependency_id in enumerate(dependencies, start=1):
+            dependency_id = require_string(
+                dependency_id,
+                f"tasks[{task_index}].dependsOnTaskIds[{dependency_index}]",
+            )
+            dependency = tasks_by_id.get(dependency_id)
+            if dependency is None:
+                raise DashboardContractError(
+                    f"Task {task_id!r} depends on unknown task {dependency_id!r}."
+                )
+            if dependency["phaseId"] != phase_id:
+                raise DashboardContractError(
+                    f"Task {task_id!r} dependency {dependency_id!r} must be in the same phase."
+                )
+
+    for tasks_in_phase in tasks_by_phase.values():
+        order_tasks_by_dependency(tasks_in_phase)
 
     active = data.get("activeTaskId")
     if active is not None:
@@ -313,7 +391,9 @@ def render_dashboard(status: dict) -> str:
     phase_by_id = {phase["id"]: phase for phase in status["phases"]}
     active_phase_id = status["activePhaseId"]
     active_phase = phase_by_id[active_phase_id]
-    tasks = [task for task in status["tasks"] if task["phaseId"] == active_phase_id]
+    tasks = order_tasks_by_dependency(
+        [task for task in status["tasks"] if task["phaseId"] == active_phase_id]
+    )
     task_by_id = {task["id"]: task for task in tasks}
     counts = {state: sum(task["status"] == state for task in tasks) for state, _ in LANES}
     attention = [task for task in tasks if task["needsUserAction"]]
@@ -388,6 +468,32 @@ def render_dashboard(status: dict) -> str:
       const phaseById = new Map(dashboardData.phases.map((phase) => [phase.id, phase]));
       const laneStates = {json.dumps([state for state, _ in LANES])};
 
+      function orderTasksByDependency(tasks) {{
+        const sourceIndex = new Map(tasks.map((task, index) => [task.id, index]));
+        const byId = new Map(tasks.map((task) => [task.id, task]));
+        const pending = new Map(tasks.map((task) => [task.id, new Set(task.dependsOnTaskIds || [])]));
+        const dependents = new Map(tasks.map((task) => [task.id, []]));
+        pending.forEach((dependencies, taskId) => {{
+          dependencies.forEach((dependencyId) => dependents.get(dependencyId).push(taskId));
+        }});
+        const ready = [...pending.entries()]
+          .filter(([, dependencies]) => dependencies.size === 0)
+          .map(([taskId]) => taskId)
+          .sort((left, right) => sourceIndex.get(left) - sourceIndex.get(right));
+        const ordered = [];
+        while (ready.length) {{
+          const taskId = ready.shift();
+          ordered.push(byId.get(taskId));
+          dependents.get(taskId).forEach((dependentId) => {{
+            const dependencies = pending.get(dependentId);
+            dependencies.delete(taskId);
+            if (dependencies.size === 0) ready.push(dependentId);
+          }});
+          ready.sort((left, right) => sourceIndex.get(left) - sourceIndex.get(right));
+        }}
+        return ordered;
+      }}
+
       function taskSummary(task) {{
         return task ? task.id + " — " + task.title : null;
       }}
@@ -442,7 +548,9 @@ def render_dashboard(status: dict) -> str:
       function renderPhase(phaseId) {{
         const phase = phaseById.get(phaseId);
         if (!phase) return;
-        const tasks = dashboardData.tasks.filter((task) => task.phaseId === phaseId);
+        const tasks = orderTasksByDependency(
+          dashboardData.tasks.filter((task) => task.phaseId === phaseId)
+        );
         const counts = Object.fromEntries(laneStates.map((state) => [state, 0]));
         tasks.forEach((task) => {{ counts[task.status] += 1; }});
         document.getElementById("selected-phase-label").textContent = phase.label;
@@ -498,7 +606,14 @@ def render_dashboard(status: dict) -> str:
 def render_detail_page(status: dict) -> str:
     phase_labels = {phase["id"]: phase["label"] for phase in status["phases"]}
     sections = []
-    for task in status["tasks"]:
+    ordered_tasks = []
+    for phase in status["phases"]:
+        ordered_tasks.extend(
+            order_tasks_by_dependency(
+                [task for task in status["tasks"] if task["phaseId"] == phase["id"]]
+            )
+        )
+    for task in ordered_tasks:
         evidence = task.get("evidence", {})
         evidence_label = evidence.get("label", "No separate evidence source recorded")
         action = task.get("userActionDetail", "No action needed")

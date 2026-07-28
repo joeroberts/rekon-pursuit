@@ -63,3 +63,13 @@ Phase lifecycle is `historical`, `active`, or `planned`: historical cards are
 Accepted, planned cards are Backlog with no owner action, and the active phase
 may depend only on accepted historical phases. The phase selector is view state
 only: it never writes JSON, ledger, roadmap, task state, or browser storage.
+
+## Card ordering
+
+Every phase uses the same stable, dependency-aware card order. Add an optional
+`dependsOnTaskIds` array to a task when its prerequisite is another task in the
+same phase. The renderer validates those references, rejects cycles, and shows
+each prerequisite before its successors in the dashboard and detail page. Cards
+without recorded task dependencies retain their canonical JSON/roadmap order.
+This supports the existing delivery history and future product work alike; it
+is not specific to any one remediation or program.
