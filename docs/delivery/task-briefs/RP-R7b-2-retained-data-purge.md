@@ -1,6 +1,6 @@
 # RP-R7b-2 — Explicit purge of logically deleted data from retained managed portable archives
 
-**State:** Proposed — serial, high-risk slice; not released for implementation  
+**State:** Accepted — product-owner hands-on verification completed.
 **Depends on:** RP-R7b-1 accepted; [ADR-001](../../architecture/adr/ADR-001-local-data-lifecycle.md); [R7b expiry and purge design](../../superpowers/specs/2026-07-27-r7b-expiry-and-purge-design.md)  
 **Blocks:** No other R7b work is released by this brief.
 

@@ -6,12 +6,11 @@
 `RP-R7a-1`, `RP-R7a-2`, `RP-R7a-3`, `RP-R7a-3a`, and `RP-R7a-3b` are
 Accepted. The wider `RP-R7a` recovery milestone, including its
 `RP-R7a-4` encrypted-default export task, and `RP-R7b-1` automatic portable
-archive expiry are Accepted. `RP-R7b-2` retained-data purge/rebuild remains
-unreleased and is now **In progress** as the sole destructive-data lifecycle
-slice. `RP-R8` is **Accepted** for its separate, bounded
+archive expiry and `RP-R7b-2` retained-data purge/rebuild are Accepted.
+`RP-R8` is **Accepted** for its separate, bounded
 empty-ledger surface. `RP-R9` is **Accepted** for its bounded Settings
-truthfulness pass. `RP-R10` remains Backlog as final candidate acceptance only
-after R7b-2 is accepted.
+truthfulness pass. `RP-R10` is **Next up** for its final planning and
+independent acceptance gate; no implementation is released yet.
 
 **Authority:** [dashboard-status.json](dashboard-status.json) is the canonical
 machine-readable operational view for the current remediation queue. This
@@ -121,8 +120,8 @@ ordinary sequencing.
 | Delivery Manager | **Released** | Canonical dashboard and ledger move R8 from Next up to In progress together. |
 | Security / Privacy | **Approved** | App-target-only view state; no AI/provider/network, raw content, persistence, metrics, telemetry, or audit entry surface. |
 | `RP-R9` | Settings exposes real recovery, expiry, deletion, export, document-reference, and ledger state; no fake integration controls. | `RP-R6`, `RP-R7b`, `RP-R8` | **Accepted** | Settings state matches stored state across relaunch. | Product owner accepted the narrow Settings pass after hands-on verification. Independent Code Review and QA approved; signed Debug build and focused lifecycle summary tests passed. Recovery/export/restore/purge behavior remains unchanged. |
-| `RP-R7b-2` | Explicitly purge logically deleted data from eligible retained managed archives: capture immutable scope, rebuild and verify a replacement, then remove only the verified predecessor; persist truthful incomplete/blocked state. | Accepted `RP-R7b-1` and an approved destructive-purge brief/gates | **In progress — hands-on verification** | Multi-archive replacement-before-removal, cancellation/failure, durable incomplete-state, redaction, and active-content-preservation evidence. | Implementation is committed as `83d11b0` after Architect, QA, and Security re-review. Five focused migration/purge safety checks passed. Product-owner verification remains required before acceptance; no downstream work is released. |
-| `RP-R10` | Clean-state, hands-on acceptance of the complete remediation candidate and package status reconciliation. | `RP-R1a`–`RP-R9`, `UX-R1`, `UX-R2`, and accepted `RP-R7b-2` | Backlog | Full user workflow evidence and independent milestone reviews. | Not eligible until R7b-2 is accepted; no implementation is released. |
+| `RP-R7b-2` | Explicitly purge logically deleted data from eligible retained managed archives: capture immutable scope, rebuild and verify a replacement, then remove only the verified predecessor; persist truthful incomplete/blocked state. | Accepted `RP-R7b-1` and approved destructive-purge gates | **Accepted** | Multi-archive replacement-before-removal, cancellation/failure, durable incomplete-state, redaction, and active-content-preservation evidence. | `83d11b0`; Architect, QA, and Security re-review approved. Product owner verified the current signed Debug app exposed the purge control and completed the destructive workflow as described. |
+| `RP-R10` | Clean-state, hands-on acceptance of the complete remediation candidate and package status reconciliation. | `RP-R1a`–`RP-R9`, `UX-R1`, `UX-R2`, and accepted `RP-R7b-2` | **Next up** | Full user workflow evidence and independent milestone reviews. | Eligible only for its final planning and independent release gate; no implementation is released. |
 
 ### RP-R6 pre-implementation gate and release
 
@@ -516,6 +515,7 @@ not release R5.
 | 2026-07-28 | `RP-R9` | **Accepted — RP-R10 Next up** | Product owner accepted the lifecycle-aware Settings screen after hands-on verification. Independent Code Review and QA found no P0/P1 findings; focused lifecycle summary verification and signed Debug build passed. RP-R10 requires its own plan and release gate. |
 | 2026-07-28 | `RP-R7b-2` / `RP-R10` | **Roadmap corrected — R7b-2 Next up; R10 Backlog** | Delivery review found that ADR-001’s accepted destructive retained-data purge/rebuild requirement was still unreleased. It is not silently deferred. R7b-2 is restored as the sole next slice for a dedicated high-risk plan and gates; R10 becomes final candidate acceptance only after it is accepted. |
 | 2026-07-28 | `RP-R7b-2` | **Released for implementation** | Planning, Architect, TPM, QA, Delivery, and Security/Privacy approved the corrected destructive-purge brief. Implement only managed-archive purge/rebuild with fixed-expiry inheritance, no-follow temporary cleanup, and failure-safe truthful state. R10 remains Backlog. |
+| 2026-07-28 | `RP-R7b-2` | **Accepted — RP-R10 Next up** | Product owner verified the current signed Debug app exposed the purge control and the destructive retained-data workflow behaved as described. Architect, QA, and Security re-review approval plus focused purge-safety evidence remain recorded. R10 is eligible for its own final planning and independent gate only; no R10 implementation is released. |
 
 ### UX-R2-A acceptance record
 

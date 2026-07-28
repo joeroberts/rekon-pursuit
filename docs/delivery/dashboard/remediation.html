@@ -141,12 +141,12 @@
   <div><dt>Latest transition</dt><dd>Accepted after focused lifecycle safety verification, independent code/QA/security re-review, and product-owner protected-export verification.</dd></div>
   <div><dt>User action</dt><dd>No action needed</dd></div>
   <div><dt>Evidence record</dt><dd>R7b-1 task brief</dd></div></dl>
-</article><article id="RP-R7b-2" class="detail status-in_progress">
-  <div class="heading"><span class="task-id">RP-R7b-2</span><span>Data lifecycle</span><span>In Progress</span></div>
+</article><article id="RP-R7b-2" class="detail status-accepted">
+  <div class="heading"><span class="task-id">RP-R7b-2</span><span>Data lifecycle</span><span>Accepted</span></div>
   <h2>Purge deleted data from retained backups</h2>
-  <dl><div><dt>Release condition</dt><dd>Requires its own approved destructive-purge brief and Architecture/Security, TPM, QA, and Delivery gates; it must rebuild and verify a replacement before removing any predecessor archive.</dd></div>
-  <div><dt>Latest transition</dt><dd>Implementation committed as 83d11b0 after Architect, QA, and Security re-review; ready for product-owner destructive-workflow verification.</dd></div>
-  <div><dt>User action</dt><dd>Verify the explicit Settings purge workflow in the current test app; it must remove deleted material only from a newly verified replacement archive and leave active records intact.</dd></div>
+  <dl><div><dt>Release condition</dt><dd>Accepted explicit retained-data purge: only a verified replacement archive may replace an eligible managed predecessor; active workspace data remains intact.</dd></div>
+  <div><dt>Latest transition</dt><dd>Accepted after the current signed Debug app exposed the purge control and the product owner verified the destructive workflow behaved as described.</dd></div>
+  <div><dt>User action</dt><dd>No action needed</dd></div>
   <div><dt>Evidence record</dt><dd>R7b-2 task brief</dd></div></dl>
 </article><article id="RP-R8" class="detail status-accepted">
   <div class="heading"><span class="task-id">RP-R8</span><span>Observability</span><span>Accepted</span></div>
@@ -162,11 +162,11 @@
   <div><dt>Latest transition</dt><dd>Accepted by the product owner after hands-on verification of lifecycle summaries and existing Settings actions.</dd></div>
   <div><dt>User action</dt><dd>No action needed</dd></div>
   <div><dt>Evidence record</dt><dd>Remediation ledger</dd></div></dl>
-</article><article id="RP-R10" class="detail status-backlog">
-  <div class="heading"><span class="task-id">RP-R10</span><span>Acceptance</span><span>Backlog</span></div>
+</article><article id="RP-R10" class="detail status-next_up">
+  <div class="heading"><span class="task-id">RP-R10</span><span>Acceptance</span><span>Next Up</span></div>
   <h2>Clean-state remediation acceptance</h2>
-  <dl><div><dt>Release condition</dt><dd>Release only after RP-R7b-2 and all prior remediation work are accepted; this is final candidate acceptance, not a way to defer accepted lifecycle work.</dd></div>
-  <div><dt>Latest transition</dt><dd>Moved back to Backlog after delivery review found RP-R7b-2 purge/rebuild is still an accepted, unreleased lifecycle requirement.</dd></div>
+  <dl><div><dt>Release condition</dt><dd>Eligible for its required final planning and independent-gate review now that RP-R7b-2 and all prior remediation work are accepted; this is final candidate acceptance, not a way to defer lifecycle work.</dd></div>
+  <div><dt>Latest transition</dt><dd>Released to Next up after RP-R7b-2 was accepted by product-owner hands-on verification.</dd></div>
   <div><dt>User action</dt><dd>No action needed</dd></div>
   <div><dt>Evidence record</dt><dd>Remediation ledger</dd></div></dl>
 </article></main></body></html>

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "RP-R7b-2",
-  "nextEligibleTaskId": null,
+  "activeTaskId": null,
+  "nextEligibleTaskId": "RP-R10",
   "tasks": [
     {
       "id": "RP-R0",
@@ -267,15 +267,14 @@
       "id": "RP-R7b-2",
       "title": "Purge deleted data from retained backups",
       "workType": "Data lifecycle",
-      "status": "in_progress",
-      "releaseCondition": "Requires its own approved destructive-purge brief and Architecture/Security, TPM, QA, and Delivery gates; it must rebuild and verify a replacement before removing any predecessor archive.",
-      "latestTransition": "Implementation committed as 83d11b0 after Architect, QA, and Security re-review; ready for product-owner destructive-workflow verification.",
+      "status": "accepted",
+      "releaseCondition": "Accepted explicit retained-data purge: only a verified replacement archive may replace an eligible managed predecessor; active workspace data remains intact.",
+      "latestTransition": "Accepted after the current signed Debug app exposed the purge control and the product owner verified the destructive workflow behaved as described.",
       "evidence": {
         "label": "R7b-2 task brief",
         "href": "../task-briefs/RP-R7b-2-retained-data-purge.md"
       },
-      "needsUserAction": true,
-      "userActionDetail": "Verify the explicit Settings purge workflow in the current test app; it must remove deleted material only from a newly verified replacement archive and leave active records intact."
+      "needsUserAction": false
     },
     {
       "id": "RP-R8",
@@ -307,9 +306,9 @@
       "id": "RP-R10",
       "title": "Clean-state remediation acceptance",
       "workType": "Acceptance",
-      "status": "backlog",
-      "releaseCondition": "Release only after RP-R7b-2 and all prior remediation work are accepted; this is final candidate acceptance, not a way to defer accepted lifecycle work.",
-      "latestTransition": "Moved back to Backlog after delivery review found RP-R7b-2 purge/rebuild is still an accepted, unreleased lifecycle requirement.",
+      "status": "next_up",
+      "releaseCondition": "Eligible for its required final planning and independent-gate review now that RP-R7b-2 and all prior remediation work are accepted; this is final candidate acceptance, not a way to defer lifecycle work.",
+      "latestTransition": "Released to Next up after RP-R7b-2 was accepted by product-owner hands-on verification.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
