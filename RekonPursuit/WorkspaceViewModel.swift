@@ -283,6 +283,8 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var isCreatingProtectedExport = false
     @Published private(set) var isRestoringPortableArchive = false
     @Published private(set) var portableArchiveRestoreState: PortableArchiveRestoreState = .idle
+    @Published private(set) var retainedDataPurgeStatus: RetainedDataPurgeStatus?
+    @Published private(set) var isPurgingRetainedArchiveData = false
 
     private let openWorkspace: () throws -> WorkspaceOpenState
     private let openExternalWorkspace: (URL) throws -> WorkspaceOpenState
@@ -305,6 +307,7 @@ final class WorkspaceViewModel: ObservableObject {
     private var portableArchiveRestoreOperationID: UUID?
     private var portableArchiveRestoreTask: Task<Void, Never>?
     private var portableArchiveRestoreCancellationPending = false
+    private var retainedDataPurgeTask: Task<Void, Never>?
     private var publicURLCheckTasks: [String: Task<Void, Never>] = [:]
     private var isLoadingSelectedOpportunity = false
 
@@ -1275,6 +1278,50 @@ final class WorkspaceViewModel: ObservableObject {
         protectedExportErrorMessage = nil
     }
 
+    func purgeRetainedArchiveData(reentry: String) {
+        guard !isPurgingRetainedArchiveData else { return }
+        guard let key = RecoveryKey.parse(reentry) else {
+            statusMessage = "Enter the complete recovery key, including its checksum."
+            return
+        }
+        guard let store = readyStore() else { return }
+        isPurgingRetainedArchiveData = true
+        statusMessage = "Removing deleted data from eligible retained archives…"
+        retainedDataPurgeTask = Task { @MainActor [weak self, store] in
+            defer {
+                self?.isPurgingRetainedArchiveData = false
+                self?.retainedDataPurgeTask = nil
+            }
+            do {
+                let result = try await store.purgeRetainedDeletedData(recoveryKey: key)
+                guard let self, self.store === store else { return }
+                self.refreshCounts()
+                switch result.state {
+                case .complete:
+                    self.statusMessage = result.purgedArchiveIDs.isEmpty
+                        ? "No eligible retained archive contained deleted data."
+                        : "Deleted data was removed from \(result.purgedArchiveIDs.count) retained archive(s)."
+                case .cancelled:
+                    self.statusMessage = "Retained-data purge cancelled. Existing archives were left intact where work had not completed."
+                case .incomplete, .blocked, .running:
+                    self.statusMessage = "Retained-data purge finished with items that need review. Existing source archives were preserved."
+                }
+            } catch let error as LocalizedError {
+                guard let self, self.store === store else { return }
+                self.refreshCounts()
+                self.statusMessage = error.errorDescription ?? "The retained-data purge could not start. No archive was removed."
+            } catch {
+                guard let self, self.store === store else { return }
+                self.refreshCounts()
+                self.statusMessage = "The retained-data purge could not start. No archive was removed."
+            }
+        }
+    }
+
+    func cancelRetainedDataPurge() {
+        retainedDataPurgeTask?.cancel()
+    }
+
     private static func protectedExportMessage(for error: Error, fallback: String) -> String {
         if let controlled = error as? ProtectedExportWorkerError { return controlled.errorDescription ?? fallback }
         if let controlled = error as? ProtectedExportError { return controlled.errorDescription ?? fallback }
@@ -1820,6 +1867,7 @@ final class WorkspaceViewModel: ObservableObject {
             csvImportReportRows = try csvImportReport.map { try store?.importReportRows(for: $0.id) ?? [] } ?? []
             recoveryEnrollmentEnabled = try store?.recoveryEnrollmentState().isEnabled ?? false
             portableArchiveCatalogue = try store?.portableArchiveCatalogue() ?? []
+            retainedDataPurgeStatus = try store?.retainedDataPurgeStatus()
             documentReferenceSummary = try store?.documentReferenceSummary() ?? DocumentReferenceSummary(availableCount: 0, relinkRequiredCount: 0)
         } catch {
             statusMessage = "The local workspace could not be read."

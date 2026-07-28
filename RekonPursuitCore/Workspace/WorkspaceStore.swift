@@ -21,6 +21,28 @@ nonisolated private final class WorkspaceSynchronizationLock: @unchecked Sendabl
     func unlock() { value.unlock() }
 }
 
+nonisolated private struct RetainedDataPurgeScope: Sendable {
+    let archiveID: UUID
+    let revision: Int64
+    let expiresAt: Date
+    let createdAt: Date
+    let checksum: Data
+    let fingerprint: Data
+    let relativePath: String
+}
+
+nonisolated private struct RetainedDataPurgeJob: Sendable {
+    let id: UUID
+    let deletedOpportunityIDs: Set<String>
+    let deletedContactIDs: Set<String>
+    let scopes: [RetainedDataPurgeScope]
+}
+
+nonisolated private struct ManagedArchiveFile: Sendable {
+    let data: Data
+    let identity: PortableArchiveExpiryFileIdentity
+}
+
 final class WorkspaceStore {
     private let database: EncryptedDatabase
     private let clock: () -> Date
@@ -73,6 +95,7 @@ final class WorkspaceStore {
             configuration: database.portableArchiveConnectionConfiguration()
         )
         try WorkspaceMigrations.apply(to: database)
+        try interruptAbandonedRetainedDataPurgesAtLaunch()
         try interruptAbandonedPublicURLChecksAtLaunch()
     }
 
@@ -867,6 +890,22 @@ final class WorkspaceStore {
         }
     }
 
+    func retainedDataPurgeStatus() throws -> RetainedDataPurgeStatus? {
+        try synchronized {
+            guard let row = try database.rows("SELECT id, state, started_at, finished_at FROM retained_data_purge_jobs ORDER BY started_at DESC LIMIT 1").first,
+                  row.count == 4,
+                  case let .text(id) = row[0], let jobID = UUID(uuidString: id),
+                  case let .text(stateText) = row[1], let state = RetainedDataPurgeState(rawValue: stateText),
+                  case let .real(startedAt) = row[2] else {
+                return nil
+            }
+            let finishedAt: Date?
+            if case let .real(value) = row[3] { finishedAt = Date(timeIntervalSince1970: value) }
+            else { finishedAt = nil }
+            return RetainedDataPurgeStatus(jobID: jobID, state: state, startedAt: Date(timeIntervalSince1970: startedAt), finishedAt: finishedAt)
+        }
+    }
+
     func runPortableArchiveExpiryServiceOpportunity() async throws -> [PortableArchiveCatalogueRow] {
         try await portableArchiveExpiryWorker.run()
         return try synchronized { try portableArchiveCatalogueRowsLocked() }
@@ -931,6 +970,212 @@ final class WorkspaceStore {
             actorID: actorID, correlationID: correlationID, managedRelativePath: relativePath
         )
         return try await portableArchiveWorker.createArchive(request)
+    }
+
+    /// Explicitly removes already logically-deleted opportunity material from
+    /// eligible, workspace-managed retained archives. This never touches an
+    /// external archive and never overwrites a predecessor in place.
+    func purgeRetainedDeletedData(recoveryKey: RecoveryKey) async throws -> RetainedDataPurgeResult {
+        let startedAt = clock()
+        let job = try synchronized { try beginRetainedDataPurge(recoveryKey: recoveryKey, startedAt: startedAt) }
+        var purged: [UUID] = []
+        var incomplete: [UUID] = []
+        var wasCancelled = false
+
+        for scope in job.scopes {
+            if Task.isCancelled {
+                wasCancelled = true
+                break
+            }
+            var predecessorRemoved = false
+            do {
+                let predecessorURL = try managedArchiveURL(id: scope.archiveID, relativePath: scope.relativePath)
+                let predecessorFile = try readManagedArchive(at: predecessorURL)
+                try synchronized { try rememberPurgePredecessorIdentity(jobID: job.id, archiveID: scope.archiveID, identity: predecessorFile.identity) }
+                let contents = try PortableArchiveService.readVerifiedArchive(data: predecessorFile.data, recoveryKey: recoveryKey)
+                guard contents.archive.archiveID == scope.archiveID,
+                      contents.archive.createdAt == scope.createdAt,
+                      contents.archive.expiresAt == scope.expiresAt,
+                      contents.archive.ciphertextChecksum == scope.checksum,
+                      contents.archive.signingKeyFingerprint == scope.fingerprint else {
+                    throw PortableArchiveError.verificationFailed
+                }
+                let archivedSubjectIDs = try snapshotDeletedSubjectIDs(contents.snapshot)
+                guard !archivedSubjectIDs.opportunities.intersection(job.deletedOpportunityIDs).isEmpty ||
+                      !archivedSubjectIDs.contacts.intersection(job.deletedContactIDs).isEmpty else {
+                    try synchronized { try setPurgePhase(jobID: job.id, archiveID: scope.archiveID, phase: .notAffected) }
+                    continue
+                }
+                let replacementID = UUID()
+                let replacementRelativePath = "\(replacementID.uuidString.lowercased()).rekonarchive"
+                let replacementURL = try managedArchiveURL(id: replacementID, relativePath: replacementRelativePath)
+                // Persist the deterministic final locator before the write. A
+                // process stop after write completion can then be reconciled at
+                // launch instead of leaving an anonymous managed file behind.
+                try synchronized {
+                    try setPurgePhase(
+                        jobID: job.id,
+                        archiveID: scope.archiveID,
+                        phase: .replacementWriting,
+                        replacementID: replacementID
+                    )
+                }
+                let projected = try PortableArchiveSnapshotCodec.projecting(
+                    contents.snapshot,
+                    removingOpportunityIDs: job.deletedOpportunityIDs,
+                    removingContactIDs: job.deletedContactIDs
+                )
+                let replacement = try await portableArchiveWorker.writeManagedReplacement(
+                    snapshot: projected,
+                    recoveryKey: recoveryKey,
+                    archiveID: replacementID,
+                    createdAt: scope.createdAt,
+                    destinationURL: replacementURL
+                )
+                try synchronized {
+                    try rememberPurgeReplacementIdentity(
+                        jobID: job.id,
+                        archiveID: scope.archiveID,
+                        identity: PortableArchiveExpiryFileIdentity(
+                            device: replacement.ownership.device,
+                            inode: replacement.ownership.inode
+                        )
+                    )
+                    try setPurgePhase(jobID: job.id, archiveID: scope.archiveID, phase: .replacementVerified, replacementID: replacementID)
+                }
+                if Task.isCancelled {
+                    wasCancelled = true
+                    // The verified final file must never become untracked. Prefer
+                    // catalogue promotion over a best-effort unlink; if promotion
+                    // cannot be recorded, leave its durable identity for explicit
+                    // recovery rather than silently losing ownership evidence.
+                    do {
+                        try synchronized {
+                            try promoteReplacement(jobID: job.id, scope: scope, replacement: replacement.archive, replacementURL: replacementURL, replacementRelativePath: replacementRelativePath, now: clock())
+                            try setPurgePhase(jobID: job.id, archiveID: scope.archiveID, phase: .cancelled, replacementID: replacementID, outcome: "cancelled_after_replacement_catalogued")
+                        }
+                    } catch {
+                        // The predecessor is still intact. Remove only the final
+                        // file we just wrote, after re-checking its exact managed
+                        // identity. If that fails, leave a durable blocked record
+                        // and report an incomplete job rather than hiding it as a
+                        // successful cancellation.
+                        do {
+                            try synchronized {
+                                try removeUncataloguedManagedReplacement(
+                                    at: replacementURL,
+                                    expectedID: replacementID,
+                                    expectedIdentity: PortableArchiveExpiryFileIdentity(
+                                        device: replacement.ownership.device,
+                                        inode: replacement.ownership.inode
+                                    )
+                                )
+                                try setPurgePhase(jobID: job.id, archiveID: scope.archiveID, phase: .cancelled, replacementID: replacementID, outcome: "cancelled_after_unpromoted_replacement_removed")
+                            }
+                        } catch {
+                            incomplete.append(scope.archiveID)
+                            try? synchronized {
+                                try setPurgePhase(jobID: job.id, archiveID: scope.archiveID, phase: .blocked, replacementID: replacementID, outcome: "cancelled_replacement_catalogue_failed")
+                            }
+                        }
+                    }
+                    break
+                }
+                guard replacement.archive.expiresAt == scope.expiresAt else { throw PortableArchiveError.verificationFailed }
+                try synchronized {
+                    try promoteReplacement(
+                        jobID: job.id,
+                        scope: scope,
+                        replacement: replacement.archive,
+                        replacementURL: replacementURL,
+                        replacementRelativePath: replacementRelativePath,
+                        now: clock()
+                    )
+                }
+                try synchronized { try setPurgePhase(jobID: job.id, archiveID: scope.archiveID, phase: .predecessorRemovalPending, replacementID: replacementID) }
+                if Task.isCancelled {
+                    wasCancelled = true
+                    try synchronized { try setPurgePhase(jobID: job.id, archiveID: scope.archiveID, phase: .cancelled, replacementID: replacementID, outcome: "cancelled_before_predecessor_removal") }
+                    break
+                }
+                try synchronized {
+                    guard try scopedArchiveStillPurgeCompatible(scope, at: clock()) else {
+                        throw PortableArchiveError.verificationFailed
+                    }
+                }
+                let persistedIdentityMatches = try synchronized {
+                    try persistedPurgePredecessorIdentityMatches(
+                        jobID: job.id,
+                        archiveID: scope.archiveID,
+                        expectedIdentity: predecessorFile.identity
+                    )
+                }
+                guard persistedIdentityMatches else { throw PortableArchiveError.archiveMayRemainAfterOutputFailure }
+                try removeManagedPredecessor(
+                    at: predecessorURL,
+                    expectedIdentity: predecessorFile.identity,
+                    expectedArchive: scope,
+                    recoveryKey: recoveryKey
+                )
+                predecessorRemoved = true
+                try synchronized {
+                    try database.transaction {
+                        // The final lifecycle/expiry check occurs immediately before
+                        // removal. Once removal succeeds, the catalogue must be
+                        // reconciled even if the archive becomes due meanwhile.
+                        try database.execute("DELETE FROM portable_archive_catalogue WHERE archive_id = ?", values: [.text(scope.archiveID.uuidString)])
+                        try database.execute("DELETE FROM portable_archive_operation_leases WHERE archive_id = ? AND owner_kind = 'retained_data_purge' AND owner_id = ?", values: [.text(scope.archiveID.uuidString), .text(job.id.uuidString)])
+                        try database.execute("UPDATE retained_data_purge_archive_phases SET phase = 'purged', outcome = 'purged' WHERE job_id = ? AND archive_id = ?", values: [.text(job.id.uuidString), .text(scope.archiveID.uuidString)])
+                    }
+                }
+                purged.append(scope.archiveID)
+            } catch {
+                incomplete.append(scope.archiveID)
+                try? synchronized {
+                    if predecessorRemoved {
+                        // The file is already gone. Preserve this durable phase so
+                        // launch recovery can remove only the stale predecessor
+                        // catalogue entry; never relabel it as a generic block.
+                        try setPurgePhase(
+                            jobID: job.id,
+                            archiveID: scope.archiveID,
+                            phase: .predecessorRemovalPending,
+                            outcome: "catalogue_reconciliation_required"
+                        )
+                    } else {
+                        try setPurgePhase(jobID: job.id, archiveID: scope.archiveID, phase: .blocked, outcome: "blocked")
+                        try database.execute("DELETE FROM portable_archive_operation_leases WHERE archive_id = ? AND owner_kind = 'retained_data_purge' AND owner_id = ?", values: [.text(scope.archiveID.uuidString), .text(job.id.uuidString)])
+                    }
+                }
+            }
+        }
+        // A cancellation is only clean when it leaves no durable residual.
+        // If a verified replacement could not be catalogued, keep the job
+        // visibly incomplete so the user is not told it was safely cancelled.
+        let state: RetainedDataPurgeState = wasCancelled && incomplete.isEmpty
+            ? .cancelled
+            : (incomplete.isEmpty ? .complete : .incomplete)
+        try synchronized {
+            try database.transaction {
+                let pending = try database.rows(
+                    "SELECT count(*) FROM retained_data_purge_archive_phases WHERE job_id = ? AND phase = 'predecessor_removal_pending'",
+                    values: [.text(job.id.uuidString)]
+                )
+                guard case let .integer(pendingCount)? = pending.first?.first else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+                if pendingCount == 0 {
+                    try database.execute("DELETE FROM portable_archive_operation_leases WHERE owner_kind = 'retained_data_purge' AND owner_id = ?", values: [.text(job.id.uuidString)])
+                }
+                try database.execute("UPDATE retained_data_purge_jobs SET state = ?, finished_at = ? WHERE id = ?", values: [.text(state.rawValue), .real(clock().timeIntervalSince1970), .text(job.id.uuidString)])
+                let activityKind: String
+                switch state {
+                case .complete: activityKind = "retained_data_purge_finished"
+                case .cancelled: activityKind = "retained_data_purge_cancelled"
+                case .incomplete, .blocked, .running: activityKind = "retained_data_purge_incomplete"
+                }
+                try appendActivity(kind: activityKind, opportunityID: nil, occurredAt: clock())
+            }
+        }
+        return RetainedDataPurgeResult(jobID: job.id, state: state, purgedArchiveIDs: purged, incompleteArchiveIDs: incomplete)
     }
 
     func reviewProtectedExport(recoveryKey: RecoveryKey, at destinationURL: URL) async throws -> ProtectedExportReview {
@@ -1695,6 +1940,428 @@ final class WorkspaceStore {
             fromStage = nil
         }
         return StageHistoryEntry(id: id, opportunityID: opportunityID, fromStage: fromStage, toStage: toStage, occurredAt: Date(timeIntervalSince1970: occurredAt))
+    }
+
+    private func beginRetainedDataPurge(recoveryKey: RecoveryKey, startedAt: Date) throws -> RetainedDataPurgeJob {
+        guard let enrollment = try database.rows("SELECT fingerprint FROM recovery_enrollment WHERE id = 1").first,
+              case let .text(fingerprint) = enrollment.first,
+              fingerprint == recoveryKey.fingerprint else {
+            throw PortableArchiveError.invalidRecoveryKey
+        }
+        let jobID = UUID()
+        let tombstones = try database.rows(
+            "SELECT subject_type, subject_id FROM deletion_tombstones WHERE subject_type IN ('opportunity', 'contact') ORDER BY subject_type, subject_id"
+        )
+        var deletedOpportunityIDs = Set<String>()
+        var deletedContactIDs = Set<String>()
+        for row in tombstones {
+            guard row.count == 2,
+                  case let .text(subjectType) = row[0],
+                  case let .text(subjectID) = row[1] else {
+                throw WorkspaceStoreError.unexpectedDatabaseValue
+            }
+            switch subjectType {
+            case "opportunity": deletedOpportunityIDs.insert(subjectID)
+            case "contact": deletedContactIDs.insert(subjectID)
+            default: break
+            }
+        }
+        let rows = try database.rows(
+            "SELECT archive_id, expiry_revision, expires_at, created_at, ciphertext_checksum, signing_key_fingerprint, managed_relative_path FROM portable_archive_catalogue WHERE storage_class = 'managed' AND verification_state = 'Verified' AND lifecycle_state = 'Verified' AND expires_at > ? ORDER BY archive_id",
+            values: [.real(startedAt.timeIntervalSince1970)]
+        )
+        let scopes = rows.compactMap { row -> RetainedDataPurgeScope? in
+            guard row.count == 7,
+                  case let .text(id) = row[0], let archiveID = UUID(uuidString: id),
+                  case let .integer(revision) = row[1],
+                  case let .real(expiresAt) = row[2], case let .real(createdAt) = row[3],
+                  case let .blob(checksum) = row[4], case let .blob(fingerprint) = row[5],
+                  case let .text(relativePath) = row[6],
+                  relativePath == "\(archiveID.uuidString.lowercased()).rekonarchive" else {
+                return nil
+            }
+            return RetainedDataPurgeScope(archiveID: archiveID, revision: revision, expiresAt: Date(timeIntervalSince1970: expiresAt), createdAt: Date(timeIntervalSince1970: createdAt), checksum: checksum, fingerprint: fingerprint, relativePath: relativePath)
+        }
+        // The durable job needs an immutable audit binding, not raw identifiers.
+        // The workspace database is encrypted, but this still avoids duplicating
+        // deleted-record identifiers into a second operational table.
+        let tombstoneSnapshot = SHA256.hash(data: Data(
+            (deletedOpportunityIDs.map { "opportunity:\($0)" } + deletedContactIDs.map { "contact:\($0)" })
+                .sorted()
+                .joined(separator: "\u{1F}")
+                .utf8
+        ))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        try database.transaction {
+            try database.execute("INSERT INTO retained_data_purge_jobs (id, state, tombstone_snapshot, started_at, finished_at) VALUES (?, 'running', ?, ?, NULL)", values: [.text(jobID.uuidString), .text(tombstoneSnapshot), .real(startedAt.timeIntervalSince1970)])
+            for scope in scopes {
+                try database.execute("INSERT INTO retained_data_purge_scope (job_id, archive_id, archive_revision, expires_at, created_at, lifecycle_state, checksum, fingerprint, relative_path) VALUES (?, ?, ?, ?, ?, 'Verified', ?, ?, ?)", values: [.text(jobID.uuidString), .text(scope.archiveID.uuidString), .integer(scope.revision), .real(scope.expiresAt.timeIntervalSince1970), .real(scope.createdAt.timeIntervalSince1970), .blob(scope.checksum), .blob(scope.fingerprint), .text(scope.relativePath)])
+                try database.execute("INSERT INTO retained_data_purge_archive_phases (job_id, archive_id, phase, replacement_archive_id, outcome) VALUES (?, ?, 'scoped', NULL, '')", values: [.text(jobID.uuidString), .text(scope.archiveID.uuidString)])
+                try database.execute("INSERT INTO portable_archive_operation_leases (archive_id, owner_kind, owner_id, acquired_at) VALUES (?, 'retained_data_purge', ?, ?)", values: [.text(scope.archiveID.uuidString), .text(jobID.uuidString), .real(startedAt.timeIntervalSince1970)])
+            }
+            try appendActivity(kind: "retained_data_purge_requested", opportunityID: nil, occurredAt: startedAt)
+        }
+        return RetainedDataPurgeJob(
+            id: jobID,
+            deletedOpportunityIDs: deletedOpportunityIDs,
+            deletedContactIDs: deletedContactIDs,
+            scopes: scopes
+        )
+    }
+
+    private func setPurgePhase(jobID: UUID, archiveID: UUID, phase: RetainedDataPurgeArchivePhase, replacementID: UUID? = nil, outcome: String = "") throws {
+        try database.execute(
+            "UPDATE retained_data_purge_archive_phases SET phase = ?, replacement_archive_id = COALESCE(?, replacement_archive_id), outcome = ? WHERE job_id = ? AND archive_id = ?",
+            values: [.text(phase.rawValue), replacementID.map { .text($0.uuidString) } ?? .null, .text(outcome), .text(jobID.uuidString), .text(archiveID.uuidString)]
+        )
+    }
+
+    private func rememberPurgePredecessorIdentity(jobID: UUID, archiveID: UUID, identity: PortableArchiveExpiryFileIdentity) throws {
+        try database.execute(
+            "UPDATE retained_data_purge_scope SET predecessor_device = ?, predecessor_inode = ? WHERE job_id = ? AND archive_id = ?",
+            values: [.integer(Int64(bitPattern: identity.device)), .integer(Int64(bitPattern: identity.inode)), .text(jobID.uuidString), .text(archiveID.uuidString)]
+        )
+    }
+
+    private func rememberPurgeReplacementIdentity(jobID: UUID, archiveID: UUID, identity: PortableArchiveExpiryFileIdentity) throws {
+        try database.execute(
+            "UPDATE retained_data_purge_archive_phases SET replacement_device = ?, replacement_inode = ? WHERE job_id = ? AND archive_id = ?",
+            values: [.integer(Int64(bitPattern: identity.device)), .integer(Int64(bitPattern: identity.inode)), .text(jobID.uuidString), .text(archiveID.uuidString)]
+        )
+    }
+
+    private func persistedPurgePredecessorIdentityMatches(
+        jobID: UUID,
+        archiveID: UUID,
+        expectedIdentity: PortableArchiveExpiryFileIdentity
+    ) throws -> Bool {
+        guard let row = try database.rows(
+            "SELECT predecessor_device, predecessor_inode FROM retained_data_purge_scope WHERE job_id = ? AND archive_id = ?",
+            values: [.text(jobID.uuidString), .text(archiveID.uuidString)]
+        ).first,
+        row.count == 2,
+        case let .integer(device) = row[0],
+        case let .integer(inode) = row[1] else {
+            return false
+        }
+        return PortableArchiveExpiryFileIdentity(
+            device: UInt64(bitPattern: device),
+            inode: UInt64(bitPattern: inode)
+        ) == expectedIdentity
+    }
+
+    private func removeOwnedReplacement(at url: URL, ownership: PortableArchiveOutputOwnership) throws {
+        guard ownership.matchesCurrentOutput(at: url) else { return }
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        guard Darwin.unlink(url.path) == 0 else { throw PortableArchiveError.archiveMayRemainAfterOutputFailure }
+    }
+
+    private func managedArchiveURL(id: UUID, relativePath: String) throws -> URL {
+        guard relativePath == "\(id.uuidString.lowercased()).rekonarchive" else { throw PortableArchiveError.invalidDestination }
+        let root = try managedArchiveRoot()
+        return root.appendingPathComponent(relativePath, isDirectory: false)
+    }
+
+    private func managedArchiveRoot() throws -> URL {
+        let root = database.portableArchiveConnectionConfiguration().url
+            .deletingLastPathComponent()
+            .appendingPathComponent("portable-archives", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: root.path) {
+            try FileManager.default.createDirectory(
+                at: root,
+                withIntermediateDirectories: false,
+                attributes: [.posixPermissions: 0o700]
+            )
+        }
+        var metadata = stat()
+        guard Darwin.lstat(root.path, &metadata) == 0,
+              (metadata.st_mode & S_IFMT) == S_IFDIR,
+              (metadata.st_mode & S_IFLNK) == 0 else {
+            throw PortableArchiveError.invalidDestination
+        }
+        guard Darwin.chmod(root.path, S_IRWXU) == 0 else {
+            throw PortableArchiveError.invalidDestination
+        }
+        return root
+    }
+
+    private func readManagedArchive(at url: URL) throws -> ManagedArchiveFile {
+        let descriptor = Darwin.open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
+        guard descriptor >= 0 else { throw PortableArchiveError.archiveInvalid }
+        defer { _ = Darwin.close(descriptor) }
+        var metadata = stat()
+        guard Darwin.fstat(descriptor, &metadata) == 0, (metadata.st_mode & S_IFMT) == S_IFREG else {
+            throw PortableArchiveError.archiveInvalid
+        }
+        let identity = PortableArchiveExpiryFileIdentity(device: UInt64(metadata.st_dev), inode: UInt64(metadata.st_ino))
+        let data = try FileHandle(fileDescriptor: descriptor, closeOnDealloc: false).readToEnd() ?? Data()
+        var current = stat()
+        guard Darwin.lstat(url.path, &current) == 0,
+              (current.st_mode & S_IFMT) == S_IFREG,
+              PortableArchiveExpiryFileIdentity(device: UInt64(current.st_dev), inode: UInt64(current.st_ino)) == identity else {
+            throw PortableArchiveError.archiveInvalid
+        }
+        return ManagedArchiveFile(data: data, identity: identity)
+    }
+
+    private func removeManagedPredecessor(
+        at url: URL,
+        expectedIdentity: PortableArchiveExpiryFileIdentity,
+        expectedArchive: RetainedDataPurgeScope,
+        recoveryKey: RecoveryKey
+    ) throws {
+        // Re-open at the destructive boundary. The managed archive directory is
+        // owner-only; still reject links, non-regular files, changed identity,
+        // or an archive whose signed public bindings no longer match scope.
+        let descriptor = Darwin.open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
+        guard descriptor >= 0 else { throw PortableArchiveError.archiveMayRemainAfterOutputFailure }
+        defer { _ = Darwin.close(descriptor) }
+        var descriptorMetadata = stat()
+        guard Darwin.fstat(descriptor, &descriptorMetadata) == 0,
+              (descriptorMetadata.st_mode & S_IFMT) == S_IFREG,
+              PortableArchiveExpiryFileIdentity(
+                device: UInt64(descriptorMetadata.st_dev),
+                inode: UInt64(descriptorMetadata.st_ino)
+              ) == expectedIdentity else {
+            throw PortableArchiveError.archiveMayRemainAfterOutputFailure
+        }
+        let data = try FileHandle(fileDescriptor: descriptor, closeOnDealloc: false).readToEnd() ?? Data()
+        let verified = try PortableArchiveService.readVerifiedArchive(data: data, recoveryKey: recoveryKey).archive
+        guard verified.archiveID == expectedArchive.archiveID,
+              verified.createdAt == expectedArchive.createdAt,
+              verified.expiresAt == expectedArchive.expiresAt,
+              verified.ciphertextChecksum == expectedArchive.checksum,
+              verified.signingKeyFingerprint == expectedArchive.fingerprint else {
+            throw PortableArchiveError.verificationFailed
+        }
+        var pathMetadata = stat()
+        guard Darwin.lstat(url.path, &pathMetadata) == 0,
+              (pathMetadata.st_mode & S_IFMT) == S_IFREG,
+              PortableArchiveExpiryFileIdentity(
+                device: UInt64(pathMetadata.st_dev),
+                inode: UInt64(pathMetadata.st_ino)
+              ) == expectedIdentity,
+              Darwin.unlink(url.path) == 0 else {
+            throw PortableArchiveError.archiveMayRemainAfterOutputFailure
+        }
+    }
+
+    private func removeUncataloguedManagedReplacement(
+        at url: URL,
+        expectedID: UUID,
+        expectedIdentity: PortableArchiveExpiryFileIdentity
+    ) throws {
+        let file = try readManagedArchive(at: url)
+        guard file.identity == expectedIdentity,
+              try PortableArchiveService.verifyPublicBinding(data: file.data).archiveID == expectedID else {
+            throw PortableArchiveError.archiveMayRemainAfterOutputFailure
+        }
+        var current = stat()
+        guard Darwin.lstat(url.path, &current) == 0,
+              (current.st_mode & S_IFMT) == S_IFREG,
+              PortableArchiveExpiryFileIdentity(
+                device: UInt64(current.st_dev),
+                inode: UInt64(current.st_ino)
+              ) == expectedIdentity,
+              Darwin.unlink(url.path) == 0 else {
+            throw PortableArchiveError.archiveMayRemainAfterOutputFailure
+        }
+    }
+
+    private func interruptAbandonedRetainedDataPurgesAtLaunch() throws {
+        // A process can stop after the predecessor is unlinked but before the
+        // catalogue transaction runs. Reconcile only that durable, explicitly
+        // journaled state: replacement must already be catalogue-verified and
+        // the managed predecessor must be absent. No archive content is read,
+        // rewritten, or deleted during launch recovery.
+        // The final replacement's deterministic ID is journaled before its
+        // write begins. If launch finds that first-write phase, reconcile the
+        // uncatalogued output without touching its still-intact predecessor.
+        for row in try database.rows(
+            "SELECT phases.job_id, phases.archive_id, phases.replacement_archive_id, scope.expires_at, scope.fingerprint FROM retained_data_purge_archive_phases AS phases JOIN retained_data_purge_scope AS scope ON scope.job_id = phases.job_id AND scope.archive_id = phases.archive_id JOIN retained_data_purge_jobs AS jobs ON jobs.id = phases.job_id WHERE jobs.state IN ('running', 'incomplete') AND phases.phase = 'replacement_writing'"
+        ) {
+            guard row.count == 5,
+                  case let .text(jobID) = row[0],
+                  case let .text(predecessorID) = row[1],
+                  case let .text(replacementID) = row[2], let replacementUUID = UUID(uuidString: replacementID),
+                  case let .real(expiresAt) = row[3],
+                  case let .blob(fingerprint) = row[4] else {
+                throw WorkspaceStoreError.unexpectedDatabaseValue
+            }
+            let replacementURL = try managedArchiveURL(
+                id: replacementUUID,
+                relativePath: "\(replacementUUID.uuidString.lowercased()).rekonarchive"
+            )
+            if try managedArchiveIsMissing(
+                id: replacementUUID,
+                relativePath: "\(replacementUUID.uuidString.lowercased()).rekonarchive"
+            ) {
+                try database.transaction {
+                    try database.execute("UPDATE retained_data_purge_archive_phases SET phase = 'retryable_failure', outcome = 'interrupted_before_replacement_write' WHERE job_id = ? AND archive_id = ?", values: [.text(jobID), .text(predecessorID)])
+                    try database.execute("DELETE FROM portable_archive_operation_leases WHERE archive_id = ? AND owner_kind = 'retained_data_purge' AND owner_id = ?", values: [.text(predecessorID), .text(jobID)])
+                }
+                continue
+            }
+            do {
+                let replacementFile = try readManagedArchive(at: replacementURL)
+                let binding = try PortableArchiveService.verifyPublicBinding(data: replacementFile.data)
+                guard binding.archiveID == replacementUUID,
+                      binding.expiresAt.timeIntervalSince1970 == expiresAt,
+                      binding.signingKeyFingerprint == fingerprint else {
+                    throw PortableArchiveError.archiveMayRemainAfterOutputFailure
+                }
+                try removeUncataloguedManagedReplacement(
+                    at: replacementURL,
+                    expectedID: replacementUUID,
+                    expectedIdentity: replacementFile.identity
+                )
+                try database.transaction {
+                    try database.execute("UPDATE retained_data_purge_archive_phases SET phase = 'retryable_failure', outcome = 'recovered_unpromoted_replacement_removed' WHERE job_id = ? AND archive_id = ?", values: [.text(jobID), .text(predecessorID)])
+                    try database.execute("DELETE FROM portable_archive_operation_leases WHERE archive_id = ? AND owner_kind = 'retained_data_purge' AND owner_id = ?", values: [.text(predecessorID), .text(jobID)])
+                }
+            } catch {
+                // The predecessor remains available. Keep its lease and the
+                // journaled replacement ID for a deliberate manual recovery;
+                // launch recovery must never guess which file to remove.
+                try database.execute("UPDATE retained_data_purge_archive_phases SET phase = 'blocked', outcome = 'replacement_write_recovery_requires_manual_review' WHERE job_id = ? AND archive_id = ?", values: [.text(jobID), .text(predecessorID)])
+            }
+        }
+
+        for row in try database.rows(
+            "SELECT phases.job_id, phases.archive_id, phases.replacement_archive_id, phases.replacement_device, phases.replacement_inode, scope.relative_path FROM retained_data_purge_archive_phases AS phases JOIN retained_data_purge_scope AS scope ON scope.job_id = phases.job_id AND scope.archive_id = phases.archive_id JOIN retained_data_purge_jobs AS jobs ON jobs.id = phases.job_id WHERE jobs.state IN ('running', 'incomplete') AND phases.phase = 'predecessor_removal_pending'"
+        ) {
+            guard row.count == 6,
+                  case let .text(jobID) = row[0],
+                  case let .text(predecessorID) = row[1], let predecessorUUID = UUID(uuidString: predecessorID),
+                  case let .text(replacementID) = row[2],
+                  case let .integer(replacementDevice) = row[3],
+                  case let .integer(replacementInode) = row[4],
+                  case let .text(relativePath) = row[5],
+                  let replacementUUID = UUID(uuidString: replacementID) else {
+                throw WorkspaceStoreError.unexpectedDatabaseValue
+            }
+            guard try managedArchiveIsMissing(id: predecessorUUID, relativePath: relativePath) else { continue }
+            guard let replacementRow = try database.rows(
+                "SELECT managed_relative_path, expires_at, ciphertext_checksum, signing_key_fingerprint FROM portable_archive_catalogue WHERE archive_id = ? AND verification_state = 'Verified' AND lifecycle_state = 'Verified'",
+                values: [.text(replacementID)]
+            ).first,
+            replacementRow.count == 4,
+            case let .text(replacementRelativePath) = replacementRow[0],
+            case let .real(replacementExpiresAt) = replacementRow[1],
+            case let .blob(replacementChecksum) = replacementRow[2],
+            case let .blob(replacementFingerprint) = replacementRow[3],
+            let replacementURL = try? managedArchiveURL(id: replacementUUID, relativePath: replacementRelativePath),
+            let replacementFile = try? readManagedArchive(at: replacementURL),
+            replacementFile.identity == PortableArchiveExpiryFileIdentity(device: UInt64(bitPattern: replacementDevice), inode: UInt64(bitPattern: replacementInode)),
+            let replacementBinding = try? PortableArchiveService.verifyPublicBinding(data: replacementFile.data),
+            replacementBinding.archiveID == replacementUUID,
+            replacementBinding.expiresAt.timeIntervalSince1970 == replacementExpiresAt,
+            replacementBinding.ciphertextChecksum == replacementChecksum,
+            replacementBinding.signingKeyFingerprint == replacementFingerprint else { continue }
+            try database.transaction {
+                try database.execute("DELETE FROM portable_archive_catalogue WHERE archive_id = ?", values: [.text(predecessorID)])
+                try database.execute("DELETE FROM portable_archive_operation_leases WHERE archive_id = ? AND owner_kind = 'retained_data_purge' AND owner_id = ?", values: [.text(predecessorID), .text(jobID)])
+                try database.execute("DELETE FROM portable_archive_operation_leases WHERE archive_id = ? AND owner_kind = 'retained_data_purge' AND owner_id = ?", values: [.text(replacementID), .text(jobID)])
+                try database.execute("UPDATE retained_data_purge_archive_phases SET phase = 'purged', outcome = 'reconciled_after_predecessor_removal' WHERE job_id = ? AND archive_id = ? AND phase = 'predecessor_removal_pending'", values: [.text(jobID), .text(predecessorID)])
+            }
+        }
+        let interruptedJobs = try database.rows("SELECT id FROM retained_data_purge_jobs WHERE state IN ('running', 'incomplete')").compactMap { row -> String? in
+            guard case let .text(id)? = row.first else { return nil }
+            return id
+        }
+        guard !interruptedJobs.isEmpty else { return }
+        try database.transaction {
+            for jobID in interruptedJobs {
+                // A missing predecessor with an unreconciled replacement is the
+                // narrowest and least trustworthy recovery state. Keep both
+                // leases and the explicit phase intact for manual recovery;
+                // expiry must not touch the only remaining copy.
+                let pendingRecovery = try database.rows(
+                    "SELECT count(*) FROM retained_data_purge_archive_phases WHERE job_id = ? AND phase IN ('predecessor_removal_pending', 'blocked')",
+                    values: [.text(jobID)]
+                )
+                guard case let .integer(pendingRecoveryCount)? = pendingRecovery.first?.first else {
+                    throw WorkspaceStoreError.unexpectedDatabaseValue
+                }
+                if pendingRecoveryCount > 0 {
+                    try database.execute(
+                        "UPDATE retained_data_purge_jobs SET state = ?, finished_at = ? WHERE id = ?",
+                        values: [.text(RetainedDataPurgeState.incomplete.rawValue), .real(clock().timeIntervalSince1970), .text(jobID)]
+                    )
+                    continue
+                }
+                let outstanding = try database.rows(
+                    "SELECT count(*) FROM retained_data_purge_archive_phases WHERE job_id = ? AND phase NOT IN ('purged', 'not_affected', 'cancelled')",
+                    values: [.text(jobID)]
+                )
+                guard case let .integer(outstandingCount)? = outstanding.first?.first else {
+                    throw WorkspaceStoreError.unexpectedDatabaseValue
+                }
+                if outstandingCount > 0 {
+                    try database.execute("UPDATE retained_data_purge_archive_phases SET phase = 'retryable_failure', outcome = 'interrupted_before_completion' WHERE job_id = ? AND phase NOT IN ('purged', 'not_affected', 'cancelled')", values: [.text(jobID)])
+                }
+                try database.execute("DELETE FROM portable_archive_operation_leases WHERE owner_kind = 'retained_data_purge' AND owner_id = ?", values: [.text(jobID)])
+                try database.execute("UPDATE retained_data_purge_jobs SET state = ?, finished_at = ? WHERE id = ?", values: [.text(outstandingCount == 0 ? RetainedDataPurgeState.complete.rawValue : RetainedDataPurgeState.incomplete.rawValue), .real(clock().timeIntervalSince1970), .text(jobID)])
+            }
+        }
+    }
+
+    private func managedArchiveIsMissing(id: UUID, relativePath: String) throws -> Bool {
+        let url = try managedArchiveURL(id: id, relativePath: relativePath)
+        var metadata = stat()
+        if Darwin.lstat(url.path, &metadata) == 0 { return false }
+        if errno == ENOENT { return true }
+        throw PortableArchiveError.archiveMayRemainAfterOutputFailure
+    }
+
+    private func scopedArchiveStillPurgeCompatible(_ scope: RetainedDataPurgeScope, at now: Date) throws -> Bool {
+        guard now < scope.expiresAt else { return false }
+        let rows = try database.rows("SELECT expiry_revision, lifecycle_state, expires_at, ciphertext_checksum, signing_key_fingerprint, managed_relative_path FROM portable_archive_catalogue WHERE archive_id = ?", values: [.text(scope.archiveID.uuidString)])
+        guard let row = rows.first, row.count == 6,
+              case let .integer(revision) = row[0], revision == scope.revision,
+              case let .text(lifecycle) = row[1], lifecycle == PortableArchiveLifecycleState.verified.rawValue,
+              case let .real(expiresAt) = row[2], expiresAt == scope.expiresAt.timeIntervalSince1970,
+              case let .blob(checksum) = row[3], checksum == scope.checksum,
+              case let .blob(fingerprint) = row[4], fingerprint == scope.fingerprint,
+              case let .text(path) = row[5], path == scope.relativePath else { return false }
+        return true
+    }
+
+    private func promoteReplacement(jobID: UUID, scope: RetainedDataPurgeScope, replacement: VerifiedPortableArchive, replacementURL: URL, replacementRelativePath: String, now: Date) throws {
+        try database.transaction {
+            guard try scopedArchiveStillPurgeCompatible(scope, at: now) else { throw PortableArchiveError.verificationFailed }
+            let bookmark = try replacementURL.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+            try database.execute("INSERT INTO portable_archive_catalogue (archive_id, destination_bookmark, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint, storage_class, managed_relative_path) VALUES (?, ?, ?, 1, ?, ?, 'Verified', ?, ?, 'managed', ?)", values: [.text(replacement.archiveID.uuidString), .blob(bookmark), .text(replacementRelativePath), .real(replacement.createdAt.timeIntervalSince1970), .real(replacement.expiresAt.timeIntervalSince1970), .blob(replacement.ciphertextChecksum), .blob(replacement.signingKeyFingerprint), .text(replacementRelativePath)])
+            // The promoted replacement remains part of the same purge
+            // operation until the predecessor outcome is durably settled.
+            // Expiry must defer rather than race this narrow interval.
+            try database.execute(
+                "INSERT INTO portable_archive_operation_leases (archive_id, owner_kind, owner_id, acquired_at) VALUES (?, 'retained_data_purge', ?, ?)",
+                values: [.text(replacement.archiveID.uuidString), .text(jobID.uuidString), .real(now.timeIntervalSince1970)]
+            )
+            try setPurgePhase(jobID: jobID, archiveID: scope.archiveID, phase: .replacementCatalogued, replacementID: replacement.archiveID)
+        }
+    }
+
+    private func snapshotDeletedSubjectIDs(_ snapshot: Data) throws -> (opportunities: Set<String>, contacts: Set<String>) {
+        var reader = SnapshotProjectionReader(snapshot)
+        guard try reader.take(8) == Data("RPSNAP01".utf8), try reader.uint32() == UInt32(PortableArchiveSnapshotRegistry.tables.count) else { throw PortableArchiveError.archiveInvalid }
+        var opportunityIDs = Set<String>()
+        var contactIDs = Set<String>()
+        for table in PortableArchiveSnapshotRegistry.tables {
+            guard try reader.value().text == table.name else { throw PortableArchiveError.archiveInvalid }
+            let count = try reader.uint32()
+            for _ in 0..<count {
+                let fields = try reader.uint32()
+                var values: [SnapshotProjectionValue] = []
+                for _ in 0..<fields { values.append(try reader.value()) }
+                if table.name == "opportunities", let id = values.first?.text { opportunityIDs.insert(id) }
+                if table.name == "contacts", let id = values.first?.text { contactIDs.insert(id) }
+            }
+        }
+        guard reader.isAtEnd else { throw PortableArchiveError.archiveInvalid }
+        return (opportunityIDs, contactIDs)
     }
 
     private func tombstone(from row: [DatabaseValue]) throws -> DeletionTombstone {

@@ -169,6 +169,13 @@ actor PortableArchiveExpiryWorker: PortableArchiveExpiryWorking {
         let opportunityTime = now()
 
         for candidate in try dueCandidates(at: opportunityTime, in: database) {
+            // A retained-data purge owns the captured archive until it reaches
+            // a durable terminal phase. Expiry must defer rather than race a
+            // replacement or predecessor-removal boundary.
+            if try purgeOwnsLease(for: candidate.row.archiveID, in: database) {
+                try markDeferredByPurge(candidate, in: database)
+                continue
+            }
             if candidate.storageClass != "managed" {
                 try markExternalManualRemoval(candidate, in: database)
                 continue
@@ -185,6 +192,20 @@ actor PortableArchiveExpiryWorker: PortableArchiveExpiryWorking {
                 try persist(.ioFailure, for: activeCandidate, in: database)
             }
         }
+    }
+
+    private func purgeOwnsLease(for archiveID: UUID, in database: EncryptedDatabase) throws -> Bool {
+        !(try database.rows(
+            "SELECT archive_id FROM portable_archive_operation_leases WHERE archive_id = ? AND owner_kind = 'retained_data_purge' LIMIT 1",
+            values: [.text(archiveID.uuidString)]
+        )).isEmpty
+    }
+
+    private func markDeferredByPurge(_ candidate: PortableArchiveExpiryCandidate, in database: EncryptedDatabase) throws {
+        try database.execute(
+            "UPDATE portable_archive_catalogue SET last_expiry_outcome = ? WHERE archive_id = ? AND lifecycle_state = 'Verified' AND expiry_revision = ?",
+            values: [.text(PortableArchiveExpiryOutcome.deferredByPurge.rawValue), .text(candidate.row.archiveID.uuidString), .integer(candidate.expiryRevision)]
+        )
     }
 
     private func process(_ candidate: PortableArchiveExpiryCandidate, at opportunityTime: Date, in database: EncryptedDatabase) throws {

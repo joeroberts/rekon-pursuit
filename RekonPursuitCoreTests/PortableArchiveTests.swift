@@ -18,7 +18,7 @@ final class PortableArchiveTests: XCTestCase {
         XCTAssertEqual(catalogue.count, 1)
         XCTAssertEqual(catalogue.first?.lifecycleState, .verified)
         XCTAssertEqual(catalogue.first?.lastExpiryOutcome, PortableArchiveExpiryOutcome.none)
-        XCTAssertEqual(try fixture.store.schemaVersion(), 30)
+        XCTAssertEqual(try fixture.store.schemaVersion(), 33)
         let columns = Set(try fixture.database.rows("PRAGMA table_info(portable_archive_catalogue)").compactMap { row -> String? in
             guard row.count > 1, case let .text(name) = row[1] else { return nil }
             return name
@@ -32,7 +32,7 @@ final class PortableArchiveTests: XCTestCase {
                 guard case let .integer(version)? = row.first else { return nil }
                 return Int(version)
             }
-        XCTAssertEqual(migrationVersions, [27, 28, 29, 30])
+        XCTAssertEqual(migrationVersions, [27, 28, 29, 30, 31, 32, 33])
     }
 
     func testPortableArchiveCatalogueRejectsUnknownLifecycleState() throws {
@@ -1917,6 +1917,328 @@ final class PortableArchiveTests: XCTestCase {
         XCTAssertFalse(snapshot.contains(Data("opaque-bookmark-bytes".utf8)))
     }
 
+    func testPurgeRetainedDeletedDataRebuildsManagedArchiveWithoutDeletedOpportunity() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-purge-retained-data-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let database = try EncryptedDatabase.open(url: root.appendingPathComponent("workspace.sqlite"), key: Data(repeating: 0x61, count: 32))
+        let store = try WorkspaceStore(database: database, now: Date(timeIntervalSince1970: 1_704_067_200), actorID: "purge-test", correlationID: "purge-test")
+        defer { try? store.close() }
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+        let active = try store.create(CreateOpportunity(title: "Active role", company: "Rekon"))
+        let deleted = try store.create(CreateOpportunity(title: "Delete from archive", company: "Rekon"))
+        let predecessor = try await store.createManagedPortableArchive(recoveryKey: recoveryKey)
+        try store.deleteOpportunity(id: deleted.id)
+
+        let result = try await store.purgeRetainedDeletedData(recoveryKey: recoveryKey)
+        let catalogue = try store.portableArchiveCatalogue()
+
+        XCTAssertEqual(result.state, .complete)
+        XCTAssertEqual(result.purgedArchiveIDs, [predecessor.archiveID])
+        XCTAssertEqual(catalogue.count, 1)
+        let replacement = try XCTUnwrap(catalogue.first)
+        XCTAssertNotEqual(replacement.archiveID, predecessor.archiveID)
+        XCTAssertEqual(replacement.createdAt, predecessor.createdAt)
+        XCTAssertEqual(replacement.expiresAt, predecessor.expiresAt)
+        let bindingRow = try XCTUnwrap(try database.rows("SELECT tombstone_snapshot FROM retained_data_purge_jobs").first)
+        guard case let .text(purgeBinding) = bindingRow[0] else {
+            return XCTFail("Expected a text purge binding.")
+        }
+        XCTAssertEqual(purgeBinding.count, 64)
+        XCTAssertFalse(purgeBinding.contains(deleted.id))
+        XCTAssertFalse(purgeBinding.contains("Delete from archive"))
+        let archiveURL = root.appendingPathComponent("portable-archives/\(replacement.archiveID.uuidString.lowercased()).rekonarchive")
+        let contents = try PortableArchiveService.readVerifiedArchive(data: Data(contentsOf: archiveURL), recoveryKey: recoveryKey)
+        let archivedOpportunityIDs = try snapshotRows(contents.snapshot, named: "opportunities").compactMap { $0.values.first?.text }
+        XCTAssertEqual(archivedOpportunityIDs, [active.id])
+        XCTAssertFalse(contents.snapshot.contains(Data("Delete from archive".utf8)))
+    }
+
+    func testRetainedDataPurgeRemovesDeletedOpportunityReconciliationAndTombstoneMaterial() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-purge-projection-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let database = try EncryptedDatabase.open(url: root.appendingPathComponent("workspace.sqlite"), key: Data(repeating: 0x64, count: 32))
+        let store = try WorkspaceStore(database: database, now: Date(timeIntervalSince1970: 1_704_067_200), actorID: "purge-test", correlationID: "purge-test")
+        defer { try? store.close() }
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+        let active = try store.create(CreateOpportunity(title: "Active role", company: "Rekon"))
+        let historicalDeletion = try store.create(CreateOpportunity(title: "Historical deleted role", company: "Rekon"))
+        try store.deleteOpportunity(id: historicalDeletion.id)
+        let deleted = try store.create(CreateOpportunity(title: "Delete reconciliation material", company: "Rekon"))
+        try database.execute(
+            "INSERT INTO reconciliation_check_operations (id, opportunity_id, correlation_id, url_snapshot, state, started_at, terminal_at) VALUES (?, ?, ?, ?, 'completed', ?, ?)",
+            values: [.text("purge-operation"), .text(deleted.id), .text("purge-correlation"), .text("https://example.com/private-role"), .real(1_704_067_200), .real(1_704_067_201)]
+        )
+        try database.execute(
+            "INSERT INTO posting_checks (id, opportunity_id, url, status, evidence, checked_at) VALUES (?, ?, ?, 'closed', ?, ?)",
+            values: [.text("purge-posting-check"), .text(deleted.id), .text("https://example.com/private-role"), .text("private posting evidence"), .real(1_704_067_201)]
+        )
+        try database.execute(
+            "INSERT INTO reconciliation_results (id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, legacy_posting_check_id, legacy_status) VALUES (?, ?, ?, ?, 'closed', 'confirmed', 'manual', NULL, ?, '', ?, 'closed')",
+            values: [.text("purge-result"), .text(deleted.id), .text("https://example.com/private-role"), .real(1_704_067_202), .text("private reconciliation evidence"), .text("purge-posting-check")]
+        )
+        let deletedContact = try store.createContact(CreateContact(name: "Deleted archive contact"))
+        try database.execute(
+            "INSERT INTO interactions (id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at) VALUES (?, ?, ?, 'Note', ?, ?, NULL)",
+            values: [.text("purge-contact-interaction"), .text(deletedContact.id), .text(active.id), .text("private contact summary"), .real(1_704_067_202)]
+        )
+        _ = try await store.createManagedPortableArchive(recoveryKey: recoveryKey)
+        try store.deleteOpportunity(id: deleted.id)
+        try store.deleteContact(id: deletedContact.id)
+
+        let result = try await store.purgeRetainedDeletedData(recoveryKey: recoveryKey)
+        let replacement = try XCTUnwrap(try store.portableArchiveCatalogue().first)
+        let archiveURL = root.appendingPathComponent("portable-archives/\(replacement.archiveID.uuidString.lowercased()).rekonarchive")
+        let contents = try PortableArchiveService.readVerifiedArchive(data: Data(contentsOf: archiveURL), recoveryKey: recoveryKey)
+
+        XCTAssertEqual(result.state, .complete)
+        XCTAssertTrue(try snapshotRows(contents.snapshot, named: "reconciliation_check_operations").isEmpty)
+        XCTAssertTrue(try snapshotRows(contents.snapshot, named: "posting_checks").isEmpty)
+        XCTAssertTrue(try snapshotRows(contents.snapshot, named: "reconciliation_results").isEmpty)
+        XCTAssertTrue(try snapshotRows(contents.snapshot, named: "contacts").compactMap { $0.values.first?.text }.allSatisfy { $0 != deletedContact.id })
+        XCTAssertTrue(try snapshotRows(contents.snapshot, named: "interactions").compactMap { $0.values.first?.text }.allSatisfy { $0 != "purge-contact-interaction" })
+        let tombstones = try snapshotRows(contents.snapshot, named: "deletion_tombstones")
+        XCTAssertEqual(tombstones.count, 1)
+        XCTAssertFalse(contents.snapshot.contains(Data("Delete reconciliation material".utf8)))
+        XCTAssertFalse(contents.snapshot.contains(Data("https://example.com/private-role".utf8)))
+        XCTAssertFalse(contents.snapshot.contains(Data("Historical deleted role".utf8)))
+    }
+
+    func testRetainedDataPurgeRejectsSymlinkedManagedArchiveRootWithoutTouchingTarget() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-purge-symlink-root-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let database = try EncryptedDatabase.open(url: root.appendingPathComponent("workspace.sqlite"), key: Data(repeating: 0x65, count: 32))
+        let store = try WorkspaceStore(database: database, now: Date(timeIntervalSince1970: 1_704_067_200), actorID: "purge-test", correlationID: "purge-test")
+        defer { try? store.close() }
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+        let deleted = try store.create(CreateOpportunity(title: "Delete from archive", company: "Rekon"))
+        let predecessor = try await store.createManagedPortableArchive(recoveryKey: recoveryKey)
+        try store.deleteOpportunity(id: deleted.id)
+
+        let managedRoot = root.appendingPathComponent("portable-archives", isDirectory: true)
+        let preservedRoot = root.appendingPathComponent("preserved-portable-archives", isDirectory: true)
+        let externalRoot = root.appendingPathComponent("external-target", isDirectory: true)
+        try FileManager.default.moveItem(at: managedRoot, to: preservedRoot)
+        try FileManager.default.createDirectory(at: externalRoot, withIntermediateDirectories: true)
+        let predecessorName = "\(predecessor.archiveID.uuidString.lowercased()).rekonarchive"
+        let externalArchive = externalRoot.appendingPathComponent(predecessorName)
+        try FileManager.default.copyItem(at: preservedRoot.appendingPathComponent(predecessorName), to: externalArchive)
+        XCTAssertEqual(Darwin.symlink(externalRoot.path, managedRoot.path), 0)
+
+        let result = try await store.purgeRetainedDeletedData(recoveryKey: recoveryKey)
+
+        XCTAssertEqual(result.state, .incomplete)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: externalArchive.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: preservedRoot.appendingPathComponent(predecessorName).path))
+        XCTAssertEqual(try store.portableArchiveCatalogue().map(\.archiveID), [predecessor.archiveID])
+    }
+
+    func testPurgeLaunchRecoveryReconcilesCatalogueAfterPredecessorWasRemoved() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-purge-recovery-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let databaseURL = root.appendingPathComponent("workspace.sqlite")
+        let databaseKey = Data(repeating: 0x66, count: 32)
+        let database = try EncryptedDatabase.open(url: databaseURL, key: databaseKey)
+        let store = try WorkspaceStore(database: database, now: Date(timeIntervalSince1970: 1_704_067_200), actorID: "purge-test", correlationID: "purge-test")
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+        _ = try store.create(CreateOpportunity(title: "Active role", company: "Rekon"))
+        let predecessor = try await store.createManagedPortableArchive(recoveryKey: recoveryKey)
+        let replacement = try await store.createManagedPortableArchive(recoveryKey: recoveryKey)
+        let replacementURL = root.appendingPathComponent("portable-archives/\(replacement.archiveID.uuidString.lowercased()).rekonarchive")
+        var replacementMetadata = stat()
+        XCTAssertEqual(Darwin.lstat(replacementURL.path, &replacementMetadata), 0)
+        let scope = try XCTUnwrap(try database.rows(
+            "SELECT expiry_revision, expires_at, created_at, lifecycle_state, ciphertext_checksum, signing_key_fingerprint, managed_relative_path FROM portable_archive_catalogue WHERE archive_id = ?",
+            values: [.text(predecessor.archiveID.uuidString)]
+        ).first)
+        let jobID = UUID()
+        try database.transaction {
+            try database.execute(
+                "INSERT INTO retained_data_purge_jobs (id, state, tombstone_snapshot, started_at, finished_at) VALUES (?, 'incomplete', ?, ?, ?)",
+                values: [.text(jobID.uuidString), .text("test-binding"), .real(1_704_067_200), .real(1_704_067_201)]
+            )
+            try database.execute(
+                "INSERT INTO retained_data_purge_scope (job_id, archive_id, archive_revision, expires_at, created_at, lifecycle_state, checksum, fingerprint, relative_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                values: [.text(jobID.uuidString), .text(predecessor.archiveID.uuidString), scope[0], scope[1], scope[2], scope[3], scope[4], scope[5], scope[6]]
+            )
+            try database.execute(
+                "INSERT INTO retained_data_purge_archive_phases (job_id, archive_id, phase, replacement_archive_id, outcome, replacement_device, replacement_inode) VALUES (?, ?, 'predecessor_removal_pending', ?, '', ?, ?)",
+                values: [.text(jobID.uuidString), .text(predecessor.archiveID.uuidString), .text(replacement.archiveID.uuidString), .integer(Int64(replacementMetadata.st_dev)), .integer(Int64(replacementMetadata.st_ino))]
+            )
+            try database.execute(
+                "INSERT INTO portable_archive_operation_leases (archive_id, owner_kind, owner_id, acquired_at) VALUES (?, 'retained_data_purge', ?, ?)",
+                values: [.text(predecessor.archiveID.uuidString), .text(jobID.uuidString), .real(1_704_067_200)]
+            )
+        }
+        try FileManager.default.removeItem(at: root.appendingPathComponent("portable-archives/\(predecessor.archiveID.uuidString.lowercased()).rekonarchive"))
+        try store.close()
+
+        let reopenedDatabase = try EncryptedDatabase.open(url: databaseURL, key: databaseKey, createIfMissing: false)
+        let reopened = try WorkspaceStore(database: reopenedDatabase, now: Date(timeIntervalSince1970: 1_704_067_200), actorID: "purge-test", correlationID: "purge-test")
+        defer { try? reopened.close() }
+
+        XCTAssertEqual(try reopened.portableArchiveCatalogue().map(\.archiveID), [replacement.archiveID])
+        let phaseRow = try XCTUnwrap(try reopenedDatabase.rows("SELECT phase FROM retained_data_purge_archive_phases WHERE job_id = ?", values: [.text(jobID.uuidString)]).first)
+        let stateRow = try XCTUnwrap(try reopenedDatabase.rows("SELECT state FROM retained_data_purge_jobs WHERE id = ?", values: [.text(jobID.uuidString)]).first)
+        let leaseRow = try XCTUnwrap(try reopenedDatabase.rows("SELECT count(*) FROM portable_archive_operation_leases WHERE owner_id = ?", values: [.text(jobID.uuidString)]).first)
+        guard case let .text(phase) = phaseRow[0], case let .text(state) = stateRow[0], case let .integer(leaseCount) = leaseRow[0] else {
+            return XCTFail("Expected durable purge recovery state.")
+        }
+        XCTAssertEqual(phase, "purged")
+        XCTAssertEqual(state, "complete")
+        XCTAssertEqual(leaseCount, 0)
+    }
+
+    func testPurgeLaunchRecoveryKeepsReplacementLeasedWhenItsIdentityChanged() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-purge-identity-mismatch-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let databaseURL = root.appendingPathComponent("workspace.sqlite")
+        let databaseKey = Data(repeating: 0x67, count: 32)
+        let database = try EncryptedDatabase.open(url: databaseURL, key: databaseKey)
+        let store = try WorkspaceStore(database: database, now: Date(timeIntervalSince1970: 1_704_067_200), actorID: "purge-test", correlationID: "purge-test")
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+        _ = try store.create(CreateOpportunity(title: "Active role", company: "Rekon"))
+        let predecessor = try await store.createManagedPortableArchive(recoveryKey: recoveryKey)
+        let replacement = try await store.createManagedPortableArchive(recoveryKey: recoveryKey)
+        let replacementURL = root.appendingPathComponent("portable-archives/\(replacement.archiveID.uuidString.lowercased()).rekonarchive")
+        var replacementMetadata = stat()
+        XCTAssertEqual(Darwin.lstat(replacementURL.path, &replacementMetadata), 0)
+        let scope = try XCTUnwrap(try database.rows(
+            "SELECT expiry_revision, expires_at, created_at, lifecycle_state, ciphertext_checksum, signing_key_fingerprint, managed_relative_path FROM portable_archive_catalogue WHERE archive_id = ?",
+            values: [.text(predecessor.archiveID.uuidString)]
+        ).first)
+        let jobID = UUID()
+        try database.transaction {
+            try database.execute("INSERT INTO retained_data_purge_jobs (id, state, tombstone_snapshot, started_at, finished_at) VALUES (?, 'incomplete', ?, ?, ?)", values: [.text(jobID.uuidString), .text("test-binding"), .real(1_704_067_200), .real(1_704_067_201)])
+            try database.execute("INSERT INTO retained_data_purge_scope (job_id, archive_id, archive_revision, expires_at, created_at, lifecycle_state, checksum, fingerprint, relative_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", values: [.text(jobID.uuidString), .text(predecessor.archiveID.uuidString), scope[0], scope[1], scope[2], scope[3], scope[4], scope[5], scope[6]])
+            try database.execute("INSERT INTO retained_data_purge_archive_phases (job_id, archive_id, phase, replacement_archive_id, outcome, replacement_device, replacement_inode) VALUES (?, ?, 'predecessor_removal_pending', ?, '', ?, ?)", values: [.text(jobID.uuidString), .text(predecessor.archiveID.uuidString), .text(replacement.archiveID.uuidString), .integer(Int64(replacementMetadata.st_dev)), .integer(Int64(replacementMetadata.st_ino))])
+            for archiveID in [predecessor.archiveID, replacement.archiveID] {
+                try database.execute("INSERT INTO portable_archive_operation_leases (archive_id, owner_kind, owner_id, acquired_at) VALUES (?, 'retained_data_purge', ?, ?)", values: [.text(archiveID.uuidString), .text(jobID.uuidString), .real(1_704_067_200)])
+            }
+        }
+        try FileManager.default.removeItem(at: root.appendingPathComponent("portable-archives/\(predecessor.archiveID.uuidString.lowercased()).rekonarchive"))
+        try Data([0x00]).write(to: replacementURL, options: .atomic)
+        try store.close()
+
+        let reopenedDatabase = try EncryptedDatabase.open(url: databaseURL, key: databaseKey, createIfMissing: false)
+        let reopened = try WorkspaceStore(database: reopenedDatabase, now: Date(timeIntervalSince1970: 1_704_067_200), actorID: "purge-test", correlationID: "purge-test")
+        defer { try? reopened.close() }
+
+        XCTAssertEqual(try reopened.portableArchiveCatalogue().map(\.archiveID).sorted { $0.uuidString < $1.uuidString }, [predecessor.archiveID, replacement.archiveID].sorted { $0.uuidString < $1.uuidString })
+        let phaseRow = try XCTUnwrap(try reopenedDatabase.rows("SELECT phase FROM retained_data_purge_archive_phases WHERE job_id = ?", values: [.text(jobID.uuidString)]).first)
+        let stateRow = try XCTUnwrap(try reopenedDatabase.rows("SELECT state FROM retained_data_purge_jobs WHERE id = ?", values: [.text(jobID.uuidString)]).first)
+        let leaseRow = try XCTUnwrap(try reopenedDatabase.rows("SELECT count(*) FROM portable_archive_operation_leases WHERE owner_id = ?", values: [.text(jobID.uuidString)]).first)
+        guard case let .text(phase) = phaseRow[0], case let .text(state) = stateRow[0], case let .integer(leaseCount) = leaseRow[0] else {
+            return XCTFail("Expected blocked retained-data purge recovery state.")
+        }
+        XCTAssertEqual(phase, "predecessor_removal_pending")
+        XCTAssertEqual(state, "incomplete")
+        XCTAssertEqual(leaseCount, 2)
+    }
+
+    func testPurgeLaunchRecoveryRemovesJournaledUncataloguedReplacement() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-purge-write-recovery-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let databaseURL = root.appendingPathComponent("workspace.sqlite")
+        let databaseKey = Data(repeating: 0x68, count: 32)
+        let database = try EncryptedDatabase.open(url: databaseURL, key: databaseKey)
+        let store = try WorkspaceStore(database: database, now: Date(timeIntervalSince1970: 1_704_067_200), actorID: "purge-test", correlationID: "purge-test")
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+        _ = try store.create(CreateOpportunity(title: "Active role", company: "Rekon"))
+        let predecessor = try await store.createManagedPortableArchive(recoveryKey: recoveryKey)
+        let replacement = try await store.createManagedPortableArchive(recoveryKey: recoveryKey)
+        let scope = try XCTUnwrap(try database.rows(
+            "SELECT expiry_revision, expires_at, created_at, lifecycle_state, ciphertext_checksum, signing_key_fingerprint, managed_relative_path FROM portable_archive_catalogue WHERE archive_id = ?",
+            values: [.text(predecessor.archiveID.uuidString)]
+        ).first)
+        let jobID = UUID()
+        try database.transaction {
+            try database.execute("DELETE FROM portable_archive_catalogue WHERE archive_id = ?", values: [.text(replacement.archiveID.uuidString)])
+            try database.execute("INSERT INTO retained_data_purge_jobs (id, state, tombstone_snapshot, started_at, finished_at) VALUES (?, 'incomplete', ?, ?, ?)", values: [.text(jobID.uuidString), .text("test-binding"), .real(1_704_067_200), .real(1_704_067_201)])
+            try database.execute("INSERT INTO retained_data_purge_scope (job_id, archive_id, archive_revision, expires_at, created_at, lifecycle_state, checksum, fingerprint, relative_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", values: [.text(jobID.uuidString), .text(predecessor.archiveID.uuidString), scope[0], scope[1], scope[2], scope[3], scope[4], scope[5], scope[6]])
+            try database.execute("INSERT INTO retained_data_purge_archive_phases (job_id, archive_id, phase, replacement_archive_id, outcome) VALUES (?, ?, 'replacement_writing', ?, '')", values: [.text(jobID.uuidString), .text(predecessor.archiveID.uuidString), .text(replacement.archiveID.uuidString)])
+            try database.execute("INSERT INTO portable_archive_operation_leases (archive_id, owner_kind, owner_id, acquired_at) VALUES (?, 'retained_data_purge', ?, ?)", values: [.text(predecessor.archiveID.uuidString), .text(jobID.uuidString), .real(1_704_067_200)])
+        }
+        try store.close()
+
+        let reopenedDatabase = try EncryptedDatabase.open(url: databaseURL, key: databaseKey, createIfMissing: false)
+        let reopened = try WorkspaceStore(database: reopenedDatabase, now: Date(timeIntervalSince1970: 1_704_067_200), actorID: "purge-test", correlationID: "purge-test")
+        defer { try? reopened.close() }
+
+        XCTAssertEqual(try reopened.portableArchiveCatalogue().map(\.archiveID), [predecessor.archiveID])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("portable-archives/\(replacement.archiveID.uuidString.lowercased()).rekonarchive").path))
+        let phaseRow = try XCTUnwrap(try reopenedDatabase.rows("SELECT phase FROM retained_data_purge_archive_phases WHERE job_id = ?", values: [.text(jobID.uuidString)]).first)
+        let leaseRow = try XCTUnwrap(try reopenedDatabase.rows("SELECT count(*) FROM portable_archive_operation_leases WHERE owner_id = ?", values: [.text(jobID.uuidString)]).first)
+        guard case let .text(phase) = phaseRow[0], case let .integer(leaseCount) = leaseRow[0] else {
+            return XCTFail("Expected recovered replacement-write state.")
+        }
+        XCTAssertEqual(phase, "retryable_failure")
+        XCTAssertEqual(leaseCount, 0)
+    }
+
+    func testRetainedDataPurgeLeavesUnaffectedArchiveAndReleasesLease() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-purge-unaffected-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let database = try EncryptedDatabase.open(url: root.appendingPathComponent("workspace.sqlite"), key: Data(repeating: 0x62, count: 32))
+        let store = try WorkspaceStore(database: database, now: Date(timeIntervalSince1970: 1_704_067_200), actorID: "purge-test", correlationID: "purge-test")
+        defer { try? store.close() }
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+        _ = try store.create(CreateOpportunity(title: "Active role", company: "Rekon"))
+        let predecessor = try await store.createManagedPortableArchive(recoveryKey: recoveryKey)
+
+        let result = try await store.purgeRetainedDeletedData(recoveryKey: recoveryKey)
+        let catalogue = try store.portableArchiveCatalogue()
+
+        XCTAssertEqual(result.state, .complete)
+        XCTAssertTrue(result.purgedArchiveIDs.isEmpty)
+        XCTAssertEqual(catalogue.map(\.archiveID), [predecessor.archiveID])
+        XCTAssertEqual(try database.rows("SELECT archive_id FROM portable_archive_operation_leases").count, 0)
+        XCTAssertEqual(try store.retainedDataPurgeStatus()?.state, .complete)
+    }
+
+    func testRetainedDataPurgeRejectsWrongKeyBeforeWritingJobOrLease() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("archive-purge-invalid-key-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let database = try EncryptedDatabase.open(url: root.appendingPathComponent("workspace.sqlite"), key: Data(repeating: 0x63, count: 32))
+        let store = try WorkspaceStore(database: database, now: Date(timeIntervalSince1970: 1_704_067_200), actorID: "purge-test", correlationID: "purge-test")
+        defer { try? store.close() }
+        let enrolledKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: enrolledKey)
+        _ = try store.create(CreateOpportunity(title: "Deleted role", company: "Rekon"))
+        let wrongKey = try RecoveryKey.generate()
+
+        do {
+            _ = try await store.purgeRetainedDeletedData(recoveryKey: wrongKey)
+            XCTFail("Expected wrong recovery key to be rejected")
+        } catch let error as PortableArchiveError {
+            XCTAssertEqual(error, .invalidRecoveryKey)
+        }
+        XCTAssertEqual(try database.rows("SELECT id FROM retained_data_purge_jobs").count, 0)
+        XCTAssertEqual(try database.rows("SELECT archive_id FROM portable_archive_operation_leases").count, 0)
+    }
+
     private func assertRestoreFails(_ operation: () async throws -> Void) async {
         do {
             try await operation()
@@ -2182,6 +2504,10 @@ final class PortableArchiveTests: XCTestCase {
         try database.execute("ALTER TABLE portable_archive_catalogue DROP COLUMN expiry_quarantine_relative_path")
         try database.execute("ALTER TABLE portable_archive_catalogue DROP COLUMN expiry_expected_device")
         try database.execute("ALTER TABLE portable_archive_catalogue DROP COLUMN expiry_expected_inode")
+        try database.execute("DROP TABLE retained_data_purge_archive_phases")
+        try database.execute("DROP TABLE retained_data_purge_scope")
+        try database.execute("DROP TABLE retained_data_purge_jobs")
+        try database.execute("DROP TABLE portable_archive_operation_leases")
         try database.execute("UPDATE schema_migrations SET version = 26")
         try database.execute("DELETE FROM migration_history WHERE version >= 27")
 

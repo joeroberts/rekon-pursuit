@@ -111,6 +111,7 @@ nonisolated enum PortableArchiveExpiryOutcome: String, Equatable, Sendable {
     case ioFailure
     case removed
     case manualRemovalRequired = "manual_removal_required"
+    case deferredByPurge = "deferred_by_purge"
 }
 
 nonisolated struct PortableArchiveCatalogueRow: Equatable, Sendable {
@@ -150,6 +151,28 @@ nonisolated struct PortableArchiveCatalogueRow: Equatable, Sendable {
     }
 }
 
+nonisolated enum RetainedDataPurgeState: String, Equatable, Sendable {
+    case running, complete, incomplete, cancelled, blocked
+}
+
+nonisolated enum RetainedDataPurgeArchivePhase: String, Equatable, Sendable {
+    case scoped, notAffected = "not_affected", replacementWriting = "replacement_writing", replacementVerified = "replacement_verified", replacementCatalogued = "replacement_catalogued", predecessorRemovalPending = "predecessor_removal_pending", purged, cancelled, expiryDeferred = "expiry_deferred", retryableFailure = "retryable_failure", blocked
+}
+
+nonisolated struct RetainedDataPurgeResult: Equatable, Sendable {
+    let jobID: UUID
+    let state: RetainedDataPurgeState
+    let purgedArchiveIDs: [UUID]
+    let incompleteArchiveIDs: [UUID]
+}
+
+nonisolated struct RetainedDataPurgeStatus: Equatable, Sendable {
+    let jobID: UUID
+    let state: RetainedDataPurgeState
+    let startedAt: Date
+    let finishedAt: Date?
+}
+
 nonisolated struct VerifiedPortableArchive: Equatable, Sendable {
     let archiveID: UUID
     let createdAt: Date
@@ -159,7 +182,7 @@ nonisolated struct VerifiedPortableArchive: Equatable, Sendable {
 }
 
 nonisolated enum PortableArchiveError: Error, LocalizedError, Sendable {
-    case enrollmentRequired, invalidRecoveryKey, destinationExists, invalidDestination, destinationUnavailable, archiveInvalid, verificationFailed, signingKeyUnavailable, catalogueUnavailable, archiveMayRemainAfterOutputFailure
+    case enrollmentRequired, invalidRecoveryKey, destinationExists, invalidDestination, destinationUnavailable, archiveInvalid, verificationFailed, signingKeyUnavailable, catalogueUnavailable, archiveMayRemainAfterOutputFailure, operationCancelled
 
     var errorDescription: String? {
         switch self {
@@ -172,6 +195,7 @@ nonisolated enum PortableArchiveError: Error, LocalizedError, Sendable {
         case .signingKeyUnavailable: return "The archive signing identity is unavailable; no archive was created."
         case .catalogueUnavailable: return "The archive was verified but could not be recorded locally. It may still exist at the chosen destination."
         case .archiveMayRemainAfterOutputFailure: return "Final archive writing or verification failed. The selected file may remain; treat it as unusable and remove it yourself."
+        case .operationCancelled: return "The retained-data purge was cancelled before an archive was removed. Existing archives were left intact."
         }
     }
 }

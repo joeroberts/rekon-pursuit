@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 nonisolated enum WorkspaceMigrations {
-    static let currentVersion = 30
+    static let currentVersion = 33
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
@@ -30,6 +30,9 @@ nonisolated enum WorkspaceMigrations {
     static let versionTwentyEightChecksum = checksum(for: "28|portable_archive_catalogue.managed_expiry.v1")
     static let versionTwentyNineChecksum = checksum(for: "29|portable_archive_catalogue.expiry_quarantine_relative_path")
     static let versionThirtyChecksum = checksum(for: "30|portable_archive_catalogue.expiry_expected_identity")
+    static let versionThirtyOneChecksum = checksum(for: "31|retained_data_purge_jobs.scope.archive_phases.operation_leases.v1")
+    static let versionThirtyTwoChecksum = checksum(for: "32|retained_data_purge_scope.predecessor_identity.v1")
+    static let versionThirtyThreeChecksum = checksum(for: "33|retained_data_purge_archive_phases.replacement_identity.v1")
 
     static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false, failVersionSixteen: Bool = false, failVersionSeventeen: Bool = false, failVersionNineteen: Bool = false, failVersionTwenty: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
@@ -504,6 +507,60 @@ nonisolated enum WorkspaceMigrations {
                     }
                     try database.execute("INSERT OR IGNORE INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(30), .text(versionThirtyChecksum)])
                     try database.execute("UPDATE schema_migrations SET version = 30")
+                }
+                database.removeMigrationSnapshot()
+            } catch { throw error }
+        }
+        if version < 31 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    try database.execute("CREATE TABLE retained_data_purge_jobs (id TEXT PRIMARY KEY NOT NULL, state TEXT NOT NULL, tombstone_snapshot TEXT NOT NULL, started_at REAL NOT NULL, finished_at REAL)")
+                    try database.execute("CREATE TABLE retained_data_purge_scope (job_id TEXT NOT NULL REFERENCES retained_data_purge_jobs(id), archive_id TEXT NOT NULL, archive_revision INTEGER NOT NULL, expires_at REAL NOT NULL, created_at REAL NOT NULL, lifecycle_state TEXT NOT NULL, checksum BLOB NOT NULL, fingerprint BLOB NOT NULL, relative_path TEXT NOT NULL, PRIMARY KEY(job_id, archive_id))")
+                    try database.execute("CREATE TABLE retained_data_purge_archive_phases (job_id TEXT NOT NULL REFERENCES retained_data_purge_jobs(id), archive_id TEXT NOT NULL, phase TEXT NOT NULL, replacement_archive_id TEXT, outcome TEXT NOT NULL DEFAULT '', PRIMARY KEY(job_id, archive_id))")
+                    try database.execute("CREATE TABLE portable_archive_operation_leases (archive_id TEXT PRIMARY KEY NOT NULL, owner_kind TEXT NOT NULL, owner_id TEXT NOT NULL, acquired_at REAL NOT NULL)")
+                    try database.execute("INSERT INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(31), .text(versionThirtyOneChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 31")
+                }
+                database.removeMigrationSnapshot()
+            } catch { throw error }
+        }
+        if version < 32 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    let existingColumns = try database.rows("PRAGMA table_info(retained_data_purge_scope)").compactMap { values -> String? in
+                        guard values.count > 1, case let .text(name) = values[1] else { return nil }
+                        return name
+                    }
+                    if !existingColumns.contains("predecessor_device") {
+                        try database.execute("ALTER TABLE retained_data_purge_scope ADD COLUMN predecessor_device INTEGER")
+                    }
+                    if !existingColumns.contains("predecessor_inode") {
+                        try database.execute("ALTER TABLE retained_data_purge_scope ADD COLUMN predecessor_inode INTEGER")
+                    }
+                    try database.execute("INSERT OR IGNORE INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(32), .text(versionThirtyTwoChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 32")
+                }
+                database.removeMigrationSnapshot()
+            } catch { throw error }
+        }
+        if version < 33 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    let existingColumns = try database.rows("PRAGMA table_info(retained_data_purge_archive_phases)").compactMap { values -> String? in
+                        guard values.count > 1, case let .text(name) = values[1] else { return nil }
+                        return name
+                    }
+                    if !existingColumns.contains("replacement_device") {
+                        try database.execute("ALTER TABLE retained_data_purge_archive_phases ADD COLUMN replacement_device INTEGER")
+                    }
+                    if !existingColumns.contains("replacement_inode") {
+                        try database.execute("ALTER TABLE retained_data_purge_archive_phases ADD COLUMN replacement_inode INTEGER")
+                    }
+                    try database.execute("INSERT OR IGNORE INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(33), .text(versionThirtyThreeChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 33")
                 }
                 database.removeMigrationSnapshot()
             } catch { throw error }

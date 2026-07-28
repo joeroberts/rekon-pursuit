@@ -1075,6 +1075,8 @@ private struct SettingsView: View {
     @State private var isPresentingArchiveCreation = false
     @State private var protectedExportReentry = ""
     @State private var isPresentingProtectedExport = false
+    @State private var retainedDataPurgeReentry = ""
+    @State private var isPresentingRetainedDataPurge = false
     @State private var portableArchiveRestoreKey = ""
 
     var body: some View {
@@ -1109,6 +1111,21 @@ private struct SettingsView: View {
                             Button("Export protected copy") { isPresentingProtectedExport = true }
                                 .accessibilityIdentifier("create-protected-export")
                                 .disabled(model.isCreatingProtectedExport || model.isCreatingPortableArchive || model.isRestoringPortableArchive)
+                            Button("Purge deleted data from retained archives") { isPresentingRetainedDataPurge = true }
+                                .buttonStyle(RekonSecondaryButtonStyle())
+                                .accessibilityIdentifier("purge-retained-archive-data")
+                                .disabled(model.portableArchiveCatalogue.isEmpty || model.isPurgingRetainedArchiveData || model.isCreatingPortableArchive || model.isRestoringPortableArchive)
+                            if model.isPurgingRetainedArchiveData {
+                                ProgressView("Purging retained archive data…")
+                                    .controlSize(.small)
+                                Button("Cancel purge") { model.cancelRetainedDataPurge() }
+                                    .buttonStyle(RekonSecondaryButtonStyle())
+                            }
+                            if let status = model.retainedDataPurgeStatus {
+                                Text(retainedDataPurgeStatusText(status))
+                                    .font(.footnote)
+                                    .foregroundStyle(status.state == .complete ? Color.secondary : Color.orange)
+                            }
                             if model.isCreatingProtectedExport {
                                 ProgressView("Preparing protected export…").controlSize(.small)
                             }
@@ -1236,6 +1253,33 @@ private struct SettingsView: View {
                     if review != nil { protectedExportReentry = "" }
                 }
         }
+        .sheet(isPresented: $isPresentingRetainedDataPurge) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Purge deleted data from retained archives").font(.title2.bold())
+                Text("This permanently removes data that you already deleted from eligible, verified Rekon Pursuit recovery archives. It cannot be undone. External archives and expired archives are not changed.")
+                    .foregroundStyle(.secondary)
+                Text("Re-enter your recovery key to confirm. Rekon Pursuit creates and verifies a replacement before it removes an eligible predecessor archive.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                TextField("Recovery key", text: $retainedDataPurgeReentry)
+                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("Cancel", role: .cancel) {
+                        retainedDataPurgeReentry = ""
+                        isPresentingRetainedDataPurge = false
+                    }
+                    Spacer()
+                    Button("Purge retained archive data", role: .destructive) {
+                        model.purgeRetainedArchiveData(reentry: retainedDataPurgeReentry)
+                        retainedDataPurgeReentry = ""
+                        isPresentingRetainedDataPurge = false
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(24)
+            .frame(width: 560)
+        }
         .sheet(isPresented: Binding(
             get: {
                 switch model.portableArchiveRestoreState {
@@ -1314,6 +1358,19 @@ private struct SettingsView: View {
             return "No document references are attached to active opportunities."
         }
         return "\(summary.availableCount) available · \(summary.relinkRequiredCount) require relinking"
+    }
+
+    private func retainedDataPurgeStatusText(_ status: RetainedDataPurgeStatus) -> String {
+        switch status.state {
+        case .complete:
+            return "Deleted retained data purge completed \(status.finishedAt?.formatted(date: .abbreviated, time: .shortened) ?? "")."
+        case .cancelled:
+            return "The last retained-data purge was cancelled; any unfinished source archives were preserved."
+        case .incomplete, .blocked:
+            return "The last retained-data purge was incomplete. Review retained archives before retrying."
+        case .running:
+            return "A prior retained-data purge was interrupted and marked incomplete. It did not resume automatically."
+        }
     }
 
     private func archiveSummary(_ archive: PortableArchiveCatalogueRow) -> String {

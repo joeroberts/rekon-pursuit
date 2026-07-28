@@ -45,6 +45,43 @@ nonisolated struct PortableArchiveOutputOwnership: Equatable, Sendable {
     func matchesCurrentOutput(at url: URL) -> Bool {
         Self.current(at: url) == self
     }
+
+    /// Reads only the regular file that was exclusively created by this worker.
+    /// The descriptor and path identities must agree before callers trust its bytes.
+    func readVerifiedOutput(at url: URL) throws -> Data {
+        let descriptor = open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
+        guard descriptor >= 0 else { throw PortableArchiveError.archiveMayRemainAfterOutputFailure }
+        defer { _ = close(descriptor) }
+
+        var descriptorMetadata = stat()
+        guard fstat(descriptor, &descriptorMetadata) == 0,
+              (descriptorMetadata.st_mode & S_IFMT) == S_IFREG,
+              PortableArchiveOutputOwnership(
+                device: UInt64(descriptorMetadata.st_dev),
+                inode: UInt64(descriptorMetadata.st_ino)
+              ) == self else {
+            throw PortableArchiveError.archiveMayRemainAfterOutputFailure
+        }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
+        let data = try handle.readToEnd() ?? Data()
+        var pathMetadata = stat()
+        guard lstat(url.path, &pathMetadata) == 0,
+              (pathMetadata.st_mode & S_IFMT) == S_IFREG,
+              PortableArchiveOutputOwnership(
+                device: UInt64(pathMetadata.st_dev),
+                inode: UInt64(pathMetadata.st_ino)
+              ) == self else {
+            throw PortableArchiveError.archiveMayRemainAfterOutputFailure
+        }
+        return data
+    }
+}
+
+/// A replacement is returned only after exclusive creation and encrypted-archive
+/// verification. Its identity binds any later cleanup to this exact file.
+nonisolated struct ManagedPortableArchiveReplacement: Equatable, Sendable {
+    let archive: VerifiedPortableArchive
+    let ownership: PortableArchiveOutputOwnership
 }
 
 nonisolated struct PortableArchiveOutputWriteFailure: Error, Sendable {
@@ -77,7 +114,15 @@ nonisolated enum PortableArchiveOutputWriter {
         )
         let destination = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         do {
-            let source = try FileHandle(forReadingFrom: sourceURL)
+            let sourceDescriptor = open(sourceURL.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
+            guard sourceDescriptor >= 0 else { throw PortableArchiveOutputWriteFailure() }
+            var sourceMetadata = stat()
+            guard fstat(sourceDescriptor, &sourceMetadata) == 0,
+                  (sourceMetadata.st_mode & S_IFMT) == S_IFREG else {
+                close(sourceDescriptor)
+                throw PortableArchiveOutputWriteFailure()
+            }
+            let source = FileHandle(fileDescriptor: sourceDescriptor, closeOnDealloc: true)
             defer { try? source.close() }
             defer { try? destination.close() }
 
@@ -94,6 +139,27 @@ nonisolated enum PortableArchiveOutputWriter {
 
 protocol PortableArchiveWorking: Actor {
     func createArchive(_ request: PortableArchiveRequest) async throws -> PortableArchiveCatalogueRow
+    /// Builds and fully verifies a distinct managed replacement. Catalogue
+    /// promotion and predecessor removal deliberately remain in WorkspaceStore.
+    func writeManagedReplacement(
+        snapshot: Data,
+        recoveryKey: RecoveryKey,
+        archiveID: UUID,
+        createdAt: Date,
+        destinationURL: URL
+    ) async throws -> ManagedPortableArchiveReplacement
+}
+
+extension PortableArchiveWorking {
+    func writeManagedReplacement(
+        snapshot: Data,
+        recoveryKey: RecoveryKey,
+        archiveID: UUID,
+        createdAt: Date,
+        destinationURL: URL
+    ) async throws -> ManagedPortableArchiveReplacement {
+        throw PortableArchiveError.destinationUnavailable
+    }
 }
 
 actor PortableArchiveWorker: PortableArchiveWorking {
@@ -292,6 +358,58 @@ actor PortableArchiveWorker: PortableArchiveWorking {
         }
     }
 
+    func writeManagedReplacement(
+        snapshot: Data,
+        recoveryKey: RecoveryKey,
+        archiveID: UUID,
+        createdAt: Date,
+        destinationURL: URL
+    ) async throws -> ManagedPortableArchiveReplacement {
+        guard destinationURL.pathExtension.lowercased() == "rekonarchive" else {
+            throw PortableArchiveError.invalidDestination
+        }
+        guard !FileManager.default.fileExists(atPath: destinationURL.path) else {
+            throw PortableArchiveError.destinationExists
+        }
+        let database = try EncryptedDatabase.open(
+            url: configuration.url,
+            key: configuration.key,
+            createIfMissing: false
+        )
+        defer { try? database.close() }
+        let workspaceID: String = try database.deferredReadTransaction {
+            guard let row = try database.rows("SELECT fingerprint FROM recovery_enrollment WHERE id = 1").first,
+                  case let .text(fingerprint) = row.first,
+                  fingerprint == recoveryKey.fingerprint,
+                  case let .text(workspaceID)? = try database.rows("SELECT value FROM workspace_metadata WHERE key = 'workspace_id'").first?.first else {
+                throw PortableArchiveError.invalidRecoveryKey
+            }
+            return workspaceID
+        }
+        let rawKey = try await signingKeyStore.privateKeyRawRepresentation(for: workspaceID, catalogueExists: true)
+        let signingKey = try Curve25519.Signing.PrivateKey(rawRepresentation: rawKey)
+        let temporaryURL = PortableArchiveStagingLocation.url(
+            temporaryDirectory: destinationURL.deletingLastPathComponent(),
+            temporaryID: UUID()
+        )
+        defer { try? FileManager.default.removeItem(at: temporaryURL) }
+        let package = try PortableArchiveService.writeAndVerify(
+            snapshot: snapshot,
+            recoveryKey: recoveryKey,
+            signingKey: signingKey,
+            archiveID: archiveID,
+            createdAt: createdAt,
+            to: temporaryURL
+        )
+        let ownership = try finalOutputWriter(temporaryURL, destinationURL)
+        guard ownership.matchesCurrentOutput(at: destinationURL) else {
+            throw PortableArchiveError.archiveMayRemainAfterOutputFailure
+        }
+        let saved = try archiveVerifier(try ownership.readVerifiedOutput(at: destinationURL), recoveryKey)
+        guard saved == package else { throw PortableArchiveError.verificationFailed }
+        return ManagedPortableArchiveReplacement(archive: package, ownership: ownership)
+    }
+
     private func recordFailure(
         request: PortableArchiveRequest,
         category: String,
@@ -413,6 +531,83 @@ nonisolated enum PortableArchiveSnapshotCodec {
         return result
     }
 
+    /// Produces a new v1 snapshot from an authenticated predecessor snapshot.
+    /// It deliberately copies the predecessor's active material rather than
+    /// recapturing the current workspace, so a purge cannot silently add later
+    /// edits or omit historical active records.
+    static func projecting(
+        _ snapshot: Data,
+        removingOpportunityIDs: Set<String>,
+        removingContactIDs: Set<String> = []
+    ) throws -> Data {
+        var reader = SnapshotProjectionReader(snapshot)
+        guard try reader.take(8) == Data("RPSNAP01".utf8), try reader.uint32() == UInt32(PortableArchiveSnapshotRegistry.tables.count) else {
+            throw PortableArchiveError.archiveInvalid
+        }
+        var result = Data("RPSNAP01".utf8)
+        result.appendArchiveUInt32(UInt32(PortableArchiveSnapshotRegistry.tables.count))
+        for table in PortableArchiveSnapshotRegistry.tables {
+            let name = try reader.value()
+            guard name.text == table.name else { throw PortableArchiveError.archiveInvalid }
+            let count = try reader.uint32()
+            var retained: [[SnapshotProjectionValue]] = []
+            for _ in 0..<count {
+                let valueCount = try reader.uint32()
+                guard valueCount == UInt32(table.columns.count) else { throw PortableArchiveError.archiveInvalid }
+                let values = try (0..<valueCount).map { _ in try reader.value() }
+                if !snapshotRow(
+                    values,
+                    table: table.name,
+                    deletedOpportunityIDs: removingOpportunityIDs,
+                    deletedContactIDs: removingContactIDs
+                ) {
+                    retained.append(values)
+                }
+            }
+            try append(.text(table.name), timestamp: false, to: &result)
+            result.appendArchiveUInt32(UInt32(retained.count))
+            for values in retained {
+                result.appendArchiveUInt32(UInt32(values.count))
+                for value in values { value.append(to: &result) }
+            }
+        }
+        guard reader.isAtEnd else { throw PortableArchiveError.archiveInvalid }
+        return result
+    }
+
+    private static func snapshotRow(
+        _ values: [SnapshotProjectionValue],
+        table: String,
+        deletedOpportunityIDs: Set<String>,
+        deletedContactIDs: Set<String>
+    ) -> Bool {
+        // Audit tombstones retain only the frozen, privacy-minimized integrity
+        // record. They are not deleted content and must survive a purge so the
+        // archive's audit ledger remains coherent.
+        func contains(_ index: Int, in identifiers: Set<String>) -> Bool {
+            values.indices.contains(index) && values[index].text.map(identifiers.contains) == true
+        }
+        switch table {
+        case "opportunities", "reconciliation_reviews":
+            return contains(0, in: deletedOpportunityIDs)
+        case "reconciliation_results", "posting_checks", "reconciliation_check_operations",
+             "task_reminders", "opportunity_stage_history", "opportunity_response_history", "document_references":
+            return contains(1, in: deletedOpportunityIDs)
+        case "contacts":
+            return contains(0, in: deletedContactIDs)
+        case "contact_opportunities":
+            return contains(0, in: deletedContactIDs) || contains(1, in: deletedOpportunityIDs)
+        case "interactions":
+            return contains(1, in: deletedContactIDs) || contains(2, in: deletedOpportunityIDs)
+        case "import_report_rows":
+            return contains(6, in: deletedOpportunityIDs)
+        case "activity_events":
+            return contains(2, in: deletedOpportunityIDs) || contains(3, in: deletedContactIDs)
+        default:
+            return false
+        }
+    }
+
     private static func append(_ value: DatabaseValue, timestamp: Bool, to data: inout Data) throws {
         if timestamp {
             switch value {
@@ -457,6 +652,23 @@ nonisolated enum PortableArchiveSnapshotCodec {
             data.append(blob)
         }
     }
+}
+
+nonisolated struct SnapshotProjectionValue {
+    let tag: UInt8
+    let data: Data
+    var text: String? { tag == 3 ? String(data: data, encoding: .utf8) : nil }
+    func append(to output: inout Data) { output.append(tag); output.appendArchiveUInt32(UInt32(data.count)); output.append(data) }
+}
+
+nonisolated struct SnapshotProjectionReader {
+    let data: Data
+    var offset: Int = 0
+    init(_ data: Data) { self.data = data }
+    var isAtEnd: Bool { offset == data.count }
+    mutating func take(_ count: Int) throws -> Data { guard count >= 0, data.count - offset >= count else { throw PortableArchiveError.archiveInvalid }; defer { offset += count }; return data.subdata(in: offset..<(offset + count)) }
+    mutating func uint32() throws -> UInt32 { try take(4).reduce(0) { ($0 << 8) | UInt32($1) } }
+    mutating func value() throws -> SnapshotProjectionValue { let tag = try take(1)[0]; guard tag <= 4 else { throw PortableArchiveError.archiveInvalid }; let length = Int(try uint32()); let bytes = try take(length); switch tag { case 0: guard bytes.isEmpty else { throw PortableArchiveError.archiveInvalid }; case 1, 2: guard bytes.count == 8 else { throw PortableArchiveError.archiveInvalid }; case 3: guard String(data: bytes, encoding: .utf8) != nil else { throw PortableArchiveError.archiveInvalid }; default: break }; return .init(tag: tag, data: bytes) }
 }
 
 nonisolated private extension Data {
