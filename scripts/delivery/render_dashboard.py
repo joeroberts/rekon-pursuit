@@ -12,6 +12,7 @@ from urllib.parse import unquote, urlsplit
 
 
 ALLOWED_STATUSES = ("backlog", "next_up", "in_progress", "accepted", "blocked")
+ALLOWED_PHASE_LIFECYCLES = ("historical", "active", "planned")
 LANES = (
     ("backlog", "Backlog"),
     ("next_up", "Next up"),
@@ -98,11 +99,79 @@ def load_and_validate(source: Path) -> dict:
         raise DashboardContractError("Dashboard source must contain one JSON object.")
     if data.get("schemaVersion") != 1:
         raise DashboardContractError("schemaVersion must be 1.")
+    phase_list = data.get("phases")
+    if not isinstance(phase_list, list) or not phase_list:
+        raise DashboardContractError("phases must be a non-empty array.")
+
+    phases: dict[str, dict] = {}
+    for index, phase in enumerate(phase_list, start=1):
+        if not isinstance(phase, dict):
+            raise DashboardContractError(f"phases[{index}] must be an object.")
+        phase_id = require_string(phase.get("id"), f"phases[{index}].id")
+        if phase_id in phases:
+            raise DashboardContractError(f"Duplicate phase ID: {phase_id}")
+        require_string(phase.get("label"), f"phases[{index}].label")
+        lifecycle = phase.get("lifecycle")
+        if lifecycle not in ALLOWED_PHASE_LIFECYCLES:
+            raise DashboardContractError(
+                f"phases[{index}].lifecycle must be one of "
+                f"{', '.join(ALLOWED_PHASE_LIFECYCLES)}."
+            )
+        dependencies = phase.get("dependsOnPhaseIds")
+        if not isinstance(dependencies, list):
+            raise DashboardContractError(f"phases[{index}].dependsOnPhaseIds must be an array.")
+        phases[phase_id] = phase
+
+    for phase_id, phase in phases.items():
+        seen_dependencies: set[str] = set()
+        for dependency_index, dependency_id in enumerate(phase["dependsOnPhaseIds"], start=1):
+            dependency_id = require_string(
+                dependency_id,
+                f"phase {phase_id!r} dependsOnPhaseIds[{dependency_index}]",
+            )
+            if dependency_id in seen_dependencies:
+                raise DashboardContractError(
+                    f"Phase {phase_id!r} has duplicate dependency {dependency_id!r}."
+                )
+            seen_dependencies.add(dependency_id)
+            if dependency_id == phase_id:
+                raise DashboardContractError(f"Phase {phase_id!r} cannot depend on itself.")
+            if dependency_id not in phases:
+                raise DashboardContractError(
+                    f"Phase {phase_id!r} depends on unknown phase {dependency_id!r}."
+                )
+
+    def visit_phase(phase_id: str, visiting: set[str], visited: set[str]) -> None:
+        if phase_id in visiting:
+            raise DashboardContractError("Phase dependencies must not contain a cycle.")
+        if phase_id in visited:
+            return
+        visiting.add(phase_id)
+        for dependency_id in phases[phase_id]["dependsOnPhaseIds"]:
+            visit_phase(dependency_id, visiting, visited)
+        visiting.remove(phase_id)
+        visited.add(phase_id)
+
+    visited_phases: set[str] = set()
+    for phase_id in phases:
+        visit_phase(phase_id, set(), visited_phases)
+
+    active_phases = [phase_id for phase_id, phase in phases.items() if phase["lifecycle"] == "active"]
+    if len(active_phases) != 1:
+        raise DashboardContractError("phases must contain exactly one active lifecycle phase.")
+    active_phase_id = require_string(data.get("activePhaseId"), "activePhaseId")
+    if active_phase_id not in phases:
+        raise DashboardContractError(f"activePhaseId {active_phase_id!r} does not match a phase.")
+    if active_phases[0] != active_phase_id:
+        raise DashboardContractError("activePhaseId must match the active lifecycle phase.")
+
     task_list = data.get("tasks")
     if not isinstance(task_list, list) or not task_list:
         raise DashboardContractError("tasks must be a non-empty array.")
 
     ids: set[str] = set()
+    tasks_by_phase: dict[str, list[dict]] = {phase_id: [] for phase_id in phases}
+    tasks_by_id: dict[str, dict] = {}
     for index, task in enumerate(task_list, start=1):
         if not isinstance(task, dict):
             raise DashboardContractError(f"tasks[{index}] must be an object.")
@@ -110,6 +179,13 @@ def load_and_validate(source: Path) -> dict:
         if task_id in ids:
             raise DashboardContractError(f"Duplicate task ID: {task_id}")
         ids.add(task_id)
+        tasks_by_id[task_id] = task
+        phase_id = require_string(task.get("phaseId"), f"tasks[{index}].phaseId")
+        if phase_id not in phases:
+            raise DashboardContractError(
+                f"tasks[{index}].phaseId {phase_id!r} does not match a phase."
+            )
+        tasks_by_phase[phase_id].append(task)
         require_string(task.get("title"), f"tasks[{index}].title")
         require_string(task.get("workType"), f"tasks[{index}].workType")
         status = task.get("status")
@@ -152,11 +228,57 @@ def load_and_validate(source: Path) -> dict:
         raise DashboardContractError(
             f"nextEligibleTaskId {next_eligible!r} does not match a task."
         )
+    for phase_id, phase in phases.items():
+        tasks_in_phase = tasks_by_phase[phase_id]
+        lifecycle = phase["lifecycle"]
+        if lifecycle == "historical" and any(task["status"] != "accepted" for task in tasks_in_phase):
+            raise DashboardContractError(f"Historical phase {phase_id!r} must contain only Accepted cards.")
+        if lifecycle == "planned":
+            if any(task["status"] != "backlog" for task in tasks_in_phase):
+                raise DashboardContractError(f"planned phase {phase_id!r} must contain only Backlog cards.")
+            if any(task["needsUserAction"] for task in tasks_in_phase):
+                raise DashboardContractError(f"planned phase {phase_id!r} cannot require user action.")
+
+    if active is not None:
+        active_task = tasks_by_id[active]
+        if active_task["phaseId"] != active_phase_id or active_task["status"] != "in_progress":
+            raise DashboardContractError(
+                "activeTaskId must identify an in-progress task in the active phase."
+            )
+    if next_eligible is not None:
+        next_task = tasks_by_id[next_eligible]
+        if next_task["phaseId"] != active_phase_id or next_task["status"] != "next_up":
+            raise DashboardContractError(
+                "nextEligibleTaskId must identify a next-up task in the active phase."
+            )
+
+    for dependency_id in phases[active_phase_id]["dependsOnPhaseIds"]:
+        dependency = phases[dependency_id]
+        if dependency["lifecycle"] != "historical":
+            raise DashboardContractError(
+                f"Active phase dependency {dependency_id!r} must be historical."
+            )
+        if any(task["status"] != "accepted" for task in tasks_by_phase[dependency_id]):
+            raise DashboardContractError(
+                f"Active phase dependency {dependency_id!r} must contain only Accepted cards."
+            )
     return data
 
 
 def escape(value: object) -> str:
     return html.escape(str(value), quote=True)
+
+
+def script_safe_json(value: object) -> str:
+    """Encode JSON safely for an application/json script element."""
+    return (
+        json.dumps(value)
+        .replace("&", r"\u0026")
+        .replace("<", r"\u003c")
+        .replace(">", r"\u003e")
+        .replace("\u2028", r"\u2028")
+        .replace("\u2029", r"\u2029")
+    )
 
 
 def detail_href(task: dict) -> str:
@@ -248,6 +370,7 @@ def render_dashboard(status: dict) -> str:
 
 
 def render_detail_page(status: dict) -> str:
+    phase_labels = {phase["id"]: phase["label"] for phase in status["phases"]}
     sections = []
     for task in status["tasks"]:
         evidence = task.get("evidence", {})
@@ -255,7 +378,7 @@ def render_detail_page(status: dict) -> str:
         action = task.get("userActionDetail", "No action needed")
         sections.append(
             f'''<article id="{escape(task['id'])}" class="detail status-{escape(task['status'])}">
-  <div class="heading"><span class="task-id">{escape(task['id'])}</span><span>{escape(task['workType'])}</span><span>{escape(task['status'].replace('_', ' ').title())}</span></div>
+  <div class="heading"><span class="task-id">{escape(task['id'])}</span><span>{escape(phase_labels[task['phaseId']])}</span><span>{escape(task['workType'])}</span><span>{escape(task['status'].replace('_', ' ').title())}</span></div>
   <h2>{escape(task['title'])}</h2>
   <dl><div><dt>Release condition</dt><dd>{escape(task['releaseCondition'])}</dd></div>
   <div><dt>Latest transition</dt><dd>{escape(task['latestTransition'])}</dd></div>
@@ -266,7 +389,7 @@ def render_detail_page(status: dict) -> str:
     return f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="30"><title>Rekon Pursuit — Remediation details</title>
 <style>:root{{color-scheme:dark;--ink:#f3f6fb;--muted:#a6b2c7;--surface:#0d1423;--panel:#151f32;--line:#2b3850;--cyan:#20c9ef}}*{{box-sizing:border-box}}body{{margin:0;background:#0a0f1a;color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}}main{{max-width:960px;margin:0 auto;padding:32px}}a{{color:var(--cyan)}}h1{{margin:10px 0 6px}}.subhead,dd{{color:var(--muted)}}.detail{{scroll-margin-top:24px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin:16px 0}}.heading{{display:flex;gap:8px;align-items:center;color:#c9d5ed;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}}.task-id{{color:var(--cyan)}}h2{{margin:9px 0 14px;font-size:20px}}dl{{margin:0}}dl div{{margin:12px 0}}dt{{color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}}dd{{margin:3px 0 0}}</style></head>
-<body><main><a href="index.html">← Back to dashboard</a><h1>Remediation task details</h1><p class="subhead">A local dashboard detail view. Refreshes every 30 seconds.</p>{''.join(sections)}</main></body></html>'''
+<body><main><a href="index.html">← Back to dashboard</a><h1>Delivery task details</h1><p class="subhead">A local dashboard detail view. Refreshes every 30 seconds.</p>{''.join(sections)}</main></body></html>'''
 
 
 def main() -> int:
