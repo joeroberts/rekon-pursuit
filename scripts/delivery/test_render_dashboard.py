@@ -181,3 +181,32 @@ class DashboardContractTests(unittest.TestCase):
         self.assertIn("<h1>Delivery task details</h1>", detail_page)
         self.assertIn('href="remediation.html#UX-D11"', dashboard)
         self.assertIn('id="UX-D11"', detail_page)
+
+    def test_committed_source_has_all_approved_phases_and_future_cards(self):
+        status = renderer.load_and_validate(renderer.SOURCE)
+        self.assertEqual(status["activePhaseId"], "post_mvp_refinement")
+        self.assertEqual(
+            [phase["id"] for phase in status["phases"]],
+            ["remediation_r1", "post_mvp_refinement", "phase_2a",
+             "phase_2b", "phase_2c", "phase_3"],
+        )
+        self.assertEqual(
+            [
+                (phase["lifecycle"], phase["dependsOnPhaseIds"])
+                for phase in status["phases"]
+            ],
+            [
+                ("historical", []),
+                ("active", ["remediation_r1"]),
+                ("planned", ["post_mvp_refinement"]),
+                ("planned", ["phase_2a"]),
+                ("planned", ["phase_2b"]),
+                ("planned", ["phase_2c"]),
+            ],
+        )
+        task_by_id = {task["id"]: task for task in status["tasks"]}
+        self.assertEqual(task_by_id["RP-R10"]["phaseId"], "remediation_r1")
+        for task_id in ("UX-D10", "UX-D11", "UX-D12", "DESIGN-V2",
+                        "P2A-1", "P2B-1", "P2C-1", "P3-1"):
+            self.assertEqual(task_by_id[task_id]["status"], "backlog")
+            self.assertFalse(task_by_id[task_id]["needsUserAction"])

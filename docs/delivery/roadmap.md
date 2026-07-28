@@ -12,13 +12,12 @@ The delivery principle is **vertical slices over isolated screens**: each slice 
 
 | Release area | Current status |
 | --- | --- |
-| MVP candidate | **Remediation in progress** — an unsigned app candidate contains partial local tracker functionality, but it cannot be represented as a complete MVP. See the remediation ledger for verified gaps and release state. |
-| Package and automation | **Candidate exists** — unsigned `.app` package and build/archive/macOS smoke workflow. Developer ID signing, notarization, and DMG distribution are intentionally deferred. |
-| MVP remediation | **Current work** — the approved sequence is UX-R1 shell/opportunity navigation, then UX-R2 core workflow forms, then durable document references. The detailed, current queue and gates are in the remediation ledger; no UX or R6 implementation is released until its own brief is approved. |
-| Phase 2a — privacy and AI foundation | **Not started** — local-model runtime, cloud routing/sanitization/consent, populated AI ledger, budgets, and costs. |
-| Phase 2b — Gmail and Google Calendar | **Not started** — follows the privacy/AI foundation. |
-| Phase 2c — documents and research | **Not started** — full document processing/versioning and sourced employer research. |
-| Phase 3 — interview and offer support | **Not started** — interview preparation/call review, offers, comparison, and negotiation. |
+| Remediation R1 | **Accepted historical evidence** — the remediation ledger records the accepted R1 sequence and evidence; it is not current implementation work. |
+| Post-MVP refinement | **Active planned queue** — UX-D10, UX-D11, UX-D12, and DESIGN-V2 are visible as Backlog in their own dashboard phase. None is released, active, blocked, or awaiting owner action. |
+| Phase 2a — privacy and AI foundation | **Not started** — follows accepted Post-MVP refinement; local-model runtime, cloud routing/sanitization/consent, populated AI ledger, budgets, and costs remain Backlog. |
+| Phase 2b — Gmail and Google Calendar | **Not started** — follows accepted Phase 2a. |
+| Phase 2c — documents and research | **Not started** — follows accepted Phase 2b. |
+| Phase 3 — interview and offer support | **Not started** — follows accepted Phase 2c. |
 
 ### Shipped MVP boundaries
 
@@ -153,8 +152,9 @@ For a small team, one person may hold multiple roles, but the accountability bou
 ### Post-remediation UX refinement queue
 
 These are planned product refinements, not active remediation work. They must not
-change the current delivery dashboard or release order until separately planned
-and released.
+change release order until separately planned and released. They are visible as
+Backlog under the Post-MVP refinement dashboard phase while this roadmap and the
+remediation ledger retain sequencing and evidence authority.
 
 | ID | Refinement | Intended outcome |
 | --- | --- | --- |
@@ -171,7 +171,7 @@ and released.
 2. Populated local AI ledger with redacted entries, local search, cost/pricing-version records, budgets/alerts, and no raw sensitive prompt content by default.
 3. Fixture-backed consent, no-fallback, routing, ledger, and budget acceptance tests.
 
-**Dependencies:** MVP release acceptance; approved local-runtime policy, sanitization fields, full-cloud disclosure, pricing source, OpenAI processing/deletion terms, and privacy-owner sign-off.
+**Dependencies:** Accepted Post-MVP refinement; approved local-runtime policy, sanitization fields, full-cloud disclosure, pricing source, OpenAI processing/deletion terms, and privacy-owner sign-off.
 
 **Acceptance checkpoint:** Fixture-backed runs prove local, sanitized-cloud, and full-cloud route disclosure; no selected-route failure falls back to cloud; cancellation produces no provider call; ledger entries retain route, completion state, linked record, and pricing version without raw sensitive prompts; and budget handling is deterministic.
 
@@ -215,7 +215,7 @@ and released.
 3. Evidence-backed coaching rubric with visible inputs and `not enough evidence` outcome.
 4. Offer capture, user-controlled weights, transparent comparison, missing-term flags, sensitivity display, and negotiation draft review.
 
-**Dependencies:** Workstream G privacy/AI ledger capabilities; product-owner decisions on scoring weights/rubrics; consent and retention policy for recordings/transcripts.
+**Dependencies:** Accepted Phase 2c, including Workstream G privacy/AI ledger capabilities; product-owner decisions on scoring weights/rubrics; consent and retention policy for recordings/transcripts.
 
 **Acceptance checkpoint:** Change one offer weight and verify recomputation/explanation is predictable. Feed insufficient interview evidence and verify no fabricated score appears. Delete an interview transcript/audio and verify the interview record remains with the expected deletion activity event.
 
