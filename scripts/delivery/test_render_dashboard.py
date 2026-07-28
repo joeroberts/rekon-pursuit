@@ -139,8 +139,10 @@ class DashboardContractTests(unittest.TestCase):
 
     def test_detail_page_includes_phase_label_heading_and_compatible_fragment(self):
         status = valid_status()
+        dashboard = renderer.render_dashboard(status)
         detail_page = renderer.render_detail_page(status)
 
         self.assertIn("Post-MVP refinement", detail_page)
         self.assertIn("<h1>Delivery task details</h1>", detail_page)
-        self.assertEqual(renderer.detail_href(status["tasks"][1]), "remediation.html#UX-D11")
+        self.assertIn('href="remediation.html#UX-D11"', dashboard)
+        self.assertIn('id="UX-D11"', detail_page)
