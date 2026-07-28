@@ -46,6 +46,40 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.documentReferenceSummary, .init(availableCount: 1, relinkRequiredCount: 1))
     }
 
+    func testSelectingOpportunityRefreshesOnlyThatOpportunitiesDocumentReferences() throws {
+        let store = try makeStore()
+        let first = try store.create(CreateOpportunity(title: "First", company: "Rekon Labs"))
+        let second = try store.create(CreateOpportunity(title: "Second", company: "Rekon Labs"))
+        _ = try store.recordDocumentReference(RecordDocumentReference(
+            opportunityID: first.id,
+            kind: .resume,
+            filename: "first.pdf",
+            contentType: "application/pdf",
+            sourceHash: String(repeating: "a", count: 64),
+            byteCount: 1,
+            bookmarkData: Data([0x01])
+        ))
+        _ = try store.recordDocumentReference(RecordDocumentReference(
+            opportunityID: second.id,
+            kind: .coverLetter,
+            filename: "second.pdf",
+            contentType: "application/pdf",
+            sourceHash: String(repeating: "b", count: 64),
+            byteCount: 1,
+            bookmarkData: Data([0x02])
+        ))
+        let model = WorkspaceViewModel(
+            openWorkspace: { .ready(store) },
+            createWorkspace: { store },
+            separateLocalWorkspace: .disabledForTesting
+        )
+
+        model.start()
+        model.select(second)
+
+        XCTAssertEqual(model.selectedDocumentReferences.map(\.filename), ["second.pdf"])
+    }
+
     func testPortableArchiveRestoreKeepsSecurityScopeUntilExplicitConfirmationCompletes() async throws {
         let store = try makeStore()
         let archiveURL = URL(fileURLWithPath: "/private/tmp/portable.rekonarchive")

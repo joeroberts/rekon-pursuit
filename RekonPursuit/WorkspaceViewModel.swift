@@ -747,6 +747,7 @@ final class WorkspaceViewModel: ObservableObject {
         refreshSelectedTask()
         refreshRelationshipMemory()
         refreshSelectedReconciliation()
+        refreshSelectedDocumentReferences()
     }
 
     /// Selects an existing opportunity for an ephemeral UI route. Returning a
@@ -1700,9 +1701,8 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func openImportedOpportunity(_ id: String) {
-        guard opportunities.contains(where: { $0.id == id }) else { return }
-        selectedOpportunityID = id
-        loadSelectedOpportunity()
+        guard let opportunity = opportunities.first(where: { $0.id == id }) else { return }
+        select(opportunity)
         statusMessage = "Opened the local opportunity from the import report."
     }
 
