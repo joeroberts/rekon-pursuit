@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": "RP-R9",
-  "nextEligibleTaskId": null,
+  "activeTaskId": null,
+  "nextEligibleTaskId": "RP-R10",
   "tasks": [
     {
       "id": "RP-R0",
@@ -280,9 +280,9 @@
       "id": "RP-R9",
       "title": "Lifecycle-aware settings",
       "workType": "Settings",
-      "status": "in_progress",
-      "releaseCondition": "Released after Planning, Architect, TPM, QA, and Delivery approval; implement only truthful Settings lifecycle summaries.",
-      "latestTransition": "Released for implementation after R7b reconciliation and independent plan gates cleared.",
+      "status": "accepted",
+      "releaseCondition": "Accepted lifecycle-aware Settings summaries; recovery, export, restore, and purge behavior remain unchanged.",
+      "latestTransition": "Accepted by the product owner after hands-on verification of lifecycle summaries and existing Settings actions.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
@@ -293,9 +293,9 @@
       "id": "RP-R10",
       "title": "Clean-state remediation acceptance",
       "workType": "Acceptance",
-      "status": "backlog",
+      "status": "next_up",
       "releaseCondition": "Release after RP-R1a through RP-R9 and UX-R1/UX-R2 are accepted.",
-      "latestTransition": "Planned remediation work.",
+      "latestTransition": "Next eligible after RP-R9 product-owner acceptance; requires its own final acceptance plan and release gate.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
