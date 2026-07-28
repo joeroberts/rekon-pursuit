@@ -965,7 +965,106 @@ private struct ContactOpportunityManagementSheet: View {
     }
 }
 
-private struct GlobalActivityView: View { @ObservedObject var model: WorkspaceViewModel; var body: some View { ScrollView { VStack(alignment: .leading, spacing: 16) { Text("Activity & AI").font(.largeTitle.bold()); GroupBox("Local activity ledger") { TextField("Search activity", text: $model.activitySearch).accessibilityIdentifier("activity-search"); if model.filteredActivityEvents.isEmpty { Text(model.activityEvents.isEmpty ? "No local activity yet." : "No activity matches that search.").foregroundStyle(.secondary) } else { ForEach(model.filteredActivityEvents, id: \.id) { Text("\($0.kind.replacingOccurrences(of: "_", with: " ").capitalized) · \($0.occurredAt.formatted(date: .abbreviated, time: .shortened))") } } }; GroupBox("AI usage and cost") { Text("No AI requests have been made. Cloud AI, local-model execution, and cost tracking are intentionally unavailable in this MVP.").foregroundStyle(.secondary) } }.padding(28).frame(maxWidth: 920, alignment: .leading) } } }
+private struct GlobalActivityView: View {
+    @ObservedObject var model: WorkspaceViewModel
+    @State private var aiLedgerFilter = AIUsageLedgerFilter()
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Activity & AI")
+                    .font(.largeTitle.bold())
+
+                GroupBox("Local activity ledger") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        TextField("Search activity", text: $model.activitySearch)
+                            .accessibilityIdentifier("activity-search")
+                        if model.filteredActivityEvents.isEmpty {
+                            Text(model.activityEvents.isEmpty ? "No local activity yet." : "No activity matches that search.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(model.filteredActivityEvents, id: \.id) { event in
+                                Text("\(event.kind.replacingOccurrences(of: "_", with: " ").capitalized) · \(event.occurredAt.formatted(date: .abbreviated, time: .shortened))")
+                            }
+                        }
+                    }
+                }
+
+                GroupBox("AI usage ledger") {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("No AI requests have run. Local and cloud AI execution, model activity, and cost calculation are unavailable in this MVP.")
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("ai-ledger-empty-state")
+
+                        Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
+                            GridRow {
+                                Picker("Time", selection: $aiLedgerFilter.time) {
+                                    ForEach(AIUsageLedgerFilter.Time.allCases, id: \.self) { time in
+                                        Text(time.label).tag(time)
+                                    }
+                                }
+                                .accessibilityIdentifier("ai-ledger-time-filter")
+
+                                TextField("Feature", text: $aiLedgerFilter.featureQuery)
+                                    .accessibilityIdentifier("ai-ledger-feature-filter")
+                            }
+                            GridRow {
+                                Picker("Opportunity", selection: $aiLedgerFilter.opportunityID) {
+                                    Text("All opportunities").tag(nil as String?)
+                                    ForEach(model.opportunities, id: \.id) { opportunity in
+                                        Text("\(opportunity.title) · \(opportunity.company)").tag(Optional(opportunity.id))
+                                    }
+                                }
+                                .accessibilityIdentifier("ai-ledger-opportunity-filter")
+
+                                Picker("Route", selection: $aiLedgerFilter.route) {
+                                    ForEach(AIUsageLedgerFilter.Route.allCases, id: \.self) { route in
+                                        Text(route.label).tag(route)
+                                    }
+                                }
+                                .accessibilityIdentifier("ai-ledger-route-filter")
+                            }
+                            GridRow {
+                                TextField("Model", text: $aiLedgerFilter.modelQuery)
+                                    .accessibilityIdentifier("ai-ledger-model-filter")
+
+                                Picker("Completion", selection: $aiLedgerFilter.completion) {
+                                    ForEach(AIUsageLedgerFilter.Completion.allCases, id: \.self) { completion in
+                                        Text(completion.label).tag(completion)
+                                    }
+                                }
+                                .accessibilityIdentifier("ai-ledger-completion-filter")
+                            }
+                            GridRow {
+                                TextField("Minimum cost (USD)", text: $aiLedgerFilter.minimumCostUSD)
+                                    .accessibilityIdentifier("ai-ledger-min-cost-filter")
+                                TextField("Maximum cost (USD)", text: $aiLedgerFilter.maximumCostUSD)
+                                    .accessibilityIdentifier("ai-ledger-max-cost-filter")
+                            }
+                        }
+
+                        if let validationMessage = aiLedgerFilter.costRangeValidationMessage {
+                            Text(validationMessage)
+                                .foregroundStyle(.red)
+                        } else if !aiLedgerFilter.isDefault {
+                            Text("Zero entries match the current filters.")
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Button("Clear filters") {
+                            aiLedgerFilter.reset()
+                        }
+                        .disabled(aiLedgerFilter.isDefault)
+                        .accessibilityIdentifier("ai-ledger-clear-filters")
+                    }
+                    .frame(maxWidth: 760, alignment: .leading)
+                }
+            }
+            .padding(28)
+            .frame(maxWidth: 920, alignment: .leading)
+        }
+    }
+}
 
 private struct SettingsView: View {
     @ObservedObject var model: WorkspaceViewModel

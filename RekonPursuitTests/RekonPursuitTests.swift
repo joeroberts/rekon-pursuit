@@ -2,6 +2,68 @@ import XCTest
 @testable import RekonPursuit
 
 final class RekonPursuitTests: XCTestCase {
+    @MainActor
+    func testAIUsageLedgerFilterStartsWithUnboundedDefaults() {
+        let filter = AIUsageLedgerFilter()
+
+        XCTAssertEqual(filter.time, .allTime)
+        XCTAssertEqual(filter.featureQuery, "")
+        XCTAssertNil(filter.opportunityID)
+        XCTAssertEqual(filter.route, .any)
+        XCTAssertEqual(filter.modelQuery, "")
+        XCTAssertEqual(filter.completion, .any)
+        XCTAssertEqual(filter.minimumCostUSD, "")
+        XCTAssertEqual(filter.maximumCostUSD, "")
+        XCTAssertTrue(filter.isDefault)
+        XCTAssertNil(filter.costRangeValidationMessage)
+    }
+
+    @MainActor
+    func testAIUsageLedgerFilterResetRestoresDefaults() {
+        var filter = AIUsageLedgerFilter()
+        filter.time = .last7Days
+        filter.featureQuery = "interview prep"
+        filter.opportunityID = "opportunity-1"
+        filter.route = .sanitizedCloud
+        filter.modelQuery = "local-model"
+        filter.completion = .failed
+        filter.minimumCostUSD = "1.25"
+        filter.maximumCostUSD = "4.50"
+
+        filter.reset()
+
+        XCTAssertTrue(filter.isDefault)
+        XCTAssertNil(filter.costRangeValidationMessage)
+    }
+
+    @MainActor
+    func testAIUsageLedgerFilterValidatesCostRangeWithoutCoercion() {
+        var filter = AIUsageLedgerFilter()
+        filter.minimumCostUSD = "1.50"
+        filter.maximumCostUSD = "1.25"
+
+        XCTAssertEqual(filter.costRangeValidationMessage, "Minimum cost cannot exceed maximum cost.")
+        XCTAssertEqual(filter.minimumCostUSD, "1.50")
+        XCTAssertEqual(filter.maximumCostUSD, "1.25")
+
+        filter.minimumCostUSD = "-1"
+        filter.maximumCostUSD = ""
+        XCTAssertEqual(filter.costRangeValidationMessage, "Cost values must be non-negative USD amounts.")
+
+        filter.minimumCostUSD = "not-a-number"
+        XCTAssertEqual(filter.costRangeValidationMessage, "Enter a valid USD amount.")
+
+        filter.minimumCostUSD = "nan"
+        XCTAssertEqual(filter.costRangeValidationMessage, "Enter a valid USD amount.")
+
+        filter.minimumCostUSD = "inf"
+        XCTAssertEqual(filter.costRangeValidationMessage, "Enter a valid USD amount.")
+
+        filter.minimumCostUSD = "0"
+        filter.maximumCostUSD = "4.50"
+        XCTAssertNil(filter.costRangeValidationMessage)
+    }
+
     func testDailyNavigationStateStartsAtHome() {
         XCTAssertEqual(DailyNavigationState().route, .home)
     }
