@@ -34,14 +34,14 @@ SQLite, a server, or a second roadmap store.
 
 ## Phase model
 
-| ID | Label | Default state |
-| --- | --- | --- |
-| `remediation_r1` | Remediation R1 | Accepted historical delivery phase |
-| `post_mvp_refinement` | Post-MVP refinement | Active; its cards are planned Backlog work |
-| `phase_2a` | Phase 2a — Privacy and AI foundation | Future Backlog |
-| `phase_2b` | Phase 2b — Connected workflow | Future Backlog, sequenced after Phase 2a |
-| `phase_2c` | Phase 2c — Intelligence and documents | Future Backlog, sequenced after Phase 2b |
-| `phase_3` | Phase 3 — Decision support | Future Backlog, sequenced after Phase 2c |
+| ID | Label | Lifecycle | Dependencies | Default state |
+| --- | --- | --- | --- | --- |
+| `remediation_r1` | Remediation R1 | Historical | None | Accepted historical delivery phase |
+| `post_mvp_refinement` | Post-MVP refinement | Active | Remediation R1 | Its cards are planned Backlog work |
+| `phase_2a` | Phase 2a — Privacy and AI foundation | Planned | Post-MVP refinement | Future Backlog |
+| `phase_2b` | Phase 2b — Connected workflow | Planned | Phase 2a | Future Backlog |
+| `phase_2c` | Phase 2c — Intelligence and documents | Planned | Phase 2b | Future Backlog |
+| `phase_3` | Phase 3 — Decision support | Planned | Phase 2c | Future Backlog |
 
 Each future remediation cycle receives a distinct phase ID, display label,
 and its own cards. `workType` remains independent of phase so cards can say
@@ -53,6 +53,14 @@ ledger, task status, or attention state. A 30-second page refresh returns the
 view to `activePhaseId`, ensuring the open file reflects the latest committed
 operational state.
 
+Exactly one phase has lifecycle `active`, and it must equal `activePhaseId`.
+Historical phases contain accepted cards only. Planned phases contain Backlog
+cards only and never create an attention item. A phase may become active only
+when every declared dependency is historical and all of that phase's cards are
+accepted. Dependencies must refer to known, distinct phase IDs and form no
+cycles. These constraints make each remediation cycle repeatable rather than
+encoding a single, one-time remediation sequence.
+
 ## Data contract
 
 `dashboard-status.json` gains:
@@ -60,7 +68,12 @@ operational state.
 ```json
 {
   "activePhaseId": "post_mvp_refinement",
-  "phases": [{ "id": "post_mvp_refinement", "label": "Post-MVP refinement" }],
+  "phases": [{
+    "id": "post_mvp_refinement",
+    "label": "Post-MVP refinement",
+    "lifecycle": "active",
+    "dependsOnPhaseIds": ["remediation_r1"]
+  }],
   "tasks": [{ "id": "UX-D11", "phaseId": "post_mvp_refinement" }]
 }
 ```
