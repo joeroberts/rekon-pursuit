@@ -2,14 +2,17 @@
 
 ## Decision
 
-The local delivery dashboard becomes one Kanban board for accepted remediation
-history and post-MVP product work. It remains a generated `file://` page with
-one canonical, versioned JSON source; it does not add SQLite, a server, or a
-second roadmap store.
+The local delivery dashboard becomes one Kanban board for every delivery
+phase: remediation cycles and product phases alike. It remains a generated
+`file://` page with one canonical, versioned JSON source; it does not add
+SQLite, a server, or a second roadmap store.
 
 ## Scope
 
-- Add an explicit phase to every existing remediation task.
+- Add an explicit delivery phase to every existing remediation task. The
+  accepted current cycle is named `Remediation R1`; a later remediation is a
+  new phase (for example, `Remediation R2`), never work silently added to the
+  historical R1 lane.
 - Add the approved post-MVP cards:
   - `UX-D11` — Logs and AI Ledger tabs
   - `UX-D12` — Refine log-search semantics
@@ -33,12 +36,17 @@ second roadmap store.
 
 | ID | Label | Default state |
 | --- | --- | --- |
-| `remediation` | Remediation | Accepted historical delivery phase |
+| `remediation_r1` | Remediation R1 | Accepted historical delivery phase |
 | `post_mvp_refinement` | Post-MVP refinement | Active; its cards are planned Backlog work |
 | `phase_2a` | Phase 2a — Privacy and AI foundation | Future Backlog |
 | `phase_2b` | Phase 2b — Connected workflow | Future Backlog, sequenced after Phase 2a |
 | `phase_2c` | Phase 2c — Intelligence and documents | Future Backlog, sequenced after Phase 2b |
 | `phase_3` | Phase 3 — Decision support | Future Backlog, sequenced after Phase 2c |
+
+Each future remediation cycle receives a distinct phase ID, display label,
+and its own cards. `workType` remains independent of phase so cards can say
+what they are (for example, **Remediation**, **UX refinement**, or
+**Workflow**) without overloading the Kanban lane name.
 
 The selected phase is view state only. Changing it must not update JSON,
 ledger, task status, or attention state. A 30-second page refresh returns the
@@ -97,7 +105,7 @@ Backlog work does not create alerts.
    and contains all six selectable phases.
 3. Selecting each phase filters cards, summary counts, and attention queue to
    that phase only; it does not mutate source state.
-4. Existing remediation cards remain visible under the Remediation filter with
+4. Existing remediation cards remain visible under the Remediation R1 filter with
    their accepted statuses and evidence links intact.
 5. Existing dashboard `--check` determinism and 30-second refresh behavior
    remain intact.
