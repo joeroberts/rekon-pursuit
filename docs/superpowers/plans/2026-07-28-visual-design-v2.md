@@ -46,7 +46,10 @@ XCTest/XCUITest, existing Python delivery-dashboard renderer.
   Accepted from a test/commit alone.
 - Current shared SwiftUI seams require serial release in the card order below.
 - At each real state transition update JSON, roadmap, dashboard operational
-  ledger entry, generated HTML, and SDD evidence together.
+  record, generated HTML, and SDD evidence together. The authoritative
+  non-remediation delivery record for this program is the **Visual Design v2**
+  section in `docs/delivery/roadmap.md`; do not record VD2 acceptance evidence
+  in `docs/delivery/remediation-ledger.md`.
 
 ## Prerequisite release record
 
@@ -58,6 +61,11 @@ the active `post_mvp_refinement` dashboard phase:
 - `VD2-01` is Next up only after this plan receives all five independent gate
   approvals; `VD2-02` through `VD2-08` are Backlog.
 - `activeTaskId` stays null until the Delivery Manager formally starts VD2-01.
+- Each child starts with `evidence` pointing at its governed task brief (or this
+  plan until the brief exists) and `needsUserAction: false`. At a completed
+  owner-smoke handoff only, its card sets `needsUserAction: true`; it resets to
+  `false` when the owner accepts the card and review evidence replaces the
+  planning evidence. This is the only VD2 attention-queue condition.
 - `activePhaseId` stays `post_mvp_refinement`; `UX-D10`–`UX-D12` and Phase 2+
   remain untouched Backlog work.
 
@@ -76,10 +84,12 @@ program/card map, gate records, review evidence, risks, and each transition.
 **Test first:**
 1. Add deterministic theme/component checks for semantic colors, selected,
    pressed, disabled, focused states, and the exact known `RekonEmblem` asset.
-2. Add a stable app launch fixture/test seam that can create empty, populated,
-   recovery, error, archive, and document-relink test states without reading a
-   personal workspace. Add accessibility identifier assertions for shell/focus
-   targets.
+2. Define and add a stable, non-personal app launch-fixture contract: an
+   explicit launch argument and fixture ID, an isolated temporary store/keychain
+   namespace, a fixed clock/time-zone, deterministic empty/populated/recovery/
+   error/archive/document-relink fixtures, and UI-test teardown. The normal
+   launch path must remain untouched and fixture mode must never read a personal
+   workspace. Add accessibility identifier assertions for shell/focus targets.
 3. Run the focused tests and confirm failure before implementation.
 
 **Implementation:**
@@ -93,7 +103,10 @@ program/card map, gate records, review evidence, risks, and each transition.
 
 **Verify:**
 - focused XCTest/XCUITest suite, Debug build, compact/default/wide visual
-  sampler, Dynamic Type and Reduce Motion smoke, manual contrast/focus review.
+  sampler, Dynamic Type and Reduce Motion smoke, manual contrast/focus review,
+  and proportional independent security/privacy verification that confirms no
+  data collection, network, persistence, entitlement, or local-data exposure
+  change.
 - Independent reviewer and QA confirm no model/store/activity behavior change.
 
 **Hands-on path:** Open the signed Debug handoff; navigate between existing
@@ -120,7 +133,8 @@ into the shell.
 alternative instead of unreadable shrinking.
 
 **Verify:** Focused UI suite, all existing route tests, Debug build, independent
-code review/QA and architectural route-boundary review.
+code review/QA, proportional security/privacy verification, and architectural
+route-boundary review.
 
 **Hands-on path:** Resize the signed Debug build at 860×600, normal, and wide;
 use keyboard only to visit every destination; open and return from an
@@ -144,7 +158,8 @@ metrics, and real upcoming tasks using the approved hierarchy. Decorative
 surfaces must not conceal missing data; unsupported metrics are omitted.
 
 **Verify:** Focused tests, app manual at supported window sizes, independent
-review/QA, and owner test of task action persistence.
+review/QA, proportional security/privacy verification, and owner test of task
+action persistence.
 
 ## Task 4 — VD2-04: Pipeline table and inspector
 
@@ -168,7 +183,8 @@ inspector is not a second editor; canonical editing stays in
 `OpportunityRoute.overview`.
 
 **Verify:** Existing import/reconcile/history routes plus focused table tests,
-independent code review/QA, and architecture selection-boundary review.
+independent code review/QA, proportional security/privacy verification, and
+architecture selection-boundary review.
 
 **Hands-on path:** Search multiple terms, filter stage, select several records,
 open details/save, return, and relaunch to confirm no stale selection/data.
@@ -186,8 +202,9 @@ then add store/view-model regression tests for `.persisted`, `.noOp`,
 `.reconciliationBlocked`, `.unavailable`, and `.failed` outcomes. Cover valid
 moves, same-stage no-op, rejected missing/closed-unconfirmed moves, store or
 refresh failure rollback, activity event, stage history, refreshed lane counts,
-and relaunch persistence. UI/manual tests cover drag, drop outside/cancel,
-keyboard alternative, VoiceOver labels, and Reduce Motion.
+and relaunch persistence. UI/manual tests cover drag, drop outside/cancel, a
+stable identified **Move to stage** keyboard/VoiceOver menu with every valid
+target label, matching disabled/blocked outcome copy, and Reduce Motion.
 
 **Implementation:** Build truthful context-rich stage cards with SF-symbol or
 initial fallbacks only. Introduce a structured stage-move result returned only
@@ -196,7 +213,9 @@ reconciliation-blocked close, unavailable/deleted record, and store/refresh
 failure. Use a payload containing opportunity ID, validate target, and invoke
 only `WorkspaceViewModel.changeStage(_:to:)`. Animate drag lift and drop hover
 only; commit the lane change only after `.persisted`. All other outcomes retain
-source placement and expose their matching accessible error.
+source placement and expose their matching accessible error. The identified
+**Move to stage** menu/action is the complete keyboard and VoiceOver
+alternative; native drag/drop is never the only stage-move path.
 
 **Verify:** Focused persistence/audit tests, full stage-move regression,
 independent code review, QA, and security/privacy verification.
@@ -220,8 +239,8 @@ disclosure, delete/open route, and relaunch/persistence checks.
 contacts. Keep employer/linked opportunity lists collapsed until explicit
 disclosure; preserve current email/profile validation and activity behavior.
 
-**Verify:** Focused tests, keyboard/VoiceOver/resize smoke, independent review
-and QA.
+**Verify:** Focused tests, keyboard/VoiceOver/resize smoke, independent review,
+QA, and proportional security/privacy verification.
 
 **Hands-on path:** Filter contacts, select a record, expand/collapse related
 opportunities, open one canonical opportunity, then edit/save/relaunch.
@@ -234,10 +253,11 @@ opportunities, open one canonical opportunity, then edit/save/relaunch.
 - Modify: existing recovery/export/document tests and UI tests
 
 **Test first:** Re-run and extend regression coverage for recovery/archive
-create/verify/expiry/purge, protected export destination binding/confirm/error/
-cancel, inactive restore, separate workspace recovery, and document
-reference/relink. UI tests must use fixture state and verify accessible alerts
-and busy/disabled controls.
+create/verify/expiry/purge using an injected fixed clock, protected export
+destination binding/confirm/error/cancel with no recovery-key value in UI,
+logs, or test artifacts, inactive restore, separate workspace recovery, and
+document reference/relink. UI tests must use fixture state and verify accessible
+alerts and busy/disabled controls.
 
 **Implementation:** Recompose existing Workspace, Recovery & archives,
 Document references, and AI & connections content into truthful cards. No
@@ -260,12 +280,14 @@ verify disabled/error/cancel states remain clear.
 1. Run all unit/UI tests with deterministic fixture launch states.
 2. Debug and Release build; `git diff --check`; existing entitlement/security
 checks; dashboard renderer/test/check.
-3. Independently inspect Home, Pipeline table/board, Contacts, Activity & AI,
-Settings, onboarding/recovery, opportunity routes, empty/loading/error states
-at 860×600, 1100×760, default, and wide layouts.
-4. Run keyboard-only and VoiceOver/Accessibility Inspector checks, contrast and
-visible-focus review, Dynamic Type and Reduce Motion checks, and relaunch
-persistence checks for stage/contact/document/recovery flows.
+3. Produce an auditable visual/accessibility evidence matrix for Home, Pipeline
+table/board, Contacts, Activity & AI, Settings, onboarding/recovery, and
+opportunity routes. For each screen/state record stable screenshot or manual
+check artifact at 860×600, 1100×760, default, and wide layouts; large text;
+Reduce Motion; and supported macOS appearance.
+4. Record keyboard-only and VoiceOver/Accessibility Inspector pass evidence,
+contrast and visible-focus review, and relaunch persistence checks for
+stage/contact/document/recovery flows.
 
 **Acceptance:** A separate reviewer, QA, and security/privacy verifier approve.
 Product owner receives a concise signed Debug verification checklist and

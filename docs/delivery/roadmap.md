@@ -160,6 +160,42 @@ remediation ledger retain sequencing and evidence authority.
 | `UX-D11` | Split the existing **Activity & AI** destination into **Logs** and **AI ledger** tabs while retaining the same sidebar entry. | Each ledger has its own working area; neither search/filter surface is permanently stacked below the other. No AI execution, network capability, or new ledger data is introduced. |
 | `UX-D12` | Refine local log search beyond token-only matching. | Preserve the current safe multi-word fallback, then add predictable phrase/ordered-term behavior and a clear way to target an exact event label or identifier so queries such as `CSV import row 2 created` do not also return rows 20, 21, and 22. Define ranking, matching, and empty-state behavior before implementation. |
 
+### Visual Design v2 program
+
+**Authoritative product-delivery record:** This section, together with
+`docs/delivery/dashboard-status.json` and the local SDD progress ledger, is
+the controlling delivery record for Visual Design v2. It is not remediation
+work and its acceptance evidence must not be recorded in the remediation ledger.
+
+**Design direction:** Recompose the native SwiftUI application around the
+approved Rekon Pursuit visual language: deep layered navy surfaces, restrained
+cyan/violet accents, an accessible left navigation rail, clear type hierarchy,
+truthful cards, correct existing logo treatment, and native reduced-motion
+behavior. Reference mockups are a design-system target, not fake data or a
+pixel-copy mandate.
+
+| ID | Child card | Dependency / current state |
+| --- | --- | --- |
+| `VD2-01` | Visual foundation and tokens | **Next up** — all independent plan gates approved; no implementation released yet. |
+| `VD2-02` | App shell and navigation | Backlog — requires `VD2-01` accepted. |
+| `VD2-03` | Home redesign | Backlog — requires `VD2-02` accepted. |
+| `VD2-04` | Pipeline table and inspector | Backlog — requires `VD2-02` accepted. |
+| `VD2-05` | Pipeline board and persisted stage movement | Backlog — requires `VD2-04` accepted. |
+| `VD2-06` | Contacts master/detail redesign | Backlog — requires `VD2-02` accepted. |
+| `VD2-07` | Settings information architecture | Backlog — requires `VD2-02` accepted. |
+| `VD2-08` | Visual QA and accessibility acceptance | Backlog — requires `VD2-03` through `VD2-07` accepted. |
+
+Every child follows `Backlog → Next up → In progress → independent code
+review / QA / security-privacy verification → product-owner hands-on
+verification → Accepted`. The parent `DESIGN-V2` remains Backlog until all
+eight children, including `VD2-08`, are accepted and the product owner accepts
+the final visual and workflow verification. `needsUserAction` is true only for
+an owner-smoke handoff, never for routine tests or documentation.
+
+**Non-scope:** UX-D10, UX-D11, UX-D12, Phase 2a/2b/2c, Phase 3, AI execution,
+Gmail, Calendar, research, document processing, connected services, browser
+storage, plugins, cloud services, and web implementation remain unreleased.
+
 ### Workstream G — Privacy and AI foundation (Phase 2a)
 
 **Objective:** Establish the privacy, routing, consent, and ledger contracts required before any AI feature or connected workflow.
