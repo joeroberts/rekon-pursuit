@@ -20,8 +20,8 @@
   <main>
     <header><div class="eyebrow">Rekon Pursuit</div><h1>Delivery dashboard</h1><p class="subhead">Local operational view. This page refreshes every 30 seconds.</p></header>
     <section class="summary" aria-label="Delivery summary">
-      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">No task in progress</span></div>
-      <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">RP-R8 — Searchable local AI ledger</span></div>
+      <div class="summary-item"><span class="summary-label">Current active task</span><span class="summary-value">RP-R8 — Searchable local AI ledger</span></div>
+      <div class="summary-item"><span class="summary-label">Next eligible task</span><span class="summary-value">No successor eligible</span></div>
       <div class="summary-item"><span class="summary-label">Accepted</span><span class="summary-value">20</span></div>
       <div class="summary-item"><span class="summary-label">Backlog</span><span class="summary-value">2</span></div>
       <div class="summary-item"><span class="summary-label">Blocked</span><span class="summary-value">0</span></div>
@@ -48,17 +48,17 @@
         </dl>
         <p class="action">No action needed</p>
         <a class="details-link" href="remediation.html#RP-R10">View task details</a>
-      </article></section><section class="lane lane-next_up"><header><h2>Next up</h2><span class="lane-count">1</span></header>
-      <article class="task-card status-next_up">
+      </article></section><section class="lane lane-next_up"><header><h2>Next up</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section><section class="lane lane-in_progress"><header><h2>In progress</h2><span class="lane-count">1</span></header>
+      <article class="task-card status-in_progress">
         <div class="card-heading"><span class="task-id">RP-R8</span><span class="work-type">Observability</span></div>
         <h3>Searchable local AI ledger</h3>
         <dl>
-          <div><dt>Release condition</dt><dd>Eligible after the accepted R7a/R7b lifecycle sequence; requires its own approved plan and release gate before implementation.</dd></div>
-          <div><dt>Latest transition</dt><dd>Moved to Next up after R7b-1 acceptance; no R8 implementation is released.</dd></div>
+          <div><dt>Release condition</dt><dd>Released only for the empty, read-only local filter surface; no AI execution, ledger persistence, network, metrics, or Phase 2 routing.</dd></div>
+          <div><dt>Latest transition</dt><dd>Released after Planning, Architect, TPM, QA, Delivery, and Security/Privacy approval of the MVP-bounded brief.</dd></div>
         </dl>
         <p class="action">No action needed</p>
         <a class="details-link" href="remediation.html#RP-R8">View task details</a>
-      </article></section><section class="lane lane-in_progress"><header><h2>In progress</h2><span class="lane-count">0</span></header><p class="empty">No tasks in this lane.</p></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">20</span></header>
+      </article></section><section class="lane lane-accepted"><header><h2>Accepted</h2><span class="lane-count">20</span></header>
       <article class="task-card status-accepted">
         <div class="card-heading"><span class="task-id">RP-R0</span><span class="work-type">Foundation</span></div>
         <h3>Evidence-only remediation baseline</h3>

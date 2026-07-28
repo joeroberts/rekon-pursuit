@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": null,
-  "nextEligibleTaskId": "RP-R8",
+  "activeTaskId": "RP-R8",
+  "nextEligibleTaskId": null,
   "tasks": [
     {
       "id": "RP-R0",
@@ -267,9 +267,9 @@
       "id": "RP-R8",
       "title": "Searchable local AI ledger",
       "workType": "Observability",
-      "status": "next_up",
-      "releaseCondition": "Eligible after the accepted R7a/R7b lifecycle sequence; requires its own approved plan and release gate before implementation.",
-      "latestTransition": "Moved to Next up after R7b-1 acceptance; no R8 implementation is released.",
+      "status": "in_progress",
+      "releaseCondition": "Released only for the empty, read-only local filter surface; no AI execution, ledger persistence, network, metrics, or Phase 2 routing.",
+      "latestTransition": "Released after Planning, Architect, TPM, QA, Delivery, and Security/Privacy approval of the MVP-bounded brief.",
       "evidence": {
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"

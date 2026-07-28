@@ -7,8 +7,8 @@
 Accepted. The wider `RP-R7a` recovery milestone, including its
 `RP-R7a-4` encrypted-default export task, and `RP-R7b-1` automatic portable
 archive expiry are Accepted. `RP-R7b-2` retained-data purge/rebuild remains
-unreleased. `RP-R8` is **Next up** for its separate plan and release gate;
-`RP-R9`–`RP-R10` remain Backlog.
+unreleased. `RP-R8` is **In progress** for its separate, bounded empty-ledger
+surface; `RP-R9`–`RP-R10` remain Backlog.
 
 **Authority:** [dashboard-status.json](dashboard-status.json) is the canonical
 machine-readable operational view for the current remediation queue. This
@@ -94,7 +94,18 @@ ordinary sequencing.
 | TPM | **Approved after P1 remediation** | The ledger status is reconciled and the only in-run trigger is inactive→active while a workspace is open; no timer or daemon is introduced. |
 | Product owner | **Accepted — R7b-1 only** | Verified the protected-export workflow in the opened Debug app after the final export-verification fix. The export-success confirmation window is recorded separately as deferred `UX-D10`. |
 | Delivery Manager | **Accepted — R7b-1 only** | Dashboard and ledger move R7b-1 to Accepted and `RP-R8` to Next up. R7b-2 purge/rebuild remains unreleased; no R8 implementation is released. |
-| `RP-R8` | Empty read-only local AI ledger with time, feature, opportunity, route, model, completion, and cost filters. No AI/network/metrics execution. | Full `RP-R7a` and `RP-R7b` lifecycle sequence | Next up | Every filter works at zero entries; no entry/network is produced. | Eligible after R7b-1 acceptance, but implementation requires its own plan and release gate. |
+| `RP-R8` | Empty read-only local AI ledger with time, feature, opportunity, route, model, completion, and cost filters. No AI/network/metrics execution. | Full `RP-R7a` plus accepted `RP-R7b-1`; `RP-R7b-2` is explicitly not a dependency. | **In progress** | Every filter works at zero entries; no entry/network is produced. | Released only for the view-local, zero-entry filter surface. No storage, model execution, network, telemetry, metrics, or Phase 2 routing is released. |
+
+### RP-R8 plan and release gate
+
+| Role | Decision | Evidence / boundary |
+| --- | --- | --- |
+| Planning | **Approved** | The brief confines R8 to view-local empty-ledger filters, pure filter semantics, and signed Debug owner smoke. |
+| Architect | **Approved** | No Core/store/migration surface; Phase 2 owns real entries, pricing, routing, consent, and audit/FTS behavior. |
+| TPM | **Approved — release-safe** | R8 follows full R7a plus accepted R7b-1 only; R7b-2 is not a dependency. It is the sole eligible successor. |
+| QA | **Approved — MVP-calibrated** | Focused pure filter checks plus one signed Debug manual smoke are proportional for this zero-entry/no-store surface; no fixture/reset harness is introduced. |
+| Delivery Manager | **Released** | Canonical dashboard and ledger move R8 from Next up to In progress together. |
+| Security / Privacy | **Approved** | App-target-only view state; no AI/provider/network, raw content, persistence, metrics, telemetry, or audit entry surface. |
 | `RP-R9` | Settings exposes real recovery, expiry, deletion, export, document-reference, and ledger state; no fake integration controls. | `RP-R6`, `RP-R7b`, `RP-R8` | Backlog | Settings state matches stored state across relaunch. | Pending dependencies. |
 | `RP-R10` | Clean-state, hands-on acceptance of all remediation tasks and candidate-package status reconciliation. | `RP-R1a`–`RP-R9`, `UX-R1`, `UX-R2` | Backlog | Full user workflow evidence and independent milestone reviews. | Pending every preceding task. |
 
