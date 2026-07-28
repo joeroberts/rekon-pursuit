@@ -646,11 +646,18 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     var filteredActivityEvents: [ActivityEvent] {
-        let query = activitySearch.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return activityEvents }
+        let terms = activitySearch
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+        guard !terms.isEmpty else { return activityEvents }
         return activityEvents.filter { event in
-            event.kind.localizedCaseInsensitiveContains(query) ||
-            opportunities.first(where: { $0.id == event.opportunityID }).map { $0.title.localizedCaseInsensitiveContains(query) || $0.company.localizedCaseInsensitiveContains(query) } == true
+            let opportunity = opportunities.first(where: { $0.id == event.opportunityID })
+            let searchableText = [
+                event.kind.replacingOccurrences(of: "_", with: " "),
+                opportunity?.title ?? "",
+                opportunity?.company ?? ""
+            ].joined(separator: " ")
+            return terms.allSatisfy(searchableText.localizedCaseInsensitiveContains)
         }
     }
 
