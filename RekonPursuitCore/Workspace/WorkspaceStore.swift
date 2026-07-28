@@ -1027,6 +1027,30 @@ final class WorkspaceStore {
         }
     }
 
+    func documentReferenceSummary() throws -> DocumentReferenceSummary {
+        try synchronized {
+            let rows = try database.rows(
+                "SELECT availability, COUNT(*) FROM document_references JOIN opportunities ON opportunities.id = document_references.opportunity_id WHERE opportunities.deleted_at IS NULL GROUP BY availability"
+            )
+            var availableCount = 0
+            var relinkRequiredCount = 0
+            for row in rows {
+                guard row.count == 2, case let .text(availability) = row[0], case let .integer(count) = row[1] else {
+                    throw WorkspaceStoreError.unexpectedDatabaseValue
+                }
+                switch availability {
+                case DocumentReferenceAvailability.available.rawValue:
+                    availableCount = Int(count)
+                case DocumentReferenceAvailability.relinkRequired.rawValue:
+                    relinkRequiredCount = Int(count)
+                default:
+                    throw WorkspaceStoreError.unexpectedDatabaseValue
+                }
+            }
+            return DocumentReferenceSummary(availableCount: availableCount, relinkRequiredCount: relinkRequiredCount)
+        }
+    }
+
     func lastTouch(forContactID contactID: String) throws -> Date? {
         try contactInteractions(forContactID: contactID).map(\.occurredAt).max()
     }

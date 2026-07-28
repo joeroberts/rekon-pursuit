@@ -1083,6 +1083,8 @@ private struct SettingsView: View {
                 Text("Settings").font(.largeTitle.bold())
                 GroupBox("Workspace") {
                     VStack(alignment: .leading, spacing: 10) {
+                        Text("Workspace data stays on this Mac and is retained until you delete it. Deleted records leave the active workspace immediately; earlier encrypted archives may retain them until their displayed expiry.")
+                            .foregroundStyle(.secondary)
                         Toggle("Show closed opportunities in the pipeline", isOn: $model.showClosedOpportunities).accessibilityIdentifier("show-closed-opportunities")
                         if model.usingSeparateLocalWorkspace {
                             Text("You are using a separate local workspace. Your preserved workspace remains unchanged.").foregroundStyle(.secondary)
@@ -1090,9 +1092,10 @@ private struct SettingsView: View {
                         }
                     }
                 }
-                GroupBox("Recovery & export") {
+                GroupBox("Recovery & archives") {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(model.recoveryEnrollmentEnabled ? (model.portableArchiveCatalogue.isEmpty ? "Portable recovery is set up. No portable backup exists yet." : "Portable recovery is set up. Verified archives are listed below.") : "Portable recovery is not set up. No portable backup exists.").foregroundStyle(.secondary)
+                        Text(model.recoveryEnrollmentEnabled ? (model.portableArchiveCatalogue.isEmpty ? "Portable recovery is set up. No portable archive exists yet." : "Portable recovery is set up. Archive expiry is checked when this workspace opens or becomes active; it is not a background service.") : "Portable recovery is not set up. No portable archive exists.")
+                            .foregroundStyle(.secondary)
                         if !model.recoveryEnrollmentEnabled {
                             Button("Set up recovery key") {
                                 generatedRecoveryKey = try? RecoveryKey.generate()
@@ -1118,7 +1121,7 @@ private struct SettingsView: View {
                                 Text("No portable archive exists yet.").font(.footnote).foregroundStyle(.secondary)
                             } else {
                                 ForEach(model.portableArchiveCatalogue, id: \.archiveID) { archive in
-                                    Text("\(archive.displayFilename) · \(archive.createdAt.formatted(date: .abbreviated, time: .shortened)) · expires \(archive.expiresAt.formatted(date: .abbreviated, time: .omitted)) · \(archive.verificationState)")
+                                    Text(archiveSummary(archive))
                                         .font(.footnote).foregroundStyle(.secondary)
                                 }
                             }
@@ -1140,7 +1143,14 @@ private struct SettingsView: View {
                         }
                     }
                 }
-                GroupBox("AI and connections") { Text("Cloud AI, local-model execution, Gmail, and Google Calendar are disabled in this MVP. No network connections are configured.").foregroundStyle(.secondary) }
+                GroupBox("Document references") {
+                    Text(documentReferenceSummaryText)
+                        .foregroundStyle(.secondary)
+                }
+                GroupBox("AI and connections") {
+                    Text("The local Activity & AI ledger is read-only and empty in this MVP. No AI requests, costs, model runtime, cloud connection, Gmail, or Calendar integration is configured.")
+                        .foregroundStyle(.secondary)
+                }
             }.padding(28).frame(maxWidth: 920, alignment: .leading)
         }
         .sheet(isPresented: Binding(get: { generatedRecoveryKey != nil }, set: { if !$0 { generatedRecoveryKey = nil; reentry = ""; recoveryKeyCopied = false } })) {
@@ -1296,5 +1306,34 @@ private struct SettingsView: View {
                 Text(failure.message)
             }
         }
+    }
+
+    private var documentReferenceSummaryText: String {
+        let summary = model.documentReferenceSummary
+        if summary.availableCount == 0, summary.relinkRequiredCount == 0 {
+            return "No document references are attached to active opportunities."
+        }
+        return "\(summary.availableCount) available · \(summary.relinkRequiredCount) require relinking"
+    }
+
+    private func archiveSummary(_ archive: PortableArchiveCatalogueRow) -> String {
+        let lifecycle: String
+        switch archive.lifecycleState {
+        case .verified:
+            lifecycle = archive.verificationState
+        case .expiredPendingRemoval, .expiredPrepared:
+            lifecycle = "Expired — removal pending"
+        case .expiredRetryable:
+            lifecycle = "Expired — retry pending"
+        case .expiredBlocked:
+            lifecycle = "Expired — removal blocked"
+        case .expiredMissing:
+            lifecycle = "Expired — file unavailable"
+        case .expiredManualRemovalRequired:
+            lifecycle = "Expired — manual removal required"
+        case .expiredQuarantined:
+            lifecycle = "Expired — quarantined"
+        }
+        return "\(archive.displayFilename) · created \(archive.createdAt.formatted(date: .abbreviated, time: .shortened)) · expires \(archive.expiresAt.formatted(date: .abbreviated, time: .omitted)) · \(lifecycle)"
     }
 }

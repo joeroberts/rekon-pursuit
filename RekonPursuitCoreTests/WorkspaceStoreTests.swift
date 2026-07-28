@@ -1642,6 +1642,41 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.documentReferences(forOpportunityID: opportunity.id).first?.bookmarkData, Data([0x01, 0x02]))
     }
 
+    func testDocumentReferenceSummaryCountsOnlyActiveOpportunityReferences() throws {
+        let store = try makeStore()
+        let active = try store.create(CreateOpportunity(title: "Active role", company: "Rekon Labs"))
+        let deleted = try store.create(CreateOpportunity(title: "Deleted role", company: "Rekon Labs"))
+        _ = try store.recordDocumentReference(RecordDocumentReference(
+            opportunityID: active.id,
+            kind: .resume,
+            filename: "available.pdf",
+            contentType: "application/pdf",
+            sourceHash: String(repeating: "a", count: 64),
+            byteCount: 1,
+            bookmarkData: Data([0x01])
+        ))
+        _ = try store.recordDocumentReference(RecordDocumentReference(
+            opportunityID: active.id,
+            kind: .coverLetter,
+            filename: "relink.pdf",
+            contentType: "application/pdf",
+            sourceHash: String(repeating: "b", count: 64),
+            byteCount: 1
+        ))
+        _ = try store.recordDocumentReference(RecordDocumentReference(
+            opportunityID: deleted.id,
+            kind: .resume,
+            filename: "hidden.pdf",
+            contentType: "application/pdf",
+            sourceHash: String(repeating: "c", count: 64),
+            byteCount: 1,
+            bookmarkData: Data([0x02])
+        ))
+        try store.deleteOpportunity(id: deleted.id)
+
+        XCTAssertEqual(try store.documentReferenceSummary(), .init(availableCount: 1, relinkRequiredCount: 1))
+    }
+
     func testVersionTwentyTwoDocumentReferenceMigrationRequiresRelinkWithoutRetainingBookmarkData() throws {
         let database = try EncryptedDatabase.open(url: databaseURL, key: key)
         let currentStore = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test")

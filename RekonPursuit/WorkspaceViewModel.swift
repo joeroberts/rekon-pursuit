@@ -276,6 +276,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var usingSeparateLocalWorkspace = false
     @Published private(set) var recoveryEnrollmentEnabled = false
     @Published private(set) var portableArchiveCatalogue: [PortableArchiveCatalogueRow] = []
+    @Published private(set) var documentReferenceSummary = DocumentReferenceSummary(availableCount: 0, relinkRequiredCount: 0)
     @Published private(set) var isCreatingPortableArchive = false
     @Published private(set) var protectedExportReview: ProtectedExportReview?
     @Published private(set) var protectedExportErrorMessage: String?
@@ -1819,6 +1820,7 @@ final class WorkspaceViewModel: ObservableObject {
             csvImportReportRows = try csvImportReport.map { try store?.importReportRows(for: $0.id) ?? [] } ?? []
             recoveryEnrollmentEnabled = try store?.recoveryEnrollmentState().isEnabled ?? false
             portableArchiveCatalogue = try store?.portableArchiveCatalogue() ?? []
+            documentReferenceSummary = try store?.documentReferenceSummary() ?? DocumentReferenceSummary(availableCount: 0, relinkRequiredCount: 0)
         } catch {
             statusMessage = "The local workspace could not be read."
         }

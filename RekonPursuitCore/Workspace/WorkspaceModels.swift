@@ -510,6 +510,11 @@ enum DocumentReferenceAvailability: String, Equatable {
     case relinkRequired = "relink_required"
 }
 
+nonisolated struct DocumentReferenceSummary: Equatable, Sendable {
+    let availableCount: Int
+    let relinkRequiredCount: Int
+}
+
 struct DocumentReference: Equatable {
     let id: String
     let opportunityID: String

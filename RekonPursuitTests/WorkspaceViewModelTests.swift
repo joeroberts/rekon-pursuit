@@ -15,6 +15,37 @@ final class WorkspaceViewModelTests: XCTestCase {
         )
     }
 
+    func testRefreshIncludesLifecycleAwareDocumentReferenceSummary() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
+        _ = try store.recordDocumentReference(RecordDocumentReference(
+            opportunityID: opportunity.id,
+            kind: .resume,
+            filename: "resume.pdf",
+            contentType: "application/pdf",
+            sourceHash: String(repeating: "a", count: 64),
+            byteCount: 1,
+            bookmarkData: Data([0x01])
+        ))
+        _ = try store.recordDocumentReference(RecordDocumentReference(
+            opportunityID: opportunity.id,
+            kind: .coverLetter,
+            filename: "cover.pdf",
+            contentType: "application/pdf",
+            sourceHash: String(repeating: "b", count: 64),
+            byteCount: 1
+        ))
+        let model = WorkspaceViewModel(
+            openWorkspace: { .ready(store) },
+            createWorkspace: { store },
+            separateLocalWorkspace: .disabledForTesting
+        )
+
+        model.start()
+
+        XCTAssertEqual(model.documentReferenceSummary, .init(availableCount: 1, relinkRequiredCount: 1))
+    }
+
     func testPortableArchiveRestoreKeepsSecurityScopeUntilExplicitConfirmationCompletes() async throws {
         let store = try makeStore()
         let archiveURL = URL(fileURLWithPath: "/private/tmp/portable.rekonarchive")
