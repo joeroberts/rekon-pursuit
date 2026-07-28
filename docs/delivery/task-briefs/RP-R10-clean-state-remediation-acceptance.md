@@ -1,6 +1,6 @@
 # RP-R10 — Clean-state remediation acceptance
 
-**State:** Proposed — planning only; no implementation or package release is authorized.
+**State:** In progress — final clean-state owner acceptance. No new feature or package release is authorized.
 **Depends on:** Accepted `RP-R1a` through `RP-R9`, `UX-R1`, `UX-R2`, and `RP-R7b-2`. Post-remediation UX/design work remains out of scope.
 **Blocks:** None. Acceptance confirms the complete remediation candidate; it does not release a Phase 2 capability, signing, notarization, DMG distribution, or the visual-design v2 work.
 
