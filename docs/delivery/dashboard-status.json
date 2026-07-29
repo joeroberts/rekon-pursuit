@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "activePhaseId": "post_mvp_refinement",
-  "activeTaskId": null,
-  "nextEligibleTaskId": "VD2-02",
+  "activeTaskId": "VD2-02",
+  "nextEligibleTaskId": null,
   "phases": [
     {
       "id": "remediation_r1",
@@ -441,9 +441,9 @@
       "phaseId": "post_mvp_refinement",
       "title": "App shell and navigation",
       "workType": "App shell",
-      "status": "next_up",
-      "releaseCondition": "VD2-01 accepted; requires fresh independent Planning, Architecture, TPM, QA, and Delivery Manager release gates before implementation.",
-      "latestTransition": "Became the sole dependency-safe successor after VD2-01 product-owner acceptance.",
+      "status": "in_progress",
+      "releaseCondition": "Fresh implementation is limited to the approved app-shell/navigation brief and must begin with observed red UI regression evidence.",
+      "latestTransition": "Released to a fresh implementer after independent Planning, Architecture, TPM, QA, and Delivery Manager gates approved the red-first test contract.",
       "evidence": {
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"

@@ -177,7 +177,7 @@ pixel-copy mandate.
 | ID | Child card | Dependency / current state |
 | --- | --- | --- |
 | `VD2-01` | Visual foundation and tokens | **Accepted.** The product owner accepted the corrected shared foundation after hands-on verification; fresh independent Architecture, Code Review, QA, and Security/Privacy gates remain recorded. |
-| `VD2-02` | App shell and navigation | **Next up.** The sole dependency-safe successor; awaiting its fresh independent Planning, Architecture, TPM, QA, and Delivery Manager release gates. |
+| `VD2-02` | App shell and navigation | **In progress.** Released after fresh independent Planning, Architecture, TPM, QA, and Delivery Manager gates; implementation begins with observed red UI regression evidence. |
 | `VD2-03` | Home redesign | Backlog — requires `VD2-02` accepted. |
 | `VD2-04` | Pipeline table and inspector | Backlog — requires `VD2-02` accepted. |
 | `VD2-05` | Pipeline board and persisted stage movement | Backlog — requires `VD2-04` accepted. |
