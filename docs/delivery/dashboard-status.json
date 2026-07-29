@@ -429,12 +429,13 @@
       "workType": "Visual foundation",
       "status": "in_progress",
       "releaseCondition": "Corrective pass must restore a legible existing Rekon logo/lockup, appearance-stable semantic foreground colors, and native chrome without gray resize/full-screen regressions; then require fresh independent review, QA, security/privacy verification, and product-owner acceptance.",
-      "latestTransition": "Reopened for corrective visual verification after product-owner evidence showed an imperceptibly small logo, OS-dependent foreground colors, mockup-misaligned sidebar spacing/icon treatment, and gray chrome regressions on resize/full-screen.",
+      "latestTransition": "Corrective implementation cleared fresh independent Architecture, Code Review, QA, and Security/Privacy gates; ready for product-owner hands-on verification.",
       "evidence": {
         "label": "VD2-01 task brief",
         "href": "../task-briefs/VD2-01-visual-foundation-and-tokens.md"
       },
-      "needsUserAction": false
+      "needsUserAction": true,
+      "userActionDetail": "Verify the visible Rekon logo and lockup, readable labels in light and dark appearance, selected sidebar fill with a cyan leading indicator, then resize and enter/exit full screen to confirm navy chrome and native stoplights remain intact."
     },
     {
       "id": "VD2-02",

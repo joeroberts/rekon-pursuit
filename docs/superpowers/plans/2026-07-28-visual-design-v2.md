@@ -126,7 +126,9 @@ security semantics. It must:
    appearances;
 3. align rail destination spacing, icon sizing, selected-state treatment, and
    keyboard-focus treatment with the approved mockups without creating stacked
-   duplicate cyan outlines;
+   duplicate cyan outlines. A selected destination must use the reference's
+   restrained violet-blue surface and one cyan leading indicator; selection is
+   not an outer cyan outline;
 4. keep native traffic lights visible and eliminate gray toolbar, rail-cap, and
    rail-border regressions after resize, maximization, full-screen, and exit
    from full-screen.
@@ -142,6 +144,12 @@ collapse control with visible focus and readable labels.
 **Corrective acceptance:** Fresh independent code review, QA, architecture,
 and proportional security/privacy verification are required before a new
 product-owner visual smoke. `VD2-02` cannot release until that acceptance.
+
+**Delivery readiness — 2026-07-29:** The bounded corrective implementation
+cleared fresh independent Architecture, Code Review, QA, and Security/Privacy
+verification. `VD2-01` remains **In progress** and is ready only for the
+product-owner hands-on smoke; it is not accepted, and `VD2-02` remains
+Backlog.
 
 ## Task 2 — VD2-02: App shell and navigation
 

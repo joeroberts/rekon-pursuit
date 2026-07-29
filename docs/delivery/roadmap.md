@@ -13,7 +13,7 @@ The delivery principle is **vertical slices over isolated screens**: each slice 
 | Release area | Current status |
 | --- | --- |
 | Remediation R1 | **Accepted historical evidence** — the remediation ledger records the accepted R1 sequence and evidence; it is not current implementation work. |
-| Post-MVP refinement | **Active delivery queue** — VD2-01 is In progress for a corrective visual-foundation pass after product-owner evidence found logo legibility, appearance-stable foreground, sidebar-treatment, and resize/full-screen chrome defects. VD2-02 and later children remain dependency-ordered Backlog. |
+| Post-MVP refinement | **Active delivery queue** — VD2-01 remains In progress and is ready for product-owner hands-on verification of the corrective visual foundation. VD2-02 and later children remain dependency-ordered Backlog. |
 | Phase 2a — privacy and AI foundation | **Not started** — follows accepted Post-MVP refinement; local-model runtime, cloud routing/sanitization/consent, populated AI ledger, budgets, and costs remain Backlog. |
 | Phase 2b — Gmail and Google Calendar | **Not started** — follows accepted Phase 2a. |
 | Phase 2c — documents and research | **Not started** — follows accepted Phase 2b. |
@@ -176,7 +176,7 @@ pixel-copy mandate.
 
 | ID | Child card | Dependency / current state |
 | --- | --- | --- |
-| `VD2-01` | Visual foundation and tokens | **In progress** — corrective pass restores the real logo/lockup at a legible scale, explicit appearance-stable semantic foregrounds, mockup-aligned sidebar treatment, and native resize/full-screen chrome before fresh independent verification and product-owner acceptance. |
+| `VD2-01` | Visual foundation and tokens | **In progress — ready for product-owner hands-on verification.** The corrective pass restored the real logo/lockup at a legible scale, explicit appearance-stable semantic foregrounds, mockup-aligned sidebar treatment, and native resize/full-screen chrome; fresh independent Architecture, Code Review, QA, and Security/Privacy gates are clean. Product-owner acceptance is still required. |
 | `VD2-02` | App shell and navigation | Backlog — requires corrective `VD2-01` acceptance. |
 | `VD2-03` | Home redesign | Backlog — requires `VD2-02` accepted. |
 | `VD2-04` | Pipeline table and inspector | Backlog — requires `VD2-02` accepted. |

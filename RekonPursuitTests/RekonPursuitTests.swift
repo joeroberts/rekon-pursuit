@@ -4,8 +4,22 @@ import XCTest
 
 final class RekonPursuitTests: XCTestCase {
 
+    @MainActor
     func testVisualFoundationUsesSemanticTokensAndTheExistingRekonEmblem() {
         XCTAssertEqual(RekonVisualThemeContract.emblemAssetName, "RekonEmblem")
+        XCTAssertEqual(RekonVisualThemeContract.brandLockupAccessibilityIdentifier, "sidebar-brand-lockup")
+        XCTAssertEqual(RekonVisualThemeContract.collapseControlAccessibilityIdentifier, "sidebar-collapse")
+        XCTAssertEqual(RekonVisualThemeContract.brandEmblemTargetSize, 64)
+        XCTAssertEqual(RekonVisualThemeContract.brandLockupTextSize, 22)
+        XCTAssertEqual(RekonVisualThemeContract.railDestinationMinimumHeight, 52)
+        XCTAssertEqual(RekonVisualThemeContract.railIconSize, 22)
+        XCTAssertEqual(RekonTheme.Rail.minimumWidth, 268)
+        XCTAssertEqual(RekonTheme.Rail.idealWidth, 310)
+        XCTAssertEqual(RekonTheme.Rail.maximumWidth, 340)
+        XCTAssertEqual(RekonTheme.Rail.horizontalInset, 22)
+        XCTAssertEqual(RekonTheme.Rail.destinationRowGap, 12)
+        XCTAssertGreaterThanOrEqual(RekonTheme.Rail.destinationLabelGap, 12)
+        XCTAssertLessThanOrEqual(RekonTheme.Rail.destinationLabelGap, 16)
         XCTAssertEqual(RekonVisualThemeContract.defaultSpacing, 16)
         XCTAssertEqual(RekonVisualThemeContract.defaultCornerRadius, 16)
         XCTAssertEqual(RekonVisualThemeContract.minimumWindowWidth, 860)
@@ -21,6 +35,25 @@ final class RekonPursuitTests: XCTestCase {
         XCTAssertGreaterThan(RekonVisualThemeContract.buttonFocusGlowOpacity(isFocused: true), 0)
     }
 
+    func testSelectedRailDestinationUsesOneLeadingAccentAndDoesNotDuplicateFocus() {
+        XCTAssertEqual(
+            RekonRailDestinationPresentation.selectedIndicatorWidth(isSelected: true),
+            RekonVisualThemeContract.railSelectedIndicatorWidth
+        )
+        XCTAssertEqual(
+            RekonRailDestinationPresentation.focusRingLineWidth(isSelected: true, isFocused: true),
+            2
+        )
+        XCTAssertEqual(
+            RekonRailDestinationPresentation.focusRingLineWidth(isSelected: false, isFocused: true),
+            2
+        )
+        XCTAssertEqual(
+            RekonRailDestinationPresentation.focusRingLineWidth(isSelected: false, isFocused: false),
+            0
+        )
+    }
+
     func testVisualFoundationUsesAUnifiedNavyWindowCanvasPolicy() {
         let policy = RekonWindowCanvasPolicy.standard
 
@@ -34,10 +67,10 @@ final class RekonPursuitTests: XCTestCase {
         let windowPolicy = RekonWindowCanvasPolicy.standard
 
         XCTAssertTrue(windowPolicy.usesNavyWindowContainerBackground)
-        XCTAssertTrue(windowPolicy.usesUnifiedCompactWindowToolbar)
+        XCTAssertFalse(windowPolicy.usesUnifiedCompactWindowToolbar)
         XCTAssertTrue(windowPolicy.showsNavyWindowToolbarMaterial)
         XCTAssertTrue(windowPolicy.removesTitlebarSeparator)
-        XCTAssertEqual(windowPolicy.splitViewDividerStyle, .thick)
+        XCTAssertEqual(windowPolicy.splitViewDividerStyle, .thin)
     }
 
     @MainActor
@@ -69,7 +102,8 @@ final class RekonPursuitTests: XCTestCase {
         XCTAssertEqual(window.titleVisibility, .hidden)
         XCTAssertTrue(window.titlebarAppearsTransparent)
         XCTAssertEqual(window.titlebarSeparatorStyle, .none)
-        XCTAssertEqual(window.toolbarStyle, .unifiedCompact)
+        XCTAssertEqual(window.appearance?.name, .darkAqua)
+        XCTAssertEqual(window.toolbarStyle, .automatic)
         XCTAssertTrue(window.styleMask.contains(.fullSizeContentView))
         let closeButton = try XCTUnwrap(window.standardWindowButton(.closeButton))
         let minimizeButton = try XCTUnwrap(window.standardWindowButton(.miniaturizeButton))
@@ -84,14 +118,14 @@ final class RekonPursuitTests: XCTestCase {
             XCTAssertFalse($0.isHidden)
             XCTAssertTrue($0.window === window)
         }
-        XCTAssertEqual(splitView.dividerStyle, .thick)
+        XCTAssertEqual(splitView.dividerStyle, .thin)
         XCTAssertEqual(splitView.subviews.count, 2)
         XCTAssertTrue(splitView.subviews.contains(sidebar))
         XCTAssertTrue(splitView.subviews.contains(detail))
     }
 
     @MainActor
-    func testWindowChromeConfiguratorReappliesNavyPolicyAfterResizeNotification() throws {
+    func testWindowChromeConfiguratorReappliesNavyPolicyAfterResizeFullscreenAndActivationNotifications() throws {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -107,19 +141,79 @@ final class RekonPursuitTests: XCTestCase {
         contentView.addSubview(configurationView)
         configurationView.apply(policy: .standard)
 
-        window.backgroundColor = .systemRed
-        window.toolbarStyle = .expanded
-        window.titlebarSeparatorStyle = .automatic
+        let closeButton = try XCTUnwrap(window.standardWindowButton(.closeButton))
+        let minimizeButton = try XCTUnwrap(window.standardWindowButton(.miniaturizeButton))
+        let zoomButton = try XCTUnwrap(window.standardWindowButton(.zoomButton))
 
-        NotificationCenter.default.post(
-            name: NSWindow.didEndLiveResizeNotification,
-            object: window
+        [
+            NSWindow.didResizeNotification,
+            NSWindow.didEndLiveResizeNotification,
+            NSWindow.didEnterFullScreenNotification,
+            NSWindow.didExitFullScreenNotification,
+            NSWindow.didBecomeMainNotification,
+            NSWindow.didBecomeKeyNotification
+        ].forEach { notification in
+            window.backgroundColor = .systemRed
+            window.titlebarSeparatorStyle = .automatic
+            NotificationCenter.default.post(name: notification, object: window)
+            XCTAssertEqual(
+                window.backgroundColor,
+                NSColor(RekonTheme.background),
+                "\(notification) must synchronously restore navy chrome before deferred AppKit work."
+            )
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+
+            XCTAssertEqual(window.backgroundColor, NSColor(RekonTheme.background), "\(notification) must restore navy chrome.")
+            XCTAssertEqual(window.appearance?.name, .darkAqua)
+            XCTAssertEqual(window.titlebarSeparatorStyle, .none)
+            [closeButton, minimizeButton, zoomButton].forEach {
+                XCTAssertFalse($0.isHidden, "\(notification) must retain visible stoplights.")
+                XCTAssertTrue($0.window === window)
+            }
+        }
+    }
+
+    @MainActor
+    func testShellSemanticForegroundsMeetTextContrastAgainstTheirSurfaces() {
+        XCTAssertGreaterThanOrEqual(
+            contrastRatio(foreground: NSColor(RekonTheme.shellForeground), background: NSColor(RekonTheme.shellRailBackground)),
+            4.5
         )
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertGreaterThanOrEqual(
+            contrastRatio(foreground: NSColor(RekonTheme.shellMutedForeground), background: NSColor(RekonTheme.shellRailBackground)),
+            4.5
+        )
+        XCTAssertGreaterThanOrEqual(
+            contrastRatio(foreground: NSColor(RekonTheme.shellSelectedForeground), background: NSColor(RekonTheme.shellSelectedSurface)),
+            4.5
+        )
+        XCTAssertGreaterThanOrEqual(
+            contrastRatio(foreground: NSColor(RekonTheme.shellIcon), background: NSColor(RekonTheme.shellRailBackground)),
+            3
+        )
+        XCTAssertGreaterThanOrEqual(
+            contrastRatio(foreground: NSColor(RekonTheme.shellFocusRing), background: NSColor(RekonTheme.shellRailBackground)),
+            3
+        )
+        XCTAssertGreaterThanOrEqual(
+            contrastRatio(foreground: NSColor(RekonTheme.shellSelectedFocusRing), background: NSColor(RekonTheme.shellSelectedSurface)),
+            3
+        )
+    }
 
-        XCTAssertEqual(window.backgroundColor, NSColor(RekonTheme.background))
-        XCTAssertEqual(window.toolbarStyle, .unifiedCompact)
-        XCTAssertEqual(window.titlebarSeparatorStyle, .none)
+    @MainActor
+    private func contrastRatio(foreground: NSColor, background: NSColor) -> CGFloat {
+        func luminance(_ color: NSColor) -> CGFloat {
+            let converted = color.usingColorSpace(.sRGB) ?? color
+            let channels = [converted.redComponent, converted.greenComponent, converted.blueComponent].map { channel in
+                channel <= 0.04045 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+        }
+
+        let first = luminance(foreground)
+        let second = luminance(background)
+        return (max(first, second) + 0.05) / (min(first, second) + 0.05)
     }
 
     func testVisualFixtureLaunchConfigurationIsExplicitAndIsolated() throws {

@@ -7,12 +7,19 @@ import SwiftUI
 /// the semantic seam those tasks consume.
 nonisolated enum RekonVisualThemeContract {
     static let emblemAssetName = "RekonEmblem"
+    static let brandLockupAccessibilityIdentifier = "sidebar-brand-lockup"
+    static let collapseControlAccessibilityIdentifier = "sidebar-collapse"
     static let shellAccessibilityIdentifier = "app-shell"
     static let defaultSpacing: CGFloat = 16
     static let defaultCornerRadius: CGFloat = 16
     static let minimumWindowWidth: CGFloat = 860
     static let minimumWindowHeight: CGFloat = 600
     static let homeFocusAccessibilityIdentifier = "sidebar-home"
+    static let brandEmblemTargetSize: CGFloat = 64
+    static let brandLockupTextSize: CGFloat = 22
+    static let railDestinationMinimumHeight: CGFloat = 52
+    static let railIconSize: CGFloat = 22
+    static let railSelectedIndicatorWidth: CGFloat = 3
 
     static func decorativeBackgroundOpacity(reduceMotion: Bool) -> Double {
         reduceMotion ? 0.45 : 1
@@ -35,6 +42,19 @@ nonisolated enum RekonVisualThemeContract {
     }
 }
 
+/// Rendering decisions for an individual rail destination. Keeping the
+/// selected/focused combination outside the view body makes the single-focus
+/// treatment deterministic and protects it from regressions.
+nonisolated enum RekonRailDestinationPresentation {
+    static func selectedIndicatorWidth(isSelected: Bool) -> CGFloat {
+        isSelected ? RekonVisualThemeContract.railSelectedIndicatorWidth : 0
+    }
+
+    static func focusRingLineWidth(isSelected: Bool, isFocused: Bool) -> CGFloat {
+        isFocused ? 2 : 0
+    }
+}
+
 /// The window-level contract for the Visual Design v2 shell.  Keeping this
 /// separate from individual screens prevents an intrinsic-width screen from
 /// revealing the system canvas around the navigation split view.
@@ -47,6 +67,8 @@ nonisolated struct RekonWindowCanvasPolicy: Equatable {
     let fillsRootCanvas: Bool
     let fillsDetailCanvas: Bool
     let usesNavyWindowContainerBackground: Bool
+    /// The scene declaration in `BootstrapApp` is the sole toolbar-style owner.
+    /// This runtime configurator must never mutate the toolbar style.
     let usesUnifiedCompactWindowToolbar: Bool
     let showsNavyWindowToolbarMaterial: Bool
     let removesTitlebarSeparator: Bool
@@ -60,10 +82,10 @@ nonisolated struct RekonWindowCanvasPolicy: Equatable {
         fillsRootCanvas: true,
         fillsDetailCanvas: true,
         usesNavyWindowContainerBackground: true,
-        usesUnifiedCompactWindowToolbar: true,
+        usesUnifiedCompactWindowToolbar: false,
         showsNavyWindowToolbarMaterial: true,
         removesTitlebarSeparator: true,
-        splitViewDividerStyle: .thick
+        splitViewDividerStyle: .thin
     )
 }
 
@@ -85,6 +107,7 @@ struct RekonWindowChromeConfigurator: NSViewRepresentable {
     final class WindowConfigurationView: NSView {
         private var policy: RekonWindowCanvasPolicy
         private weak var observedWindow: NSWindow?
+        private var pendingReapply: DispatchWorkItem?
 
         init(policy: RekonWindowCanvasPolicy) {
             self.policy = policy
@@ -124,9 +147,7 @@ struct RekonWindowChromeConfigurator: NSViewRepresentable {
                 window.backgroundColor = NSColor(RekonTheme.background)
                 window.isOpaque = true
             }
-            if policy.usesUnifiedCompactWindowToolbar {
-                window.toolbarStyle = .unifiedCompact
-            }
+            window.appearance = NSAppearance(named: .darkAqua)
             if policy.removesTitlebarSeparator {
                 window.titlebarSeparatorStyle = .none
                 window.toolbar?.showsBaselineSeparator = false
@@ -142,9 +163,12 @@ struct RekonWindowChromeConfigurator: NSViewRepresentable {
 
             let center = NotificationCenter.default
             [
+                NSWindow.didResizeNotification,
                 NSWindow.didEndLiveResizeNotification,
                 NSWindow.didEnterFullScreenNotification,
-                NSWindow.didExitFullScreenNotification
+                NSWindow.didExitFullScreenNotification,
+                NSWindow.didBecomeMainNotification,
+                NSWindow.didBecomeKeyNotification
             ].forEach { notification in
                 center.addObserver(
                     self,
@@ -156,10 +180,18 @@ struct RekonWindowChromeConfigurator: NSViewRepresentable {
         }
 
         @objc private func reapplyWindowChrome(_ notification: Notification) {
-            DispatchQueue.main.async { [weak self] in
+            // The notification arrives on AppKit's main thread. Restore the
+            // owned chrome immediately so a resize/full-screen transition has
+            // no observable system-color gap, then retain the coalesced pass
+            // for any AppKit work completed after the notification returns.
+            apply(policy: policy)
+            pendingReapply?.cancel()
+            let reapply = DispatchWorkItem { [weak self] in
                 guard let self else { return }
                 self.apply(policy: self.policy)
             }
+            pendingReapply = reapply
+            DispatchQueue.main.async(execute: reapply)
         }
 
         private func configureSplitViewDivider(in window: NSWindow) {
@@ -168,7 +200,7 @@ struct RekonWindowChromeConfigurator: NSViewRepresentable {
             }
             // This is one of the properties AppKit explicitly allows callers
             // to configure on an NSSplitViewController-managed split view.
-            // `.thick` uses the native resize region while retaining its
+            // The policy uses AppKit's hairline divider while retaining its
             // documented clear divider color.
             splitView.dividerStyle = policy.splitViewDividerStyle
         }
@@ -208,6 +240,20 @@ enum RekonTheme {
     static let warning = Color(red: 0.98, green: 0.66, blue: 0.20)
     static let danger = Color(red: 1.0, green: 0.36, blue: 0.43)
 
+    // Shell colors are deliberately fixed rather than derived from the host
+    // appearance. The product shell always renders as a dark surface.
+    static let shellForeground = Color(red: 0.94, green: 0.97, blue: 1.0)
+    static let shellMutedForeground = Color(red: 0.64, green: 0.71, blue: 0.85)
+    static let shellIcon = Color(red: 0.75, green: 0.85, blue: 0.98)
+    static let shellSelectedForeground = Color.white
+    static let shellToolbarBackground = background
+    static let shellRailBackground = backgroundRaised
+    static let shellSelectedSurface = Color(red: 0.17, green: 0.18, blue: 0.42)
+    static let shellSelectedLeadingAccent = accent
+    static let shellFocusRing = accent
+    static let shellSelectedFocusRing = Color.white.opacity(0.92)
+    static let shellRailDivider = borderSubtle
+
     static let actionGradient = LinearGradient(
         colors: [accent, violet],
         startPoint: .leading,
@@ -235,6 +281,18 @@ enum RekonTheme {
         static let control: CGFloat = 10
         static let card = RekonVisualThemeContract.defaultCornerRadius
         static let large: CGFloat = 22
+    }
+
+    enum Rail {
+        static let minimumWidth: CGFloat = 268
+        static let idealWidth: CGFloat = 310
+        static let maximumWidth: CGFloat = 340
+        static let horizontalInset: CGFloat = 22
+        static let brandTopInset: CGFloat = 16
+        static let brandSpacing: CGFloat = 12
+        static let destinationRowGap: CGFloat = 12
+        static let destinationLabelGap: CGFloat = 14
+        static let selectedIndicatorWidth = RekonVisualThemeContract.railSelectedIndicatorWidth
     }
 
     enum Status {
