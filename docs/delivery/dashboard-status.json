@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "activePhaseId": "post_mvp_refinement",
-  "activeTaskId": "VD2-01",
-  "nextEligibleTaskId": null,
+  "activeTaskId": null,
+  "nextEligibleTaskId": "VD2-02",
   "phases": [
     {
       "id": "remediation_r1",
@@ -427,24 +427,23 @@
       "phaseId": "post_mvp_refinement",
       "title": "Visual foundation and tokens",
       "workType": "Visual foundation",
-      "status": "in_progress",
+      "status": "accepted",
       "releaseCondition": "Corrective pass must restore a legible existing Rekon logo/lockup, appearance-stable semantic foreground colors, and native chrome without gray resize/full-screen regressions; then require fresh independent review, QA, security/privacy verification, and product-owner acceptance.",
-      "latestTransition": "Corrective implementation cleared fresh independent Architecture, Code Review, QA, and Security/Privacy gates; ready for product-owner hands-on verification.",
+      "latestTransition": "Product owner accepted the corrected visual foundation after hands-on verification.",
       "evidence": {
         "label": "VD2-01 task brief",
         "href": "../task-briefs/VD2-01-visual-foundation-and-tokens.md"
       },
-      "needsUserAction": true,
-      "userActionDetail": "Verify the visible Rekon logo and lockup, readable labels in light and dark appearance, selected sidebar fill with a cyan leading indicator, then resize and enter/exit full screen to confirm navy chrome and native stoplights remain intact."
+      "needsUserAction": false
     },
     {
       "id": "VD2-02",
       "phaseId": "post_mvp_refinement",
       "title": "App shell and navigation",
       "workType": "App shell",
-      "status": "backlog",
-      "releaseCondition": "Requires corrective VD2-01 acceptance.",
-      "latestTransition": "Returned to Backlog while the shared VD2-01 visual foundation is corrected and reverified.",
+      "status": "next_up",
+      "releaseCondition": "VD2-01 accepted; requires fresh independent Planning, Architecture, TPM, QA, and Delivery Manager release gates before implementation.",
+      "latestTransition": "Became the sole dependency-safe successor after VD2-01 product-owner acceptance.",
       "evidence": {
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
@@ -459,7 +458,7 @@
       "phaseId": "post_mvp_refinement",
       "title": "Home redesign",
       "workType": "Home UX",
-      "status": "backlog",
+      "status": "next_up",
       "releaseCondition": "Requires VD2-02 accepted.",
       "latestTransition": "Dependency-ordered Visual Design v2 work recorded; not released.",
       "evidence": {

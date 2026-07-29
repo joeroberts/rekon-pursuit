@@ -176,8 +176,8 @@ pixel-copy mandate.
 
 | ID | Child card | Dependency / current state |
 | --- | --- | --- |
-| `VD2-01` | Visual foundation and tokens | **In progress — ready for product-owner hands-on verification.** The corrective pass restored the real logo/lockup at a legible scale, explicit appearance-stable semantic foregrounds, mockup-aligned sidebar treatment, and native resize/full-screen chrome; fresh independent Architecture, Code Review, QA, and Security/Privacy gates are clean. Product-owner acceptance is still required. |
-| `VD2-02` | App shell and navigation | Backlog — requires corrective `VD2-01` acceptance. |
+| `VD2-01` | Visual foundation and tokens | **Accepted.** The product owner accepted the corrected shared foundation after hands-on verification; fresh independent Architecture, Code Review, QA, and Security/Privacy gates remain recorded. |
+| `VD2-02` | App shell and navigation | **Next up.** The sole dependency-safe successor; awaiting its fresh independent Planning, Architecture, TPM, QA, and Delivery Manager release gates. |
 | `VD2-03` | Home redesign | Backlog — requires `VD2-02` accepted. |
 | `VD2-04` | Pipeline table and inspector | Backlog — requires `VD2-02` accepted. |
 | `VD2-05` | Pipeline board and persisted stage movement | Backlog — requires `VD2-04` accepted. |
