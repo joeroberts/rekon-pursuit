@@ -188,6 +188,10 @@ struct AppShellView<Detail: View>: View {
             windowCanvasPolicy.hidesWindowToolbarMaterial ? .hidden : .automatic,
             for: .windowToolbar
         )
+        .toolbar(
+            windowCanvasPolicy.hidesWindowToolbar ? .hidden : .automatic,
+            for: .windowToolbar
+        )
         .accessibilityIdentifier(RekonVisualThemeContract.shellAccessibilityIdentifier)
     }
 }

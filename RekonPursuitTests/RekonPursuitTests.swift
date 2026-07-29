@@ -29,17 +29,18 @@ final class RekonPursuitTests: XCTestCase {
         XCTAssertTrue(policy.fillsDetailCanvas)
     }
 
-    func testVisualFoundationKeepsWindowChromeNavy() {
+    func testVisualFoundationKeepsWindowChromeNavyWithSupportedSplitViewConfiguration() {
         let windowPolicy = RekonWindowCanvasPolicy.standard
 
         XCTAssertTrue(windowPolicy.usesNavyWindowContainerBackground)
         XCTAssertTrue(windowPolicy.hidesWindowToolbarMaterial)
+        XCTAssertTrue(windowPolicy.hidesWindowToolbar)
         XCTAssertTrue(windowPolicy.removesTitlebarSeparator)
-        XCTAssertTrue(windowPolicy.coversSplitViewDivider)
+        XCTAssertEqual(windowPolicy.splitViewDividerStyle, .thick)
     }
 
     @MainActor
-    func testWindowChromeConfiguratorAppliesNavyChromeAndCoversTheAttachedSplitDivider() throws {
+    func testWindowChromeConfiguratorAppliesNavyChromeWithoutAddingManagedSplitViewSubviews() throws {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -67,13 +68,10 @@ final class RekonPursuitTests: XCTestCase {
         XCTAssertEqual(window.titleVisibility, .hidden)
         XCTAssertTrue(window.titlebarAppearsTransparent)
         XCTAssertEqual(window.titlebarSeparatorStyle, .none)
-        let dividerOverlay = try XCTUnwrap(
-            splitView.subviews.first {
-                $0.identifier == RekonWindowChromeConfigurator.sidebarDividerIdentifier
-            }
-        )
-        XCTAssertEqual(dividerOverlay.frame.minX, sidebar.frame.maxX)
-        XCTAssertGreaterThanOrEqual(dividerOverlay.frame.width, 1)
+        XCTAssertEqual(splitView.dividerStyle, .thick)
+        XCTAssertEqual(splitView.subviews.count, 2)
+        XCTAssertTrue(splitView.subviews.contains(sidebar))
+        XCTAssertTrue(splitView.subviews.contains(detail))
     }
 
     func testVisualFixtureLaunchConfigurationIsExplicitAndIsolated() throws {

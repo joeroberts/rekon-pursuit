@@ -44,8 +44,11 @@ nonisolated struct RekonWindowCanvasPolicy: Equatable {
     let fillsDetailCanvas: Bool
     let usesNavyWindowContainerBackground: Bool
     let hidesWindowToolbarMaterial: Bool
+    let hidesWindowToolbar: Bool
     let removesTitlebarSeparator: Bool
-    let coversSplitViewDivider: Bool
+    /// `NSSplitViewController` permits its managed split view's divider
+    /// properties to be configured, but not its child views to be mutated.
+    let splitViewDividerStyle: NSSplitView.DividerStyle
 
     static let standard = Self(
         hidesSystemTitleBar: true,
@@ -53,8 +56,9 @@ nonisolated struct RekonWindowCanvasPolicy: Equatable {
         fillsDetailCanvas: true,
         usesNavyWindowContainerBackground: true,
         hidesWindowToolbarMaterial: true,
+        hidesWindowToolbar: true,
         removesTitlebarSeparator: true,
-        coversSplitViewDivider: true
+        splitViewDividerStyle: .thick
     )
 }
 
@@ -64,7 +68,6 @@ nonisolated struct RekonWindowCanvasPolicy: Equatable {
 /// the native traffic lights and resizing behavior.
 struct RekonWindowChromeConfigurator: NSViewRepresentable {
     let policy: RekonWindowCanvasPolicy
-    static let sidebarDividerIdentifier = NSUserInterfaceItemIdentifier("rekon-sidebar-divider")
 
     func makeNSView(context: Context) -> WindowConfigurationView {
         WindowConfigurationView(policy: policy)
@@ -76,9 +79,6 @@ struct RekonWindowChromeConfigurator: NSViewRepresentable {
 
     final class WindowConfigurationView: NSView {
         private var policy: RekonWindowCanvasPolicy
-        private weak var configuredSplitView: NSSplitView?
-        private weak var dividerOverlay: NSView?
-        private var sidebarFrameObservation: NSKeyValueObservation?
 
         init(policy: RekonWindowCanvasPolicy) {
             self.policy = policy
@@ -98,11 +98,6 @@ struct RekonWindowChromeConfigurator: NSViewRepresentable {
             }
         }
 
-        override func layout() {
-            super.layout()
-            positionDividerOverlay()
-        }
-
         func apply(policy: RekonWindowCanvasPolicy) {
             self.policy = policy
             guard let window else { return }
@@ -119,71 +114,18 @@ struct RekonWindowChromeConfigurator: NSViewRepresentable {
                 window.titlebarSeparatorStyle = .none
                 window.toolbar?.showsBaselineSeparator = false
             }
-            if policy.coversSplitViewDivider {
-                configureSplitViewDivider(in: window)
-            }
+            configureSplitViewDivider(in: window)
         }
 
         private func configureSplitViewDivider(in window: NSWindow) {
-            guard let splitView = window.contentView?.firstDescendant(of: NSSplitView.self),
-                  splitView.subviews.count >= 2
-            else {
+            guard let splitView = window.contentView?.firstDescendant(of: NSSplitView.self) else {
                 return
             }
-
-            if configuredSplitView !== splitView {
-                sidebarFrameObservation = nil
-                dividerOverlay?.removeFromSuperview()
-
-                let overlay = SidebarDividerOverlay()
-                overlay.identifier = RekonWindowChromeConfigurator.sidebarDividerIdentifier
-                overlay.wantsLayer = true
-                overlay.layer?.backgroundColor = NSColor(RekonTheme.background).cgColor
-                splitView.addSubview(overlay, positioned: .above, relativeTo: nil)
-
-                configuredSplitView = splitView
-                dividerOverlay = overlay
-                sidebarFrameObservation = splitView.subviews.first?.observe(\.frame, options: [.initial, .new]) { [weak self] _, _ in
-                    self?.positionDividerOverlay()
-                }
-            }
-
-            positionDividerOverlay()
-        }
-
-        private func positionDividerOverlay() {
-            guard let splitView = configuredSplitView,
-                  let dividerOverlay,
-                  splitView.subviews.count >= 2
-            else {
-                return
-            }
-
-            let leadingPane = splitView.subviews[0].frame
-            let trailingPane = splitView.subviews[1].frame
-            if splitView.isVertical {
-                let dividerMinX = leadingPane.maxX
-                dividerOverlay.frame = NSRect(
-                    x: dividerMinX,
-                    y: splitView.bounds.minY,
-                    width: max(1, trailingPane.minX - dividerMinX),
-                    height: splitView.bounds.height
-                )
-            } else {
-                let dividerMinY = leadingPane.maxY
-                dividerOverlay.frame = NSRect(
-                    x: splitView.bounds.minX,
-                    y: dividerMinY,
-                    width: splitView.bounds.width,
-                    height: max(1, trailingPane.minY - dividerMinY)
-                )
-            }
-        }
-
-        private final class SidebarDividerOverlay: NSView {
-            override func hitTest(_ point: NSPoint) -> NSView? {
-                nil
-            }
+            // This is one of the properties AppKit explicitly allows callers
+            // to configure on an NSSplitViewController-managed split view.
+            // `.thick` uses the native resize region while retaining its
+            // documented clear divider color.
+            splitView.dividerStyle = policy.splitViewDividerStyle
         }
     }
 }
