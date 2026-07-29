@@ -28,6 +28,16 @@ final class RekonPursuitTests: XCTestCase {
         XCTAssertTrue(policy.fillsDetailCanvas)
     }
 
+    func testVisualFoundationKeepsWindowChromeNavyAndUsesOneSidebarFocusTreatment() {
+        let windowPolicy = RekonWindowCanvasPolicy.standard
+        let sidebarFocusPolicy = RekonSidebarFocusPolicy.standard
+
+        XCTAssertTrue(windowPolicy.usesNavyWindowContainerBackground)
+        XCTAssertTrue(windowPolicy.hidesWindowToolbarMaterial)
+        XCTAssertTrue(sidebarFocusPolicy.rendersCustomFocusRing)
+        XCTAssertTrue(sidebarFocusPolicy.suppressesSystemFocusEffect)
+    }
+
     func testVisualFixtureLaunchConfigurationIsExplicitAndIsolated() throws {
         let configuration = try XCTUnwrap(
             VisualFixtureLaunchConfiguration(

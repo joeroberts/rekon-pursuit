@@ -183,6 +183,11 @@ struct AppShellView<Detail: View>: View {
             maxHeight: windowCanvasPolicy.fillsRootCanvas ? .infinity : nil
         )
         .background(RekonTheme.background.ignoresSafeArea())
+        .background(RekonWindowChromeConfigurator(policy: windowCanvasPolicy))
+        .toolbarBackground(
+            windowCanvasPolicy.hidesWindowToolbarMaterial ? .hidden : .automatic,
+            for: .windowToolbar
+        )
         .accessibilityIdentifier(RekonVisualThemeContract.shellAccessibilityIdentifier)
     }
 }
@@ -191,6 +196,7 @@ private struct SidebarDestinationButton: View {
     let destination: AppDestination
     let isSelected: Bool
     let select: () -> Void
+    private let focusPolicy = RekonSidebarFocusPolicy.standard
     @FocusState private var isFocused: Bool
 
     var body: some View {
@@ -219,6 +225,7 @@ private struct SidebarDestinationButton: View {
         .buttonStyle(.plain)
         .focusable()
         .focused($isFocused)
+        .focusEffectDisabled(focusPolicy.suppressesSystemFocusEffect)
         .accessibilityIdentifier(destination.accessibilityID)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 
@@ -41,12 +42,76 @@ nonisolated struct RekonWindowCanvasPolicy: Equatable {
     let hidesSystemTitleBar: Bool
     let fillsRootCanvas: Bool
     let fillsDetailCanvas: Bool
+    let usesNavyWindowContainerBackground: Bool
+    let hidesWindowToolbarMaterial: Bool
 
     static let standard = Self(
         hidesSystemTitleBar: true,
         fillsRootCanvas: true,
-        fillsDetailCanvas: true
+        fillsDetailCanvas: true,
+        usesNavyWindowContainerBackground: true,
+        hidesWindowToolbarMaterial: true
     )
+}
+
+/// Sidebar destinations provide their own visible focus ring. Suppressing the
+/// platform focus effect prevents a second, inset ring from appearing around
+/// the image and label while preserving keyboard focus and VoiceOver behavior.
+nonisolated struct RekonSidebarFocusPolicy: Equatable {
+    let rendersCustomFocusRing: Bool
+    let suppressesSystemFocusEffect: Bool
+
+    static let standard = Self(
+        rendersCustomFocusRing: true,
+        suppressesSystemFocusEffect: true
+    )
+}
+
+/// Applies the window-owned chrome treatment that SwiftUI's root background
+/// cannot reach on macOS 14. The view has no visual content; it configures its
+/// hosting window whenever SwiftUI attaches or updates it.
+struct RekonWindowChromeConfigurator: NSViewRepresentable {
+    let policy: RekonWindowCanvasPolicy
+
+    func makeNSView(context: Context) -> WindowConfigurationView {
+        WindowConfigurationView(policy: policy)
+    }
+
+    func updateNSView(_ view: WindowConfigurationView, context: Context) {
+        view.apply(policy: policy)
+    }
+
+    final class WindowConfigurationView: NSView {
+        private var policy: RekonWindowCanvasPolicy
+
+        init(policy: RekonWindowCanvasPolicy) {
+            self.policy = policy
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) {
+            nil
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            apply(policy: policy)
+        }
+
+        func apply(policy: RekonWindowCanvasPolicy) {
+            self.policy = policy
+            guard let window else { return }
+
+            if policy.hidesSystemTitleBar {
+                window.titleVisibility = .hidden
+                window.titlebarAppearsTransparent = true
+            }
+            if policy.usesNavyWindowContainerBackground {
+                window.backgroundColor = NSColor(RekonTheme.background)
+                window.isOpaque = true
+            }
+        }
+    }
 }
 
 enum RekonTheme {
