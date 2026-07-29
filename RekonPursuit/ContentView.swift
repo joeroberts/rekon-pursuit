@@ -339,6 +339,8 @@ private struct PipelineView: View {
                             HStack {
                                 Button { anchorID = opportunity.id; open(opportunity) } label: { OpportunityRow(opportunity: opportunity) }
                                     .buttonStyle(.plain)
+                                    .accessibilityIdentifier("pipeline-opportunity-\(opportunity.id)")
+                                    .accessibilityLabel(opportunity.title)
                                 Spacer()
                                 Button("Delete", role: .destructive) { delete(opportunity) }
                             }
@@ -370,6 +372,8 @@ private struct OpportunityCard: View {
     var body: some View {
         Button(action: open) { OpportunityRow(opportunity: opportunity).padding(10).background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: 10)).overlay(RoundedRectangle(cornerRadius: 10).stroke(RekonTheme.border, lineWidth: 1)) }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("pipeline-opportunity-\(opportunity.id)")
+            .accessibilityLabel(opportunity.title)
     }
 }
 
