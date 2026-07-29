@@ -458,7 +458,7 @@
       "phaseId": "post_mvp_refinement",
       "title": "Home redesign",
       "workType": "Home UX",
-      "status": "next_up",
+      "status": "backlog",
       "releaseCondition": "Requires VD2-02 accepted.",
       "latestTransition": "Dependency-ordered Visual Design v2 work recorded; not released.",
       "evidence": {

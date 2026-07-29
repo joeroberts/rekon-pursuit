@@ -13,7 +13,7 @@ The delivery principle is **vertical slices over isolated screens**: each slice 
 | Release area | Current status |
 | --- | --- |
 | Remediation R1 | **Accepted historical evidence** — the remediation ledger records the accepted R1 sequence and evidence; it is not current implementation work. |
-| Post-MVP refinement | **Active delivery queue** — VD2-01 remains In progress and is ready for product-owner hands-on verification of the corrective visual foundation. VD2-02 and later children remain dependency-ordered Backlog. |
+| Post-MVP refinement | **Active delivery queue** — VD2-01 is accepted. VD2-02 is next up under fresh independent gates; later children remain dependency-ordered Backlog. |
 | Phase 2a — privacy and AI foundation | **Not started** — follows accepted Post-MVP refinement; local-model runtime, cloud routing/sanitization/consent, populated AI ledger, budgets, and costs remain Backlog. |
 | Phase 2b — Gmail and Google Calendar | **Not started** — follows accepted Phase 2a. |
 | Phase 2c — documents and research | **Not started** — follows accepted Phase 2b. |
