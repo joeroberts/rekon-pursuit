@@ -435,7 +435,7 @@
         "href": "../task-briefs/VD2-01-visual-foundation-and-tokens.md"
       },
       "needsUserAction": true,
-      "userActionDetail": "Open /Users/jroberts/Library/Developer/Xcode/DerivedData/RekonPursuit-bdixudonsubqxgewspbeaidonmvf/Build/Products/Debug/RekonPursuit.app at default, 860×600, and wide window sizes; visit Home, Contacts, Activity & AI, Settings, and recovery/onboarding if available; confirm a navy title/canvas with native traffic lights and no gray margins."
+      "userActionDetail": "Open /tmp/rekon-vd2-supported-chrome-qa-1785295233/Build/Products/Debug/RekonPursuit.app at default, 860×600, and wide window sizes; visit Home, Contacts, Activity & AI, Settings, and recovery/onboarding if available; confirm a navy title/canvas with native traffic lights and no gray margins."
     },
     {
       "id": "VD2-02",
