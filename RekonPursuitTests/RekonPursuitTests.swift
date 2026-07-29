@@ -2,6 +2,361 @@ import XCTest
 @testable import RekonPursuit
 
 final class RekonPursuitTests: XCTestCase {
+
+    func testVisualFoundationUsesSemanticTokensAndTheExistingRekonEmblem() {
+        XCTAssertEqual(RekonVisualThemeContract.emblemAssetName, "RekonEmblem")
+        XCTAssertEqual(RekonVisualThemeContract.defaultSpacing, 16)
+        XCTAssertEqual(RekonVisualThemeContract.defaultCornerRadius, 16)
+        XCTAssertEqual(RekonVisualThemeContract.minimumWindowWidth, 860)
+        XCTAssertEqual(RekonVisualThemeContract.minimumWindowHeight, 600)
+        XCTAssertEqual(RekonVisualThemeContract.shellAccessibilityIdentifier, "app-shell")
+        XCTAssertEqual(RekonVisualThemeContract.controlOpacity(isEnabled: true), 1)
+        XCTAssertEqual(RekonVisualThemeContract.controlOpacity(isEnabled: false), 0.42)
+        XCTAssertEqual(RekonVisualThemeContract.controlBorderWidth(isFocused: false), 1)
+        XCTAssertEqual(RekonVisualThemeContract.controlBorderWidth(isFocused: true), 2)
+        XCTAssertEqual(RekonVisualThemeContract.buttonFocusBorderWidth(isFocused: false), 1)
+        XCTAssertEqual(RekonVisualThemeContract.buttonFocusBorderWidth(isFocused: true), 2)
+        XCTAssertEqual(RekonVisualThemeContract.buttonFocusGlowOpacity(isFocused: false), 0)
+        XCTAssertGreaterThan(RekonVisualThemeContract.buttonFocusGlowOpacity(isFocused: true), 0)
+    }
+
+    func testVisualFixtureLaunchConfigurationIsExplicitAndIsolated() throws {
+        let configuration = try XCTUnwrap(
+            VisualFixtureLaunchConfiguration(
+                arguments: ["RekonPursuit", "-rekon-visual-fixture", "populated"],
+                environment: [:]
+            )
+        )
+
+        XCTAssertEqual(configuration.fixture, .populated)
+        XCTAssertEqual(configuration.timeZone.identifier, "GMT")
+        XCTAssertTrue(configuration.keychainNamespace.hasPrefix("com.rekonlabs.RekonPursuit.visual-fixture.direct-initializer.populated"))
+        XCTAssertTrue(configuration.root.path.contains("rekon-pursuit-visual-fixtures"))
+        XCTAssertFalse(configuration.root.path.contains("Application Support"))
+    }
+
+    func testVisualFixtureConfigurationsUsePerRunTemporaryRoots() throws {
+        let first = try XCTUnwrap(
+            VisualFixtureLaunchConfiguration(
+                arguments: ["RekonPursuit", "-rekon-visual-fixture", "populated"],
+                environment: ["REKON_VISUAL_FIXTURE_SESSION": "fixture-run-a"]
+            )
+        )
+        let second = try XCTUnwrap(
+            VisualFixtureLaunchConfiguration(
+                arguments: ["RekonPursuit", "-rekon-visual-fixture", "populated"],
+                environment: ["REKON_VISUAL_FIXTURE_SESSION": "fixture-run-b"]
+            )
+        )
+
+        XCTAssertNotEqual(first.root, second.root)
+        XCTAssertNotEqual(first.keychainNamespace, second.keychainNamespace)
+        XCTAssertTrue(first.root.path.contains("fixture-run-a"))
+        XCTAssertTrue(second.root.path.contains("fixture-run-b"))
+    }
+
+    func testVisualFixtureCurrentProcessRequiresTheXCTestEnvironment() throws {
+        let arguments = ["RekonPursuit", VisualFixtureLaunchConfiguration.argument, VisualFixtureID.populated.rawValue]
+        let session = "current-process-gate"
+
+        XCTAssertNil(
+            VisualFixtureLaunchConfiguration.currentProcess(
+                arguments: arguments,
+                environment: [VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: session]
+            )
+        )
+
+        let configuration = try XCTUnwrap(
+            VisualFixtureLaunchConfiguration.currentProcess(
+                arguments: arguments,
+                environment: [
+                    VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: session,
+                    VisualFixtureLaunchConfiguration.xctestConfigurationFilePathEnvironmentKey: "/tmp/RekonPursuit.xctestconfiguration"
+                ]
+            )
+        )
+        XCTAssertEqual(configuration.fixture, .populated)
+        XCTAssertTrue(configuration.root.path.contains(session))
+    }
+
+    func testVisualFixtureCleanupLaunchUsesTheSameParserWithoutRenderingAFixture() throws {
+        let environment = [
+            VisualFixtureLaunchConfiguration.xctestConfigurationFilePathEnvironmentKey: "/tmp/test.xctestconfiguration",
+            VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: "cleanup-session"
+        ]
+
+        let cleanupConfiguration = try XCTUnwrap(
+            VisualFixtureLaunchConfiguration.cleanupCurrentProcess(
+                arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.cleanupArgument, VisualFixtureID.empty.rawValue],
+                environment: environment
+            )
+        )
+
+        XCTAssertEqual(cleanupConfiguration.sessionRoot.lastPathComponent, "cleanup-session")
+        XCTAssertNil(
+            VisualFixtureLaunchConfiguration.currentProcess(
+                arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.cleanupArgument, VisualFixtureID.empty.rawValue],
+                environment: environment
+            )
+        )
+        XCTAssertFalse(
+            VisualFixtureProcessLaunch.currentProcess(
+                arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.cleanupArgument, VisualFixtureID.empty.rawValue],
+                environment: environment
+            ).requiresApplicationDependencies
+        )
+    }
+
+    @MainActor
+    func testVisualFixtureCleanupRemovesEveryPopulatedFixtureRootForTheSession() throws {
+        let session = "cleanup-all-\(UUID().uuidString)"
+        let environment = [
+            VisualFixtureLaunchConfiguration.xctestConfigurationFilePathEnvironmentKey: "/tmp/test.xctestconfiguration",
+            VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: session
+        ]
+        let configurations = try VisualFixtureID.allCases.map { fixture in
+            try XCTUnwrap(
+                VisualFixtureLaunchConfiguration(
+                    arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.argument, fixture.rawValue],
+                    environment: environment
+                )
+            )
+        }
+        for configuration in configurations {
+            try FileManager.default.createDirectory(at: configuration.root, withIntermediateDirectories: true)
+            try Data("fixture".utf8).write(to: configuration.root.appendingPathComponent("seed.txt"))
+        }
+
+        let cleanupConfiguration = try XCTUnwrap(
+            VisualFixtureLaunchConfiguration.cleanupCurrentProcess(
+                arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.cleanupArgument, VisualFixtureID.empty.rawValue],
+                environment: environment
+            )
+        )
+        VisualFixtureWorkspace.teardown(configuration: cleanupConfiguration)
+
+        for configuration in configurations {
+            XCTAssertFalse(
+                FileManager.default.fileExists(atPath: configuration.root.path),
+                "Cleanup must remove the populated \(configuration.fixture.rawValue) fixture root."
+            )
+        }
+    }
+
+    @MainActor
+    func testVisualFixturePathGuardRefusesToDeleteOutsideTheFixtureBase() throws {
+        let outsideRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rekon-pursuit-outside-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: outsideRoot, withIntermediateDirectories: true)
+        try Data("preserve".utf8).write(to: outsideRoot.appendingPathComponent("preserve.txt"))
+        defer { try? FileManager.default.removeItem(at: outsideRoot) }
+
+        XCTAssertFalse(VisualFixtureWorkspace.removeTemporaryFixtureRoot(outsideRoot))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outsideRoot.path))
+    }
+
+    @MainActor
+    func testVisualFixtureCleanupRefusesAnIntermediateSessionSymlinkAndPreservesItsTarget() throws {
+        let testRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rekon-pursuit-fixture-symlink-test-\(UUID().uuidString)", isDirectory: true)
+        let fixtureBase = testRoot.appendingPathComponent("owned-fixtures", isDirectory: true)
+        let externalRoot = testRoot.appendingPathComponent("external-session", isDirectory: true)
+        let sessionRoot = fixtureBase.appendingPathComponent("session", isDirectory: true)
+        let sentinel = externalRoot.appendingPathComponent("preserve.txt")
+        try FileManager.default.createDirectory(at: fixtureBase, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: externalRoot, withIntermediateDirectories: true)
+        try Data("preserve".utf8).write(to: sentinel)
+        try FileManager.default.createSymbolicLink(at: sessionRoot, withDestinationURL: externalRoot)
+        defer { try? FileManager.default.removeItem(at: testRoot) }
+
+        XCTAssertFalse(
+            VisualFixtureWorkspace.removeTemporaryFixtureRoot(sessionRoot, fixtureBaseRoot: fixtureBase)
+        )
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sentinel.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sessionRoot.path))
+    }
+
+    @MainActor
+    func testVisualFixtureCleanupRefusesASymlinkedFixtureBaseAndPreservesItsTarget() throws {
+        let testRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rekon-pursuit-fixture-base-symlink-test-\(UUID().uuidString)", isDirectory: true)
+        let fixtureBase = testRoot.appendingPathComponent("owned-fixtures", isDirectory: true)
+        let externalBase = testRoot.appendingPathComponent("external-fixtures", isDirectory: true)
+        let sessionRoot = fixtureBase.appendingPathComponent("session", isDirectory: true)
+        let externalSession = externalBase.appendingPathComponent("session", isDirectory: true)
+        let sentinel = externalSession.appendingPathComponent("preserve.txt")
+        try FileManager.default.createDirectory(at: externalSession, withIntermediateDirectories: true)
+        try Data("preserve".utf8).write(to: sentinel)
+        try FileManager.default.createSymbolicLink(at: fixtureBase, withDestinationURL: externalBase)
+        defer { try? FileManager.default.removeItem(at: testRoot) }
+
+        XCTAssertFalse(
+            VisualFixtureWorkspace.removeTemporaryFixtureRoot(sessionRoot, fixtureBaseRoot: fixtureBase)
+        )
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sentinel.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: externalSession.path))
+    }
+
+    @MainActor
+    func testVisualFixtureUsesFixedTimeAndReducedMotionContracts() throws {
+        let configuration = try XCTUnwrap(
+            VisualFixtureLaunchConfiguration(
+                arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.argument, VisualFixtureID.empty.rawValue],
+                environment: [VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: "fixed-time"]
+            )
+        )
+
+        XCTAssertEqual(configuration.now, VisualFixtureLaunchConfiguration.fixedNow)
+        XCTAssertEqual(configuration.timeZone.identifier, "GMT")
+        XCTAssertEqual(RekonVisualThemeContract.decorativeBackgroundOpacity(reduceMotion: false), 1)
+        XCTAssertEqual(RekonVisualThemeContract.decorativeBackgroundOpacity(reduceMotion: true), 0.45)
+        XCTAssertEqual(RekonVisualThemeContract.homeFocusAccessibilityIdentifier, AppDestination.home.accessibilityID)
+    }
+
+    @MainActor
+    func testAllVisualFixtureStatesReachTheirExpectedWorkspaceState() throws {
+        for fixture in VisualFixtureID.allCases {
+            let configuration = try XCTUnwrap(
+                VisualFixtureLaunchConfiguration(
+                    arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.argument, fixture.rawValue],
+                    environment: [VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: "state-\(fixture.rawValue)"]
+                )
+            )
+            defer { VisualFixtureWorkspace.teardown(configuration: configuration) }
+
+            let model = VisualFixtureWorkspace.makeViewModel(configuration: configuration)
+            model.start()
+
+            switch fixture {
+            case .empty:
+                XCTAssertTrue(model.canCreateWorkspace)
+                XCTAssertFalse(model.workspaceReady)
+            case .recovery:
+                XCTAssertTrue(model.workspaceRequiresRecovery)
+                XCTAssertFalse(model.workspaceReady)
+            case .error:
+                XCTAssertFalse(model.workspaceReady)
+                XCTAssertFalse(model.canCreateWorkspace)
+                XCTAssertFalse(model.workspaceRequiresRecovery)
+            case .populated, .archive, .documentRelink:
+                XCTAssertTrue(model.workspaceReady)
+                XCTAssertFalse(model.canCreateWorkspace)
+            }
+
+            model.teardown()
+        }
+    }
+
+    @MainActor
+    func testPopulatedVisualFixtureContainsDeterministicOpportunityContent() throws {
+        let configuration = try XCTUnwrap(
+            VisualFixtureLaunchConfiguration(
+                arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.argument, VisualFixtureID.populated.rawValue],
+                environment: [VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: "populated-content"]
+            )
+        )
+        defer { VisualFixtureWorkspace.teardown(configuration: configuration) }
+
+        let model = VisualFixtureWorkspace.makeViewModel(configuration: configuration)
+        model.start()
+
+        XCTAssertEqual(model.opportunities.count, 1)
+        XCTAssertEqual(model.opportunities.first?.title, "Fixture opportunity")
+        XCTAssertEqual(model.opportunities.first?.company, "Fixture employer")
+        XCTAssertEqual(model.opportunities.first?.jobURL, "https://jobs.example.test/fixture")
+        XCTAssertEqual(model.opportunities.first?.location, "Fixture location")
+        XCTAssertEqual(model.opportunities.first?.dueAt, configuration.now)
+        model.teardown()
+    }
+
+    @MainActor
+    func testDocumentRelinkVisualFixtureContainsASelectedRelinkRequiredReference() throws {
+        let configuration = try XCTUnwrap(
+            VisualFixtureLaunchConfiguration(
+                arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.argument, VisualFixtureID.documentRelink.rawValue],
+                environment: [VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: "document-relink-content"]
+            )
+        )
+        defer { VisualFixtureWorkspace.teardown(configuration: configuration) }
+
+        let model = VisualFixtureWorkspace.makeViewModel(configuration: configuration)
+        model.start()
+
+        XCTAssertEqual(model.selectedDocumentReferences.count, 1)
+        XCTAssertEqual(model.selectedDocumentReferences.first?.filename, "fixture-resume.pdf")
+        XCTAssertEqual(model.selectedDocumentReferences.first?.availability, .relinkRequired)
+        XCTAssertNil(model.selectedDocumentReferences.first?.bookmarkData)
+        XCTAssertEqual(model.documentReferenceSummary, DocumentReferenceSummary(availableCount: 0, relinkRequiredCount: 1))
+        model.teardown()
+    }
+
+    @MainActor
+    func testArchiveVisualFixtureConstructionCompletesOnTheMainActor() throws {
+        let configuration = try XCTUnwrap(
+            VisualFixtureLaunchConfiguration(
+                arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.argument, VisualFixtureID.archive.rawValue],
+                environment: [VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: "archive-construction"]
+            )
+        )
+        defer { VisualFixtureWorkspace.teardown(configuration: configuration) }
+
+        let model = VisualFixtureWorkspace.makeViewModel(configuration: configuration)
+        model.start()
+
+        XCTAssertTrue(model.workspaceReady)
+        XCTAssertEqual(model.portableArchiveCatalogue.count, 1)
+        model.teardown()
+    }
+
+    @MainActor
+    func testArchiveVisualFixtureSeedsVerifiedArchiveCatalogue() throws {
+        let configuration = try XCTUnwrap(
+            VisualFixtureLaunchConfiguration(
+                arguments: ["RekonPursuit", "-rekon-visual-fixture", "archive"],
+                environment: ["REKON_VISUAL_FIXTURE_SESSION": "archive-catalogue"]
+            )
+        )
+        defer { VisualFixtureWorkspace.teardown(configuration: configuration) }
+
+        let model = VisualFixtureWorkspace.makeViewModel(configuration: configuration)
+        model.start()
+
+        XCTAssertTrue(model.workspaceReady)
+        XCTAssertTrue(model.recoveryEnrollmentEnabled)
+        XCTAssertEqual(model.portableArchiveCatalogue.count, 1)
+        XCTAssertEqual(model.portableArchiveCatalogue.first?.createdAt, configuration.now)
+        XCTAssertEqual(model.portableArchiveCatalogue.first?.displayFilename, "Fixture Archive.rekonarchive")
+        XCTAssertEqual(model.portableArchiveCatalogue.first?.verificationState, "Verified")
+        XCTAssertEqual(model.portableArchiveCatalogue.first?.lifecycleState, .verified)
+        model.teardown()
+    }
+
+    @MainActor
+    func testArchiveVisualFixtureUsesItsDeclaredTimeZoneAtTheCalendarBoundary() throws {
+        let timeZone = try XCTUnwrap(TimeZone(identifier: "Pacific/Auckland"))
+        var utcCalendar = Calendar(identifier: .gregorian)
+        utcCalendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let createdAt = try XCTUnwrap(
+            utcCalendar.date(from: DateComponents(year: 2025, month: 9, day: 1, hour: 12))
+        )
+        let configuration = VisualFixtureLaunchConfiguration(
+            fixture: .archive,
+            session: "archive-time-zone",
+            now: createdAt,
+            timeZone: timeZone
+        )
+        defer { VisualFixtureWorkspace.teardown(configuration: configuration) }
+
+        let model = VisualFixtureWorkspace.makeViewModel(configuration: configuration)
+        model.start()
+
+        let expectedExpiry = try XCTUnwrap(
+            configuration.fixtureCalendar.date(byAdding: .day, value: 30, to: createdAt)
+        )
+        XCTAssertEqual(model.portableArchiveCatalogue.first?.expiresAt, expectedExpiry)
+        XCTAssertEqual(configuration.fixtureCalendar.timeZone.identifier, timeZone.identifier)
+        model.teardown()
+    }
     @MainActor
     func testAIUsageLedgerFilterStartsWithUnboundedDefaults() {
         let filter = AIUsageLedgerFilter()

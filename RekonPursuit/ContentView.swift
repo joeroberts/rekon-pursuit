@@ -19,7 +19,7 @@ struct CSVExportDocument: FileDocument {
 }
 
 struct ContentView: View {
-    @StateObject private var model = WorkspaceViewModel()
+    @StateObject private var model: WorkspaceViewModel
     @State private var navigation = DailyNavigationState()
     @State private var opportunityRoute: OpportunityRoute?
     @State private var showsPipelineBoard = false
@@ -31,6 +31,11 @@ struct ContentView: View {
     @State private var showsDocumentReferenceImporter = false
     @State private var documentReferenceToRelink: DocumentReference?
     @State private var closureConfirmationID: String?
+
+    init(visualFixture: VisualFixtureLaunchConfiguration? = nil) {
+        let initialModel = visualFixture.map(VisualFixtureWorkspace.makeViewModel) ?? WorkspaceViewModel()
+        _model = StateObject(wrappedValue: initialModel)
+    }
 
     var body: some View {
         AppShellView(

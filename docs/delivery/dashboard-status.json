@@ -428,13 +428,14 @@
       "title": "Visual foundation and tokens",
       "workType": "Visual foundation",
       "status": "in_progress",
-      "releaseCondition": "Requires the independently approved Visual Design v2 plan and then its own review, QA, security/privacy, and product-owner acceptance before VD2-02 releases.",
-      "latestTransition": "Delivery released the foundation slice after independent Planning, Architect, TPM, QA, and Delivery approval.",
+      "releaseCondition": "Requires the independently approved Visual Design v2 plan, independent review, QA, security/privacy, and product-owner acceptance before VD2-02 releases.",
+      "latestTransition": "Independent code review, QA, architecture, and security/privacy gates passed; ready for product-owner hands-on verification.",
       "evidence": {
-        "label": "Visual Design v2 plan",
-        "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
+        "label": "VD2-01 task brief",
+        "href": "../task-briefs/VD2-01-visual-foundation-and-tokens.md"
       },
-      "needsUserAction": false
+      "needsUserAction": true,
+      "userActionDetail": "Verify the signed Debug handoff: visit existing destinations, use keyboard focus, enable Reduce Motion, and confirm workspace behavior remains unchanged."
     },
     {
       "id": "VD2-02",

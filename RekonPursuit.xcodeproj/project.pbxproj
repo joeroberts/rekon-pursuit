@@ -27,6 +27,7 @@
 		100000000000000000000018 /* WorkspaceViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000023 /* WorkspaceViewModel.swift */; };
 		100000000000000000000019 /* CSVOpportunityImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000024 /* CSVOpportunityImporter.swift */; };
 		100000000000000000000020 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000025 /* AppShellView.swift */; };
+		100000000000000000000044 /* RekonVisualTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000044 /* RekonVisualTheme.swift */; };
 		100000000000000000000043 /* AIUsageLedgerFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000043 /* AIUsageLedgerFilter.swift */; };
 		100000000000000000000021 /* PublicURLChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000026 /* PublicURLChecker.swift */; };
 		100000000000000000000024 /* WorkspaceLocationBookmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000029 /* WorkspaceLocationBookmark.swift */; };
@@ -90,6 +91,7 @@
 		200000000000000000000023 /* WorkspaceViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceViewModel.swift; sourceTree = "<group>"; };
 		200000000000000000000024 /* CSVOpportunityImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Import/CSVOpportunityImporter.swift; sourceTree = "<group>"; };
 		200000000000000000000025 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
+		200000000000000000000044 /* RekonVisualTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonVisualTheme.swift; sourceTree = "<group>"; };
 		200000000000000000000043 /* AIUsageLedgerFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIUsageLedgerFilter.swift; sourceTree = "<group>"; };
 			200000000000000000000026 /* PublicURLChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Reconciliation/PublicURLChecker.swift; sourceTree = "<group>"; };
 			200000000000000000000029 /* WorkspaceLocationBookmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/WorkspaceLocationBookmark.swift; sourceTree = "<group>"; };
@@ -172,6 +174,7 @@
 			children = (
 				200000000000000000000001 /* BootstrapApp.swift */,
 				200000000000000000000025 /* AppShellView.swift */,
+				200000000000000000000044 /* RekonVisualTheme.swift */,
 				200000000000000000000043 /* AIUsageLedgerFilter.swift */,
 				200000000000000000000002 /* ContentView.swift */,
 				200000000000000000000003 /* RekonPursuit.entitlements */,
@@ -389,6 +392,7 @@
 				100000000000000000000018 /* WorkspaceViewModel.swift in Sources */,
 				100000000000000000000019 /* CSVOpportunityImporter.swift in Sources */,
 				100000000000000000000020 /* AppShellView.swift in Sources */,
+				100000000000000000000044 /* RekonVisualTheme.swift in Sources */,
 				100000000000000000000043 /* AIUsageLedgerFilter.swift in Sources */,
 				100000000000000000000021 /* PublicURLChecker.swift in Sources */,
 				100000000000000000000024 /* WorkspaceLocationBookmark.swift in Sources */,
@@ -684,6 +688,7 @@
 			buildSettings = {
 				ARCHS = "arm64 x86_64";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2UA854NLX4;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				ONLY_ACTIVE_ARCH = NO;
@@ -702,6 +707,7 @@
 			buildSettings = {
 				ARCHS = "arm64 x86_64";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2UA854NLX4;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				ONLY_ACTIVE_ARCH = NO;

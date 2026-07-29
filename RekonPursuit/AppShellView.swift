@@ -109,50 +109,6 @@ nonisolated enum OpportunityRoute: Equatable {
     }
 }
 
-enum RekonTheme {
-    static let background = Color(red: 0.018, green: 0.035, blue: 0.075)
-    static let surface = Color(red: 0.045, green: 0.075, blue: 0.13)
-    static let elevatedSurface = Color(red: 0.065, green: 0.105, blue: 0.18)
-    static let border = Color(red: 0.16, green: 0.23, blue: 0.35)
-    static let secondaryText = Color(red: 0.62, green: 0.69, blue: 0.80)
-    static let accent = Color(red: 0.10, green: 0.70, blue: 0.96)
-    static let violet = Color(red: 0.53, green: 0.30, blue: 0.96)
-}
-
-struct RekonPrimaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.body.weight(.semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(RekonTheme.accent.opacity(configuration.isPressed ? 0.78 : 1), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(RekonTheme.accent.opacity(0.75), lineWidth: 1))
-    }
-}
-
-struct RekonSecondaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.body.weight(.medium))
-            .foregroundStyle(RekonTheme.secondaryText)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(RekonTheme.surface.opacity(configuration.isPressed ? 0.65 : 1), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(RekonTheme.border, lineWidth: 1))
-    }
-}
-
-struct RekonTextFieldStyle: TextFieldStyle {
-    func _body(configuration: TextField<Self._Label>) -> some View {
-        configuration
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(RekonTheme.border, lineWidth: 1))
-    }
-}
-
 struct AppShellView<Detail: View>: View {
     @Binding private var selection: DailyRoute
     private let detailTitle: String
@@ -198,7 +154,12 @@ struct AppShellView<Detail: View>: View {
                     .padding(.horizontal, 8)
                 }
             }
-            .background(RekonTheme.background)
+            .background {
+                ZStack {
+                    RekonTheme.background
+                    RekonDecorativeBackground()
+                }
+            }
         } detail: {
             detail
                 .background(RekonTheme.background)
@@ -207,7 +168,11 @@ struct AppShellView<Detail: View>: View {
         .tint(RekonTheme.accent)
         .textFieldStyle(RekonTextFieldStyle())
         .navigationSplitViewStyle(.balanced)
-        .frame(minWidth: 860, minHeight: 600)
+        .frame(
+            minWidth: RekonVisualThemeContract.minimumWindowWidth,
+            minHeight: RekonVisualThemeContract.minimumWindowHeight
+        )
+        .accessibilityIdentifier(RekonVisualThemeContract.shellAccessibilityIdentifier)
     }
 }
 
@@ -215,6 +180,7 @@ private struct SidebarDestinationButton: View {
     let destination: AppDestination
     let isSelected: Bool
     let select: () -> Void
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         Button(action: select) {
@@ -226,13 +192,22 @@ private struct SidebarDestinationButton: View {
             }
             .font(.body.weight(isSelected ? .semibold : .regular))
             .foregroundStyle(isSelected ? Color.white : RekonTheme.secondaryText)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 9)
+            .padding(.horizontal, RekonTheme.Spacing.compact)
+            .padding(.vertical, RekonTheme.Spacing.tight)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isSelected ? RekonTheme.elevatedSurface : Color.clear, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(isSelected ? RekonTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1))
+            .background(isSelected ? RekonTheme.elevatedSurface : Color.clear, in: RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
+            .overlay(
+                RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
+                    .stroke(
+                        isFocused ? RekonTheme.accent : (isSelected ? RekonTheme.accent.opacity(0.55) : Color.clear),
+                        lineWidth: RekonVisualThemeContract.controlBorderWidth(isFocused: isFocused)
+                    )
+            )
+            .shadow(color: isFocused ? RekonTheme.accent.opacity(0.32) : .clear, radius: 7)
         }
         .buttonStyle(.plain)
+        .focusable()
+        .focused($isFocused)
         .accessibilityIdentifier(destination.accessibilityID)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }

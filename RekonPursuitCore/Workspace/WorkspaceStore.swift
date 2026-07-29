@@ -890,6 +890,43 @@ final class WorkspaceStore {
         }
     }
 
+    /// Records deterministic archive metadata for an isolated visual fixture.
+    ///
+    /// This seam deliberately creates no archive file, does not access the
+    /// signing-key store, and only permits stores rooted below the fixture
+    /// temporary directory. Production workspaces must use the real archive
+    /// creation path instead.
+    func seedVerifiedPortableArchiveCatalogueForVisualFixture(createdAt: Date, calendar: Calendar) throws {
+        let fixtureRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rekon-pursuit-visual-fixtures", isDirectory: true)
+            .standardizedFileURL
+        let workspaceRoot = database.portableArchiveConnectionConfiguration().url
+            .deletingLastPathComponent()
+            .standardizedFileURL
+
+        guard workspaceRoot.path.hasPrefix(fixtureRoot.path + "/") else {
+            throw WorkspaceStoreError.injectedFailure
+        }
+
+        let archiveID = UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
+        let expiresAt = calendar.date(byAdding: .day, value: 30, to: createdAt)!
+        try synchronized {
+            try database.execute(
+                "INSERT INTO portable_archive_catalogue (archive_id, destination_bookmark, display_filename, format_version, created_at, expires_at, verification_state, ciphertext_checksum, signing_key_fingerprint, storage_class, managed_relative_path) VALUES (?, ?, ?, ?, ?, ?, 'Verified', ?, ?, 'fixture', NULL)",
+                values: [
+                    .text(archiveID.uuidString),
+                    .blob(Data()),
+                    .text("Fixture Archive.rekonarchive"),
+                    .integer(1),
+                    .real(createdAt.timeIntervalSince1970),
+                    .real(expiresAt.timeIntervalSince1970),
+                    .blob(Data(repeating: 0xF1, count: 32)),
+                    .blob(Data(repeating: 0xA7, count: 32))
+                ]
+            )
+        }
+    }
+
     func retainedDataPurgeStatus() throws -> RetainedDataPurgeStatus? {
         try synchronized {
             guard let row = try database.rows("SELECT id, state, started_at, finished_at FROM retained_data_purge_jobs ORDER BY started_at DESC LIMIT 1").first,
