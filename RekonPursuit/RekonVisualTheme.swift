@@ -44,34 +44,27 @@ nonisolated struct RekonWindowCanvasPolicy: Equatable {
     let fillsDetailCanvas: Bool
     let usesNavyWindowContainerBackground: Bool
     let hidesWindowToolbarMaterial: Bool
+    let removesTitlebarSeparator: Bool
+    let coversSplitViewDivider: Bool
 
     static let standard = Self(
         hidesSystemTitleBar: true,
         fillsRootCanvas: true,
         fillsDetailCanvas: true,
         usesNavyWindowContainerBackground: true,
-        hidesWindowToolbarMaterial: true
+        hidesWindowToolbarMaterial: true,
+        removesTitlebarSeparator: true,
+        coversSplitViewDivider: true
     )
 }
 
-/// Sidebar destinations provide their own visible focus ring. Suppressing the
-/// platform focus effect prevents a second, inset ring from appearing around
-/// the image and label while preserving keyboard focus and VoiceOver behavior.
-nonisolated struct RekonSidebarFocusPolicy: Equatable {
-    let rendersCustomFocusRing: Bool
-    let suppressesSystemFocusEffect: Bool
-
-    static let standard = Self(
-        rendersCustomFocusRing: true,
-        suppressesSystemFocusEffect: true
-    )
-}
-
-/// Applies the window-owned chrome treatment that SwiftUI's root background
-/// cannot reach on macOS 14. The view has no visual content; it configures its
-/// hosting window whenever SwiftUI attaches or updates it.
+/// Applies the window-owned chrome treatment. SwiftUI background modifiers do
+/// not control the native titlebar, toolbar baseline, or `NSSplitView` divider,
+/// so this AppKit bridge configures those chrome-owned surfaces while preserving
+/// the native traffic lights and resizing behavior.
 struct RekonWindowChromeConfigurator: NSViewRepresentable {
     let policy: RekonWindowCanvasPolicy
+    static let sidebarDividerIdentifier = NSUserInterfaceItemIdentifier("rekon-sidebar-divider")
 
     func makeNSView(context: Context) -> WindowConfigurationView {
         WindowConfigurationView(policy: policy)
@@ -83,6 +76,9 @@ struct RekonWindowChromeConfigurator: NSViewRepresentable {
 
     final class WindowConfigurationView: NSView {
         private var policy: RekonWindowCanvasPolicy
+        private weak var configuredSplitView: NSSplitView?
+        private weak var dividerOverlay: NSView?
+        private var sidebarFrameObservation: NSKeyValueObservation?
 
         init(policy: RekonWindowCanvasPolicy) {
             self.policy = policy
@@ -96,6 +92,15 @@ struct RekonWindowChromeConfigurator: NSViewRepresentable {
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             apply(policy: policy)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.apply(policy: self.policy)
+            }
+        }
+
+        override func layout() {
+            super.layout()
+            positionDividerOverlay()
         }
 
         func apply(policy: RekonWindowCanvasPolicy) {
@@ -110,7 +115,90 @@ struct RekonWindowChromeConfigurator: NSViewRepresentable {
                 window.backgroundColor = NSColor(RekonTheme.background)
                 window.isOpaque = true
             }
+            if policy.removesTitlebarSeparator {
+                window.titlebarSeparatorStyle = .none
+                window.toolbar?.showsBaselineSeparator = false
+            }
+            if policy.coversSplitViewDivider {
+                configureSplitViewDivider(in: window)
+            }
         }
+
+        private func configureSplitViewDivider(in window: NSWindow) {
+            guard let splitView = window.contentView?.firstDescendant(of: NSSplitView.self),
+                  splitView.subviews.count >= 2
+            else {
+                return
+            }
+
+            if configuredSplitView !== splitView {
+                sidebarFrameObservation = nil
+                dividerOverlay?.removeFromSuperview()
+
+                let overlay = SidebarDividerOverlay()
+                overlay.identifier = RekonWindowChromeConfigurator.sidebarDividerIdentifier
+                overlay.wantsLayer = true
+                overlay.layer?.backgroundColor = NSColor(RekonTheme.background).cgColor
+                splitView.addSubview(overlay, positioned: .above, relativeTo: nil)
+
+                configuredSplitView = splitView
+                dividerOverlay = overlay
+                sidebarFrameObservation = splitView.subviews.first?.observe(\.frame, options: [.initial, .new]) { [weak self] _, _ in
+                    self?.positionDividerOverlay()
+                }
+            }
+
+            positionDividerOverlay()
+        }
+
+        private func positionDividerOverlay() {
+            guard let splitView = configuredSplitView,
+                  let dividerOverlay,
+                  splitView.subviews.count >= 2
+            else {
+                return
+            }
+
+            let leadingPane = splitView.subviews[0].frame
+            let trailingPane = splitView.subviews[1].frame
+            if splitView.isVertical {
+                let dividerMinX = leadingPane.maxX
+                dividerOverlay.frame = NSRect(
+                    x: dividerMinX,
+                    y: splitView.bounds.minY,
+                    width: max(1, trailingPane.minX - dividerMinX),
+                    height: splitView.bounds.height
+                )
+            } else {
+                let dividerMinY = leadingPane.maxY
+                dividerOverlay.frame = NSRect(
+                    x: splitView.bounds.minX,
+                    y: dividerMinY,
+                    width: splitView.bounds.width,
+                    height: max(1, trailingPane.minY - dividerMinY)
+                )
+            }
+        }
+
+        private final class SidebarDividerOverlay: NSView {
+            override func hitTest(_ point: NSPoint) -> NSView? {
+                nil
+            }
+        }
+    }
+}
+
+private extension NSView {
+    func firstDescendant<T: NSView>(of type: T.Type) -> T? {
+        if let matchingView = self as? T {
+            return matchingView
+        }
+        for subview in subviews {
+            if let matchingView = subview.firstDescendant(of: type) {
+                return matchingView
+            }
+        }
+        return nil
     }
 }
 

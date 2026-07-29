@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import RekonPursuit
 
@@ -28,14 +29,51 @@ final class RekonPursuitTests: XCTestCase {
         XCTAssertTrue(policy.fillsDetailCanvas)
     }
 
-    func testVisualFoundationKeepsWindowChromeNavyAndUsesOneSidebarFocusTreatment() {
+    func testVisualFoundationKeepsWindowChromeNavy() {
         let windowPolicy = RekonWindowCanvasPolicy.standard
-        let sidebarFocusPolicy = RekonSidebarFocusPolicy.standard
 
         XCTAssertTrue(windowPolicy.usesNavyWindowContainerBackground)
         XCTAssertTrue(windowPolicy.hidesWindowToolbarMaterial)
-        XCTAssertTrue(sidebarFocusPolicy.rendersCustomFocusRing)
-        XCTAssertTrue(sidebarFocusPolicy.suppressesSystemFocusEffect)
+        XCTAssertTrue(windowPolicy.removesTitlebarSeparator)
+        XCTAssertTrue(windowPolicy.coversSplitViewDivider)
+    }
+
+    @MainActor
+    func testWindowChromeConfiguratorAppliesNavyChromeAndCoversTheAttachedSplitDivider() throws {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        let contentView = NSView(frame: window.contentView?.bounds ?? .zero)
+        let splitView = NSSplitView(frame: contentView.bounds)
+        splitView.isVertical = true
+        let sidebar = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 600))
+        let detail = NSView(frame: NSRect(x: 261, y: 0, width: 639, height: 600))
+        splitView.addSubview(sidebar)
+        splitView.addSubview(detail)
+        contentView.addSubview(splitView)
+        window.contentView = contentView
+
+        let configurationView = RekonWindowChromeConfigurator.WindowConfigurationView(
+            policy: .standard
+        )
+        contentView.addSubview(configurationView)
+        configurationView.apply(policy: .standard)
+
+        XCTAssertEqual(window.backgroundColor, NSColor(RekonTheme.background))
+        XCTAssertTrue(window.isOpaque)
+        XCTAssertEqual(window.titleVisibility, .hidden)
+        XCTAssertTrue(window.titlebarAppearsTransparent)
+        XCTAssertEqual(window.titlebarSeparatorStyle, .none)
+        let dividerOverlay = try XCTUnwrap(
+            splitView.subviews.first {
+                $0.identifier == RekonWindowChromeConfigurator.sidebarDividerIdentifier
+            }
+        )
+        XCTAssertEqual(dividerOverlay.frame.minX, sidebar.frame.maxX)
+        XCTAssertGreaterThanOrEqual(dividerOverlay.frame.width, 1)
     }
 
     func testVisualFixtureLaunchConfigurationIsExplicitAndIsolated() throws {

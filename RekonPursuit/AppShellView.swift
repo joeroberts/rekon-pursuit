@@ -196,7 +196,6 @@ private struct SidebarDestinationButton: View {
     let destination: AppDestination
     let isSelected: Bool
     let select: () -> Void
-    private let focusPolicy = RekonSidebarFocusPolicy.standard
     @FocusState private var isFocused: Bool
 
     var body: some View {
@@ -225,7 +224,9 @@ private struct SidebarDestinationButton: View {
         .buttonStyle(.plain)
         .focusable()
         .focused($isFocused)
-        .focusEffectDisabled(focusPolicy.suppressesSystemFocusEffect)
+        // The custom cyan outline above is the single visible keyboard focus
+        // treatment; suppress the system halo to avoid rendering two rings.
+        .focusEffectDisabled(true)
         .accessibilityIdentifier(destination.accessibilityID)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }

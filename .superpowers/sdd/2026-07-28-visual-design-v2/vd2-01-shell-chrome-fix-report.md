@@ -20,12 +20,15 @@ and toolbar material on the macOS 14 deployment target. The earlier root-canvas
 background therefore left the system graphite material visible in title/toolbar
 regions, especially after entering full screen.
 
-`containerBackground(_:for: .window)` was considered, but it is macOS 15+.
-Instead, a zero-content `NSViewRepresentable` configures the hosting `NSWindow`
-with the existing Rekon navy token and transparent titlebar. The shell also
-hides its window toolbar background using the macOS 14-supported SwiftUI API.
-This retains the native window controls rather than replacing the titlebar or
-changing the window style mask.
+`containerBackground(_:for: .window)` is available on the macOS 14 deployment
+target, but it does not own every native `NavigationSplitView` divider and
+titlebar surface involved here. The newer `.navigationSplitView` placement is
+not required for this fix. Instead, a zero-content `NSViewRepresentable`
+configures the hosting `NSWindow` with the existing Rekon navy token and
+transparent titlebar, then covers only the native split divider with a
+non-interactive navy overlay. The shell also hides its window toolbar
+background. This retains the native window controls, split resizing, and
+window style mask.
 
 Sidebar destinations already render the approved custom cyan focus ring. The
 platform focus effect was additionally drawing an inset rectangle around the
@@ -40,26 +43,22 @@ VoiceOver behavior.
 - Added `RekonWindowChromeConfigurator`, which updates the attached AppKit
   window on creation, update, and window attachment.
 - Applied the configurator and hidden toolbar material at `AppShellView`.
-- Added a testable `RekonSidebarFocusPolicy` and applied
-  `focusEffectDisabled(true)` only because the custom focus ring remains the
-  visible keyboard focus indicator.
-- Added a focused policy regression test.
+- Applied `focusEffectDisabled(true)` only because the custom focus ring
+  remains the visible keyboard focus indicator.
+- Added an attached-window regression test that exercises the production
+  configurator against a real `NSWindow`/`NSSplitView` hierarchy and asserts
+  navy container color, opaque window state, hidden transparent titlebar,
+  removed titlebar separator, and the divider overlay position.
 
 ## TDD and verification evidence
-
-### Red
-
-The new focused test was first run before the window/focus-policy API existed.
-It failed with missing `RekonSidebarFocusPolicy` and missing window-policy
-members, as expected.
 
 ### Green
 
 ```text
 xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit \
   -destination 'platform=macOS' \
-  -only-testing:RekonPursuitTests/RekonPursuitTests/testVisualFoundationKeepsWindowChromeNavyAndUsesOneSidebarFocusTreatment \
-  -derivedDataPath /tmp/rekon-vd2-shell-chrome-green
+  -only-testing:RekonPursuitTests/RekonPursuitTests/testWindowChromeConfiguratorAppliesNavyChromeAndCoversTheAttachedSplitDivider \
+  -derivedDataPath /tmp/rekon-vd2-shell-chrome-review-fix
 
 Test Suite 'Selected tests' passed: 1 test, 0 failures.
 ** TEST SUCCEEDED **
@@ -68,10 +67,10 @@ Test Suite 'Selected tests' passed: 1 test, 0 failures.
 ```text
 xcodebuild build -project RekonPursuit.xcodeproj -scheme RekonPursuit \
   -configuration Debug \
-  -derivedDataPath /tmp/rekon-vd2-shell-chrome-build
+  -derivedDataPath /tmp/rekon-vd2-shell-chrome-review-fix
 
 codesign --verify --deep --strict \
-  /tmp/rekon-vd2-shell-chrome-build/Build/Products/Debug/RekonPursuit.app
+  /tmp/rekon-vd2-shell-chrome-review-fix/Build/Products/Debug/RekonPursuit.app
 
 ** BUILD SUCCEEDED **
 ```
@@ -83,7 +82,7 @@ No UI-test runner was launched in this corrective pass.
 
 Open the signed Debug app at:
 
-`/tmp/rekon-vd2-shell-chrome-build/Build/Products/Debug/RekonPursuit.app`
+`/tmp/rekon-vd2-shell-chrome-review-fix/Build/Products/Debug/RekonPursuit.app`
 
 Verify the following before accepting this corrective pass:
 
@@ -98,6 +97,7 @@ Verify the following before accepting this corrective pass:
 
 ## Remaining gate
 
-The compiler, targeted regression test, and code-sign verification are green.
-Independent code review, QA verification, and the live visual smoke above are
-still required; this report does not mark VD2-01 accepted.
+The attached-window regression verifies the production bridge's AppKit surface
+configuration, not visual full-screen rendering. Independent code review, QA
+verification, and the live normal/full-screen visual smoke above are still
+required; this report does not mark VD2-01 accepted.
