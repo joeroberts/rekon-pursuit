@@ -13,7 +13,7 @@ The delivery principle is **vertical slices over isolated screens**: each slice 
 | Release area | Current status |
 | --- | --- |
 | Remediation R1 | **Accepted historical evidence** — the remediation ledger records the accepted R1 sequence and evidence; it is not current implementation work. |
-| Post-MVP refinement | **Active delivery queue** — VD2-01 is ready for its product-owner hands-on verification; UX-D10, UX-D11, UX-D12, DESIGN-V2, and remaining VD2 children remain dependency-ordered Backlog. |
+| Post-MVP refinement | **Active delivery queue** — VD2-01 is ready for a focused product-owner window-chrome smoke after corrective pass `91928a4`; UX-D10, UX-D11, UX-D12, DESIGN-V2, and remaining VD2 children remain dependency-ordered Backlog. |
 | Phase 2a — privacy and AI foundation | **Not started** — follows accepted Post-MVP refinement; local-model runtime, cloud routing/sanitization/consent, populated AI ledger, budgets, and costs remain Backlog. |
 | Phase 2b — Gmail and Google Calendar | **Not started** — follows accepted Phase 2a. |
 | Phase 2c — documents and research | **Not started** — follows accepted Phase 2b. |
@@ -176,7 +176,7 @@ pixel-copy mandate.
 
 | ID | Child card | Dependency / current state |
 | --- | --- | --- |
-| `VD2-01` | Visual foundation and tokens | **Ready for product-owner hands-on verification** — independent code review, QA, architecture, and security/privacy gates passed; it remains In progress until owner acceptance. |
+| `VD2-01` | Visual foundation and tokens | **Ready for focused product-owner visual smoke** — corrective window-canvas pass `91928a4` passed independent code review and QA; it remains In progress until owner acceptance. |
 | `VD2-02` | App shell and navigation | Backlog — requires `VD2-01` accepted. |
 | `VD2-03` | Home redesign | Backlog — requires `VD2-02` accepted. |
 | `VD2-04` | Pipeline table and inspector | Backlog — requires `VD2-02` accepted. |

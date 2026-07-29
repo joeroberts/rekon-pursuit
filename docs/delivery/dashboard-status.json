@@ -429,13 +429,13 @@
       "workType": "Visual foundation",
       "status": "in_progress",
       "releaseCondition": "Requires the independently approved Visual Design v2 plan, independent review, QA, security/privacy, and product-owner acceptance before VD2-02 releases.",
-      "latestTransition": "Independent code review, QA, architecture, and security/privacy gates passed; ready for product-owner hands-on verification.",
+      "latestTransition": "Corrective window-canvas pass in 91928a4 passed independent code review and QA; ready for focused product-owner visual smoke.",
       "evidence": {
         "label": "VD2-01 task brief",
         "href": "../task-briefs/VD2-01-visual-foundation-and-tokens.md"
       },
       "needsUserAction": true,
-      "userActionDetail": "Verify the signed Debug handoff: visit existing destinations, use keyboard focus, enable Reduce Motion, and confirm workspace behavior remains unchanged."
+      "userActionDetail": "Open the normal app at default, 860×600, and wide window sizes; visit Home, Contacts, Activity & AI, Settings, and recovery/onboarding if available; confirm a navy title/canvas with native traffic lights and no gray margins."
     },
     {
       "id": "VD2-02",
