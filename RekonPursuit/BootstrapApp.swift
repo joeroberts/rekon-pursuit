@@ -24,6 +24,6 @@ struct RekonPursuitApp: App {
         }
         .defaultSize(width: 1100, height: 760)
         .windowResizability(.contentMinSize)
-        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unifiedCompact(showsTitle: false))
     }
 }

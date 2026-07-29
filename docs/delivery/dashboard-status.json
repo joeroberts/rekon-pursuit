@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "activePhaseId": "post_mvp_refinement",
-  "activeTaskId": "VD2-01",
-  "nextEligibleTaskId": null,
+  "activeTaskId": null,
+  "nextEligibleTaskId": "VD2-02",
   "phases": [
     {
       "id": "remediation_r1",
@@ -427,24 +427,23 @@
       "phaseId": "post_mvp_refinement",
       "title": "Visual foundation and tokens",
       "workType": "Visual foundation",
-      "status": "in_progress",
-      "releaseCondition": "Requires the independently approved Visual Design v2 plan, independent review, QA, security/privacy, and product-owner acceptance before VD2-02 releases.",
-      "latestTransition": "Supported split-chrome corrective pass in ad312ae passed independent code review and QA; ready for focused product-owner visual smoke.",
+      "status": "accepted",
+      "releaseCondition": "Accepted after the independently approved Visual Design v2 plan, independent review, QA, security/privacy verification, and product-owner acceptance.",
+      "latestTransition": "Accepted after independent code review, focused QA chrome regressions, and product-owner hands-on acceptance of the native-window correction.",
       "evidence": {
         "label": "VD2-01 task brief",
         "href": "../task-briefs/VD2-01-visual-foundation-and-tokens.md"
       },
-      "needsUserAction": true,
-      "userActionDetail": "Open /tmp/rekon-vd2-supported-chrome-qa-1785295233/Build/Products/Debug/RekonPursuit.app at default, 860×600, and wide window sizes; visit Home, Contacts, Activity & AI, Settings, and recovery/onboarding if available; confirm a navy title/canvas with native traffic lights and no gray margins."
+      "needsUserAction": false
     },
     {
       "id": "VD2-02",
       "phaseId": "post_mvp_refinement",
       "title": "App shell and navigation",
       "workType": "App shell",
-      "status": "backlog",
+      "status": "next_up",
       "releaseCondition": "Requires VD2-01 accepted.",
-      "latestTransition": "Dependency-ordered Visual Design v2 work recorded; not released.",
+      "latestTransition": "Released as the next eligible dependency-safe task after VD2-01 acceptance.",
       "evidence": {
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"

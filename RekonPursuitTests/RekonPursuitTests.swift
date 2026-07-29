@@ -24,7 +24,8 @@ final class RekonPursuitTests: XCTestCase {
     func testVisualFoundationUsesAUnifiedNavyWindowCanvasPolicy() {
         let policy = RekonWindowCanvasPolicy.standard
 
-        XCTAssertTrue(policy.hidesSystemTitleBar)
+        XCTAssertTrue(policy.preservesNativeWindowControls)
+        XCTAssertTrue(policy.hidesTitleText)
         XCTAssertTrue(policy.fillsRootCanvas)
         XCTAssertTrue(policy.fillsDetailCanvas)
     }
@@ -33,8 +34,8 @@ final class RekonPursuitTests: XCTestCase {
         let windowPolicy = RekonWindowCanvasPolicy.standard
 
         XCTAssertTrue(windowPolicy.usesNavyWindowContainerBackground)
-        XCTAssertTrue(windowPolicy.hidesWindowToolbarMaterial)
-        XCTAssertTrue(windowPolicy.hidesWindowToolbar)
+        XCTAssertTrue(windowPolicy.usesUnifiedCompactWindowToolbar)
+        XCTAssertTrue(windowPolicy.showsNavyWindowToolbarMaterial)
         XCTAssertTrue(windowPolicy.removesTitlebarSeparator)
         XCTAssertEqual(windowPolicy.splitViewDividerStyle, .thick)
     }
@@ -68,10 +69,57 @@ final class RekonPursuitTests: XCTestCase {
         XCTAssertEqual(window.titleVisibility, .hidden)
         XCTAssertTrue(window.titlebarAppearsTransparent)
         XCTAssertEqual(window.titlebarSeparatorStyle, .none)
+        XCTAssertEqual(window.toolbarStyle, .unifiedCompact)
+        XCTAssertTrue(window.styleMask.contains(.fullSizeContentView))
+        let closeButton = try XCTUnwrap(window.standardWindowButton(.closeButton))
+        let minimizeButton = try XCTUnwrap(window.standardWindowButton(.miniaturizeButton))
+        let zoomButton = try XCTUnwrap(window.standardWindowButton(.zoomButton))
+        [closeButton, minimizeButton, zoomButton].forEach {
+            XCTAssertFalse($0.isHidden)
+            XCTAssertTrue($0.window === window)
+        }
+        window.setFrame(NSRect(x: 0, y: 0, width: 1200, height: 760), display: false)
+        window.layoutIfNeeded()
+        [closeButton, minimizeButton, zoomButton].forEach {
+            XCTAssertFalse($0.isHidden)
+            XCTAssertTrue($0.window === window)
+        }
         XCTAssertEqual(splitView.dividerStyle, .thick)
         XCTAssertEqual(splitView.subviews.count, 2)
         XCTAssertTrue(splitView.subviews.contains(sidebar))
         XCTAssertTrue(splitView.subviews.contains(detail))
+    }
+
+    @MainActor
+    func testWindowChromeConfiguratorReappliesNavyPolicyAfterResizeNotification() throws {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        let contentView = NSView(frame: window.contentView?.bounds ?? .zero)
+        window.contentView = contentView
+
+        let configurationView = RekonWindowChromeConfigurator.WindowConfigurationView(
+            policy: .standard
+        )
+        contentView.addSubview(configurationView)
+        configurationView.apply(policy: .standard)
+
+        window.backgroundColor = .systemRed
+        window.toolbarStyle = .expanded
+        window.titlebarSeparatorStyle = .automatic
+
+        NotificationCenter.default.post(
+            name: NSWindow.didEndLiveResizeNotification,
+            object: window
+        )
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+
+        XCTAssertEqual(window.backgroundColor, NSColor(RekonTheme.background))
+        XCTAssertEqual(window.toolbarStyle, .unifiedCompact)
+        XCTAssertEqual(window.titlebarSeparatorStyle, .none)
     }
 
     func testVisualFixtureLaunchConfigurationIsExplicitAndIsolated() throws {

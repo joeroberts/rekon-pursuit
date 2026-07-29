@@ -39,24 +39,29 @@ nonisolated enum RekonVisualThemeContract {
 /// separate from individual screens prevents an intrinsic-width screen from
 /// revealing the system canvas around the navigation split view.
 nonisolated struct RekonWindowCanvasPolicy: Equatable {
-    let hidesSystemTitleBar: Bool
+    /// Keep AppKit's titled-window host intact so the native close, minimize,
+    /// zoom, resize, and full-screen controls remain owned by the window.
+    let preservesNativeWindowControls: Bool
+    /// Hide the title text while leaving the native titlebar available.
+    let hidesTitleText: Bool
     let fillsRootCanvas: Bool
     let fillsDetailCanvas: Bool
     let usesNavyWindowContainerBackground: Bool
-    let hidesWindowToolbarMaterial: Bool
-    let hidesWindowToolbar: Bool
+    let usesUnifiedCompactWindowToolbar: Bool
+    let showsNavyWindowToolbarMaterial: Bool
     let removesTitlebarSeparator: Bool
     /// `NSSplitViewController` permits its managed split view's divider
     /// properties to be configured, but not its child views to be mutated.
     let splitViewDividerStyle: NSSplitView.DividerStyle
 
     static let standard = Self(
-        hidesSystemTitleBar: true,
+        preservesNativeWindowControls: true,
+        hidesTitleText: true,
         fillsRootCanvas: true,
         fillsDetailCanvas: true,
         usesNavyWindowContainerBackground: true,
-        hidesWindowToolbarMaterial: true,
-        hidesWindowToolbar: true,
+        usesUnifiedCompactWindowToolbar: true,
+        showsNavyWindowToolbarMaterial: true,
         removesTitlebarSeparator: true,
         splitViewDividerStyle: .thick
     )
@@ -79,6 +84,7 @@ struct RekonWindowChromeConfigurator: NSViewRepresentable {
 
     final class WindowConfigurationView: NSView {
         private var policy: RekonWindowCanvasPolicy
+        private weak var observedWindow: NSWindow?
 
         init(policy: RekonWindowCanvasPolicy) {
             self.policy = policy
@@ -91,6 +97,7 @@ struct RekonWindowChromeConfigurator: NSViewRepresentable {
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            observeWindowTransitions()
             apply(policy: policy)
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
@@ -98,11 +105,18 @@ struct RekonWindowChromeConfigurator: NSViewRepresentable {
             }
         }
 
+        deinit {
+            NotificationCenter.default.removeObserver(self)
+        }
+
         func apply(policy: RekonWindowCanvasPolicy) {
             self.policy = policy
             guard let window else { return }
 
-            if policy.hidesSystemTitleBar {
+            if policy.preservesNativeWindowControls {
+                window.styleMask.insert(.fullSizeContentView)
+            }
+            if policy.hidesTitleText {
                 window.titleVisibility = .hidden
                 window.titlebarAppearsTransparent = true
             }
@@ -110,11 +124,42 @@ struct RekonWindowChromeConfigurator: NSViewRepresentable {
                 window.backgroundColor = NSColor(RekonTheme.background)
                 window.isOpaque = true
             }
+            if policy.usesUnifiedCompactWindowToolbar {
+                window.toolbarStyle = .unifiedCompact
+            }
             if policy.removesTitlebarSeparator {
                 window.titlebarSeparatorStyle = .none
                 window.toolbar?.showsBaselineSeparator = false
             }
             configureSplitViewDivider(in: window)
+        }
+
+        private func observeWindowTransitions() {
+            guard let window, observedWindow !== window else { return }
+
+            NotificationCenter.default.removeObserver(self)
+            observedWindow = window
+
+            let center = NotificationCenter.default
+            [
+                NSWindow.didEndLiveResizeNotification,
+                NSWindow.didEnterFullScreenNotification,
+                NSWindow.didExitFullScreenNotification
+            ].forEach { notification in
+                center.addObserver(
+                    self,
+                    selector: #selector(reapplyWindowChrome(_:)),
+                    name: notification,
+                    object: window
+                )
+            }
+        }
+
+        @objc private func reapplyWindowChrome(_ notification: Notification) {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.apply(policy: self.policy)
+            }
         }
 
         private func configureSplitViewDivider(in window: NSWindow) {

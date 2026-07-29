@@ -184,12 +184,9 @@ struct AppShellView<Detail: View>: View {
         )
         .background(RekonTheme.background.ignoresSafeArea())
         .background(RekonWindowChromeConfigurator(policy: windowCanvasPolicy))
+        .toolbarBackground(RekonTheme.background, for: .windowToolbar)
         .toolbarBackground(
-            windowCanvasPolicy.hidesWindowToolbarMaterial ? .hidden : .automatic,
-            for: .windowToolbar
-        )
-        .toolbar(
-            windowCanvasPolicy.hidesWindowToolbar ? .hidden : .automatic,
+            windowCanvasPolicy.showsNavyWindowToolbarMaterial ? .visible : .automatic,
             for: .windowToolbar
         )
         .accessibilityIdentifier(RekonVisualThemeContract.shellAccessibilityIdentifier)
