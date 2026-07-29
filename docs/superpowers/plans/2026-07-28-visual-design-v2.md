@@ -113,6 +113,36 @@ program/card map, gate records, review evidence, risks, and each transition.
 screens and confirm the shared visual foundation, keyboard focus, reduced
 motion, and unchanged workspace behavior.
 
+### VD2-01 corrective amendment — 2026-07-29
+
+Product-owner evidence after acceptance reopens this shared-foundation task.
+The correction must not change workflow, persistence, activity, recovery, or
+security semantics. It must:
+
+1. render the existing Rekon emblem together with a legible Rekon Pursuit
+   lockup at the rail scale established by the approved mockups;
+2. replace OS-dependent foreground use in the shell/rail/collapse control with
+   explicit semantic theme tokens that remain legible in system light and dark
+   appearances;
+3. align rail destination spacing, icon sizing, selected-state treatment, and
+   keyboard-focus treatment with the approved mockups without creating stacked
+   duplicate cyan outlines;
+4. keep native traffic lights visible and eliminate gray toolbar, rail-cap, and
+   rail-border regressions after resize, maximization, full-screen, and exit
+   from full-screen.
+
+**Corrective test-first evidence:** Add focused deterministic unit/UI coverage
+for the lockup accessibility identifier and size contract, semantic foreground
+tokens, selected/focused rail state, and normal/compact/full-screen chrome
+configuration. Manual signed-Debug validation must cover 860×600, default,
+wide, maximized, and full-screen/exit-full-screen in both system appearances.
+Keyboard traversal and VoiceOver must expose every rail destination and the
+collapse control with visible focus and readable labels.
+
+**Corrective acceptance:** Fresh independent code review, QA, architecture,
+and proportional security/privacy verification are required before a new
+product-owner visual smoke. `VD2-02` cannot release until that acceptance.
+
 ## Task 2 — VD2-02: App shell and navigation
 
 **Files:**

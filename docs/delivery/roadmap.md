@@ -13,7 +13,7 @@ The delivery principle is **vertical slices over isolated screens**: each slice 
 | Release area | Current status |
 | --- | --- |
 | Remediation R1 | **Accepted historical evidence** — the remediation ledger records the accepted R1 sequence and evidence; it is not current implementation work. |
-| Post-MVP refinement | **Active delivery queue** — VD2-01 is Accepted after independent review/QA and product-owner native-window verification; VD2-02 is Next up. UX-D10, UX-D11, UX-D12, DESIGN-V2, and remaining VD2 children remain dependency-ordered Backlog. |
+| Post-MVP refinement | **Active delivery queue** — VD2-01 is In progress for a corrective visual-foundation pass after product-owner evidence found logo legibility, appearance-stable foreground, sidebar-treatment, and resize/full-screen chrome defects. VD2-02 and later children remain dependency-ordered Backlog. |
 | Phase 2a — privacy and AI foundation | **Not started** — follows accepted Post-MVP refinement; local-model runtime, cloud routing/sanitization/consent, populated AI ledger, budgets, and costs remain Backlog. |
 | Phase 2b — Gmail and Google Calendar | **Not started** — follows accepted Phase 2a. |
 | Phase 2c — documents and research | **Not started** — follows accepted Phase 2b. |
@@ -176,8 +176,8 @@ pixel-copy mandate.
 
 | ID | Child card | Dependency / current state |
 | --- | --- | --- |
-| `VD2-01` | Visual foundation and tokens | **Accepted** — independent review, focused QA, security/privacy verification, and product-owner native-window acceptance complete. |
-| `VD2-02` | App shell and navigation | **Next up** — released after `VD2-01` acceptance. |
+| `VD2-01` | Visual foundation and tokens | **In progress** — corrective pass restores the real logo/lockup at a legible scale, explicit appearance-stable semantic foregrounds, mockup-aligned sidebar treatment, and native resize/full-screen chrome before fresh independent verification and product-owner acceptance. |
+| `VD2-02` | App shell and navigation | Backlog — requires corrective `VD2-01` acceptance. |
 | `VD2-03` | Home redesign | Backlog — requires `VD2-02` accepted. |
 | `VD2-04` | Pipeline table and inspector | Backlog — requires `VD2-02` accepted. |
 | `VD2-05` | Pipeline board and persisted stage movement | Backlog — requires `VD2-04` accepted. |

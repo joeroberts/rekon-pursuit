@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "activePhaseId": "post_mvp_refinement",
-  "activeTaskId": null,
-  "nextEligibleTaskId": "VD2-02",
+  "activeTaskId": "VD2-01",
+  "nextEligibleTaskId": null,
   "phases": [
     {
       "id": "remediation_r1",
@@ -427,9 +427,9 @@
       "phaseId": "post_mvp_refinement",
       "title": "Visual foundation and tokens",
       "workType": "Visual foundation",
-      "status": "accepted",
-      "releaseCondition": "Accepted after the independently approved Visual Design v2 plan, independent review, QA, security/privacy verification, and product-owner acceptance.",
-      "latestTransition": "Accepted after independent code review, focused QA chrome regressions, and product-owner hands-on acceptance of the native-window correction.",
+      "status": "in_progress",
+      "releaseCondition": "Corrective pass must restore a legible existing Rekon logo/lockup, appearance-stable semantic foreground colors, and native chrome without gray resize/full-screen regressions; then require fresh independent review, QA, security/privacy verification, and product-owner acceptance.",
+      "latestTransition": "Reopened for corrective visual verification after product-owner evidence showed an imperceptibly small logo, OS-dependent foreground colors, mockup-misaligned sidebar spacing/icon treatment, and gray chrome regressions on resize/full-screen.",
       "evidence": {
         "label": "VD2-01 task brief",
         "href": "../task-briefs/VD2-01-visual-foundation-and-tokens.md"
@@ -441,9 +441,9 @@
       "phaseId": "post_mvp_refinement",
       "title": "App shell and navigation",
       "workType": "App shell",
-      "status": "next_up",
-      "releaseCondition": "Requires VD2-01 accepted.",
-      "latestTransition": "Released as the next eligible dependency-safe task after VD2-01 acceptance.",
+      "status": "backlog",
+      "releaseCondition": "Requires corrective VD2-01 acceptance.",
+      "latestTransition": "Returned to Backlog while the shared VD2-01 visual foundation is corrected and reverified.",
       "evidence": {
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
