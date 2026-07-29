@@ -20,6 +20,14 @@ final class RekonPursuitTests: XCTestCase {
         XCTAssertGreaterThan(RekonVisualThemeContract.buttonFocusGlowOpacity(isFocused: true), 0)
     }
 
+    func testVisualFoundationUsesAUnifiedNavyWindowCanvasPolicy() {
+        let policy = RekonWindowCanvasPolicy.standard
+
+        XCTAssertTrue(policy.hidesSystemTitleBar)
+        XCTAssertTrue(policy.fillsRootCanvas)
+        XCTAssertTrue(policy.fillsDetailCanvas)
+    }
+
     func testVisualFixtureLaunchConfigurationIsExplicitAndIsolated() throws {
         let configuration = try XCTUnwrap(
             VisualFixtureLaunchConfiguration(

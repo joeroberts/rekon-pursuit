@@ -34,6 +34,21 @@ nonisolated enum RekonVisualThemeContract {
     }
 }
 
+/// The window-level contract for the Visual Design v2 shell.  Keeping this
+/// separate from individual screens prevents an intrinsic-width screen from
+/// revealing the system canvas around the navigation split view.
+nonisolated struct RekonWindowCanvasPolicy: Equatable {
+    let hidesSystemTitleBar: Bool
+    let fillsRootCanvas: Bool
+    let fillsDetailCanvas: Bool
+
+    static let standard = Self(
+        hidesSystemTitleBar: true,
+        fillsRootCanvas: true,
+        fillsDetailCanvas: true
+    )
+}
+
 enum RekonTheme {
     // Background and surface hierarchy
     static let background = Color(red: 0.012, green: 0.024, blue: 0.063)

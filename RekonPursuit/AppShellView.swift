@@ -111,6 +111,7 @@ nonisolated enum OpportunityRoute: Equatable {
 
 struct AppShellView<Detail: View>: View {
     @Binding private var selection: DailyRoute
+    private let windowCanvasPolicy = RekonWindowCanvasPolicy.standard
     private let detailTitle: String
     private let selectDestination: (DailyRoute) -> Void
     private let detail: Detail
@@ -162,6 +163,11 @@ struct AppShellView<Detail: View>: View {
             }
         } detail: {
             detail
+                .frame(
+                    maxWidth: windowCanvasPolicy.fillsDetailCanvas ? .infinity : nil,
+                    maxHeight: windowCanvasPolicy.fillsDetailCanvas ? .infinity : nil,
+                    alignment: .topLeading
+                )
                 .background(RekonTheme.background)
                 .navigationTitle(detailTitle)
         }
@@ -172,6 +178,11 @@ struct AppShellView<Detail: View>: View {
             minWidth: RekonVisualThemeContract.minimumWindowWidth,
             minHeight: RekonVisualThemeContract.minimumWindowHeight
         )
+        .frame(
+            maxWidth: windowCanvasPolicy.fillsRootCanvas ? .infinity : nil,
+            maxHeight: windowCanvasPolicy.fillsRootCanvas ? .infinity : nil
+        )
+        .background(RekonTheme.background.ignoresSafeArea())
         .accessibilityIdentifier(RekonVisualThemeContract.shellAccessibilityIdentifier)
     }
 }
