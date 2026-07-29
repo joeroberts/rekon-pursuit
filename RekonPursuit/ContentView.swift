@@ -118,15 +118,18 @@ struct ContentView: View {
     }
 
     @ViewBuilder private var dailyDestination: some View {
-        switch navigation.route {
-        case .home: HomeView(model: model, open: openAttentionTask, addOpportunity: { navigation.handle(.homeEmptyStateAdd) }, reschedule: { task in taskToReschedule = task; rescheduledDueAt = task.dueAt ?? .now })
-        case .pipeline: PipelineView(model: model, showsBoard: $showsPipelineBoard, anchorID: $pipelineAnchorID, open: openOpportunity, delete: { pendingDeletion = $0 }, addOpportunity: { navigation.handle(.pipelineAdd) }, importCSV: { navigation.handle(.pipelineImport) })
-        case .addOpportunity: AddOpportunityView(model: model)
-        case .importCSV: CSVImportView(model: model, chooseFile: chooseCSVFile, open: openOpportunity, finish: { navigation.select(.pipeline) })
-        case .contacts: ContactsView(model: model, open: openOpportunity, delete: { pendingContactDeletion = $0 })
-        case .activityAI: GlobalActivityView(model: model)
-        case .settings: SettingsView(model: model)
+        Group {
+            switch navigation.route {
+            case .home: HomeView(model: model, open: openAttentionTask, addOpportunity: { navigation.handle(.homeEmptyStateAdd) }, reschedule: { task in taskToReschedule = task; rescheduledDueAt = task.dueAt ?? .now })
+            case .pipeline: PipelineView(model: model, showsBoard: $showsPipelineBoard, anchorID: $pipelineAnchorID, open: openOpportunity, delete: { pendingDeletion = $0 }, addOpportunity: { navigation.handle(.pipelineAdd) }, importCSV: { navigation.handle(.pipelineImport) })
+            case .addOpportunity: AddOpportunityView(model: model)
+            case .importCSV: CSVImportView(model: model, chooseFile: chooseCSVFile, open: openOpportunity, finish: { navigation.select(.pipeline) })
+            case .contacts: ContactsView(model: model, open: openOpportunity, delete: { pendingContactDeletion = $0 })
+            case .activityAI: GlobalActivityView(model: model)
+            case .settings: SettingsView(model: model)
+            }
         }
+        .accessibilityIdentifier(navigation.route.accessibilityIdentifier)
     }
 
     @ViewBuilder private func routedOpportunityView(_ route: OpportunityRoute) -> some View {

@@ -59,4 +59,34 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertFalse(app.buttons["sidebar-add-opportunity"].exists)
         XCTAssertFalse(app.buttons["sidebar-import-csv"].exists)
     }
+
+    @MainActor
+    func testSidebarDestinationsExposeTheActiveDailyRoute() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ApplePersistenceIgnoreState", "YES",
+            "-rekon-visual-fixture", "empty"
+        ]
+        app.launchEnvironment["REKON_VISUAL_FIXTURE_SESSION"] = fixtureSession
+        app.launch()
+        app.activate()
+
+        let destinations: [(sidebarID: String, routeID: String)] = [
+            ("sidebar-home", "daily-route-home"),
+            ("sidebar-pipeline", "daily-route-pipeline"),
+            ("sidebar-contacts", "daily-route-contacts"),
+            ("sidebar-activity-and-ai", "daily-route-activity-ai"),
+            ("sidebar-settings", "daily-route-settings")
+        ]
+
+        for destination in destinations {
+            let sidebarItem = app.descendants(matching: .any)[destination.sidebarID]
+            XCTAssertTrue(sidebarItem.waitForExistence(timeout: 5))
+            sidebarItem.tap()
+            XCTAssertTrue(
+                app.descendants(matching: .any)[destination.routeID].waitForExistence(timeout: 5),
+                "Expected \(destination.sidebarID) to make \(destination.routeID) active"
+            )
+        }
+    }
 }

@@ -51,6 +51,18 @@ nonisolated enum DailyRoute: Equatable {
     case activityAI
     case settings
 
+    var accessibilityIdentifier: String {
+        switch self {
+        case .home: "daily-route-home"
+        case .pipeline: "daily-route-pipeline"
+        case .addOpportunity: "daily-route-add-opportunity"
+        case .importCSV: "daily-route-import-csv"
+        case .contacts: "daily-route-contacts"
+        case .activityAI: "daily-route-activity-ai"
+        case .settings: "daily-route-settings"
+        }
+    }
+
     init(_ destination: AppDestination) {
         switch destination {
         case .home: self = .home
