@@ -191,6 +191,7 @@ Re-run Step 2 with `green-unit` paths and all three selectors. Require three pas
 **Files:**
 - Modify: `RekonPursuit/PipelineBoardView.swift`
 - Modify: `RekonPursuit/PipelineView.swift`
+- Modify: `RekonPursuit/ContentView.swift` solely to add the existing derived URL warning's `add-opportunity-url-warning` accessibility identifier; no other ContentView layout, state, or behavior change
 - Test: `RekonPursuitTests/RekonPursuitTests.swift`
 
 **Consumes:** Task 2 bindings and exact lanes, including the single internal `PipelineBoardLane.dropTarget == stage`, no private duplicate, and the live Screening title `"Screening"`, symbol `"checklist"`, and `RekonTheme.accent` arm.
@@ -229,7 +230,7 @@ Use fixed readable lane widths in horizontal scrolling. Retain Task 2's basic Sc
 
 Build the compact top-right `pipeline-card-actions-<id>` from `PipelineCardActionsConfiguration.canonical`: ellipsis image; label, tooltip, and AX help `Actions for <title>`; focus ring and sufficient hit target. Outer menu is exactly Edit and Move; Move owns the six targets/current state. Edit/card body call existing `open`; Move creates the unchanged typed request. Remove stage pill and full-width control. Shift-Command-M and post-move focus target actions.
 
-Add identifier `add-opportunity-url-warning` to the existing derived warning. Do not create a failure fixture.
+Add identifier `add-opportunity-url-warning` to the existing derived warning in `ContentView.swift`. This is the sole Task 3 authority for that file: do not create a failure fixture or make any other ContentView layout, state, or behavior change.
 
 - [ ] **Step 4: Run GREEN**
 
