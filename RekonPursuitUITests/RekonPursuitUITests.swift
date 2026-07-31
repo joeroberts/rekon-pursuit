@@ -117,7 +117,9 @@ final class RekonPursuitUITests: XCTestCase {
         let search = app.textFields["opportunity-search"]
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.click()
+        search.typeKey("a", modifierFlags: [.command])
         search.typeText("Product")
+        XCTAssertEqual(search.value as? String, "Product")
         selectStageFilter("Screening", in: app)
         let includeClosed = app.checkBoxes["pipeline-include-closed"]
         XCTAssertTrue(includeClosed.waitForExistence(timeout: 5))
