@@ -62,6 +62,14 @@ nonisolated enum PortableArchiveRestoreFailure: Equatable {
     }
 }
 
+nonisolated enum StageMoveResult: Equatable {
+    case persisted(opportunityID: String, from: PipelineStage, to: PipelineStage)
+    case noOp(opportunityID: String, stage: PipelineStage)
+    case reconciliationBlocked(opportunityID: String, target: PipelineStage)
+    case unavailable(opportunityID: String)
+    case failed(opportunityID: String)
+}
+
 /// The only UI-facing boundary for a portable archive. The selected URL stays
 /// in memory for one restore attempt and is passed directly to the restore
 /// worker; it is never staged, bookmarked, or persisted.
@@ -162,9 +170,6 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var opportunities: [Opportunity] = []
     @Published private(set) var activityEvents: [ActivityEvent] = []
     @Published var activitySearch = ""
-    @Published var showClosedOpportunities = UserDefaults.standard.object(forKey: "showClosedOpportunities") as? Bool ?? true {
-        didSet { UserDefaults.standard.set(showClosedOpportunities, forKey: "showClosedOpportunities") }
-    }
     @Published private(set) var selectedStageHistory: [StageHistoryEntry] = []
     @Published private(set) var selectedResponseHistory: [ResponseHistoryEntry] = []
     @Published private(set) var selectedTask: TaskReminder?
@@ -571,6 +576,33 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
+    func discardNewOpportunityDraft() {
+        let now = Date.now
+        title = ""
+        company = ""
+        stage = .saved
+        nextAction = ""
+        dueAt = now
+        hasDueDate = false
+        jobURL = ""
+        jobDescription = ""
+        notes = ""
+        compensation = ""
+        compensationMinimum = ""
+        compensationMaximum = ""
+        compensationPayPeriod = .year
+        location = ""
+        workArrangement = .notSpecified
+        applicationDate = now
+        hasApplicationDate = false
+        responseState = .noResponseRecorded
+        responseEffectiveDate = now
+        stageChangedAt = now
+        actionType = .noAction
+        actionCustomText = ""
+        addOpportunitySaveError = nil
+    }
+
     func deleteOpportunity(_ opportunity: Opportunity) {
         guard let store = readyStore() else { return }
         do {
@@ -618,24 +650,62 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
-    func changeStage(_ opportunity: Opportunity, to stage: PipelineStage) {
-        guard let store = readyStore() else { return }
+    @discardableResult
+    func changeStage(_ opportunity: Opportunity, to stage: PipelineStage) -> StageMoveResult {
+        guard let store = readyStore() else {
+            statusMessage = "That opportunity is no longer available locally."
+            return .unavailable(opportunityID: opportunity.id)
+        }
         do {
-            try store.changeStage(opportunityID: opportunity.id, to: stage)
-            refreshCounts()
-            statusMessage = "Stage updated locally."
+            switch try store.moveStage(opportunityID: opportunity.id, to: stage) {
+            case let .persisted(commit):
+                opportunities = commit.projection.opportunities
+                opportunityCount = opportunities.count
+                activityEvents = commit.projection.activityEvents
+                activityCount = activityEvents.count
+                needsAttention = commit.projection.needsAttention
+                needsAttentionCount = needsAttention.count
+                if selectedOpportunityID == commit.opportunityID {
+                    selectedStageHistory = commit.projection.stageHistoryForTransition
+                    if let selected = opportunities.first(where: { $0.id == commit.opportunityID }) {
+                        selectedStage = selected.stage
+                    }
+                }
+                statusMessage = "Stage updated locally."
+                return .persisted(opportunityID: commit.opportunityID, from: commit.from, to: commit.to)
+            case let .noOp(opportunityID, stage):
+                statusMessage = "This opportunity is already in that stage."
+                return .noOp(opportunityID: opportunityID, stage: stage)
+            case let .reconciliationBlocked(opportunityID, target):
+                statusMessage = "Confirm reconciliation before closing this opportunity."
+                return .reconciliationBlocked(opportunityID: opportunityID, target: target)
+            case let .unavailable(opportunityID):
+                statusMessage = "That opportunity is no longer available locally."
+                return .unavailable(opportunityID: opportunityID)
+            }
         } catch {
-            statusMessage = "The stage could not be updated."
+            statusMessage = "The local stage was not changed."
+            return .failed(opportunityID: opportunity.id)
+        }
+    }
+
+    /// A read-only Pipeline projection. Its inputs belong to the Pipeline
+    /// presentation session rather than workspace preferences or persistence.
+    func filteredOpportunities(query: String, stage: String, includesClosed: Bool) -> [Opportunity] {
+        let tokens = query
+            .split(whereSeparator: { $0.isWhitespace })
+            .map { $0.lowercased() }
+
+        return opportunities.filter { opportunity in
+            let matchesStage = stage == "All stages" || opportunity.stage.rawValue == stage
+            let searchSurface = "\(opportunity.title) \(opportunity.company)".lowercased()
+            let matchesSearch = tokens.allSatisfy { searchSurface.contains($0) }
+            return matchesStage && matchesSearch && (includesClosed || opportunity.stage != .closed)
         }
     }
 
     var filteredOpportunities: [Opportunity] {
-        opportunities.filter { opportunity in
-            let matchesStage = stageFilter == "All stages" || opportunity.stage.rawValue == stageFilter
-            let query = opportunitySearch.trimmingCharacters(in: .whitespacesAndNewlines)
-            let matchesSearch = query.isEmpty || opportunity.title.localizedCaseInsensitiveContains(query) || opportunity.company.localizedCaseInsensitiveContains(query)
-            return matchesStage && matchesSearch && (showClosedOpportunities || opportunity.stage != .closed)
-        }
+        filteredOpportunities(query: opportunitySearch, stage: stageFilter, includesClosed: true)
     }
 
     var selectedOpportunity: Opportunity? {

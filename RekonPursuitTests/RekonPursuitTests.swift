@@ -1,8 +1,327 @@
 import AppKit
 import XCTest
+
 @testable import RekonPursuit
 
 final class RekonPursuitTests: XCTestCase {
+
+    func testStageMovePayloadContainsOnlyOpportunityID() throws {
+        let opportunityID = "00000000-0000-4000-8000-000000000205"
+
+        let data = try XCTUnwrap(PipelineStageMovePayload.data(forOpportunityID: opportunityID))
+
+        XCTAssertEqual(String(data: data, encoding: .utf8), opportunityID)
+        XCTAssertEqual(data.count, opportunityID.utf8.count)
+        XCTAssertFalse(data.contains(UInt8(ascii: "{")))
+        XCTAssertFalse(data.contains(UInt8(ascii: ":")))
+    }
+
+    func testEmptyOversizedMalformedAndUnknownPayloadNeverInvokesCommand() {
+        let knownID = "00000000-0000-4000-8000-000000000205"
+        let inputs: [Data?] = [
+            Data(),
+            Data(repeating: UInt8(ascii: "a"), count: PipelineStageMovePayload.maximumByteCount + 1),
+            Data([0xFF, 0xFE]),
+            Data("malformed\nidentifier".utf8),
+            Data("00000000-0000-4000-8000-000000000999".utf8)
+        ]
+
+        for input in inputs {
+            XCTAssertNil(
+                PipelineStageMovePayload.request(
+                    from: input,
+                    target: .screening,
+                    knownOpportunityIDs: [knownID],
+                    isCancelled: false,
+                    isInsideTarget: true
+                )
+            )
+        }
+    }
+
+    func testCancelledAndOutsideDropNeverInvokesCommand() {
+        let opportunityID = "00000000-0000-4000-8000-000000000205"
+        let data = Data(opportunityID.utf8)
+
+        XCTAssertNil(
+            PipelineStageMovePayload.request(
+                from: data,
+                target: .screening,
+                knownOpportunityIDs: [opportunityID],
+                isCancelled: true,
+                isInsideTarget: true
+            )
+        )
+        XCTAssertNil(
+            PipelineStageMovePayload.request(
+                from: data,
+                target: .screening,
+                knownOpportunityIDs: [opportunityID],
+                isCancelled: false,
+                isInsideTarget: false
+            )
+        )
+        XCTAssertNil(
+            PipelineStageMovePayload.request(
+                from: data,
+                target: nil,
+                knownOpportunityIDs: [opportunityID],
+                isCancelled: false,
+                isInsideTarget: true
+            )
+        )
+    }
+
+    func testNonPersistedResultsKeepSourceLane() {
+        let opportunityID = "00000000-0000-4000-8000-000000000205"
+        let results: [StageMoveResult] = [
+            .noOp(opportunityID: opportunityID, stage: .saved),
+            .reconciliationBlocked(opportunityID: opportunityID, target: .closed),
+            .unavailable(opportunityID: opportunityID),
+            .failed(opportunityID: opportunityID)
+        ]
+        let presentations = results.map {
+            PipelineStageMovePresentation.make(for: $0, sourceStage: .saved)
+        }
+
+        XCTAssertTrue(presentations.allSatisfy { !$0.relocatesCard })
+        XCTAssertTrue(presentations.allSatisfy { $0.presentedStage == .saved })
+        XCTAssertTrue(presentations.allSatisfy { $0.boardLane == .saved })
+        XCTAssertEqual(Set(presentations.map(\.outcomeText)).count, results.count)
+    }
+
+    @MainActor
+    func testPersistedResultUsesExactStageChipAndBoardLane() {
+        let deliveryGate = PipelineStageMoveDeliveryGate()
+        let nativeProvider = NSItemProvider()
+        let distinctProvider = NSItemProvider()
+
+        XCTAssertTrue(deliveryGate.accept(provider: nativeProvider, target: .screening))
+        XCTAssertFalse(deliveryGate.accept(provider: nativeProvider, target: .screening))
+        XCTAssertTrue(deliveryGate.accept(provider: distinctProvider, target: .screening))
+
+        let presentation = PipelineStageMovePresentation.make(
+            for: .persisted(
+                opportunityID: "00000000-0000-4000-8000-000000000205",
+                from: .saved,
+                to: .screening
+            ),
+            sourceStage: .saved
+        )
+
+        XCTAssertTrue(presentation.relocatesCard)
+        XCTAssertEqual(presentation.presentedStage, .screening)
+        XCTAssertEqual(presentation.boardLane, .applied)
+        XCTAssertEqual(presentation.outcomeText, "Moved to Screening.")
+        XCTAssertTrue(presentation.isLiveOutcome)
+
+        let independentNoOp = PipelineStageMovePresentation.make(
+            for: .noOp(
+                opportunityID: "00000000-0000-4000-8000-000000000205",
+                stage: .screening
+            ),
+            sourceStage: .screening
+        )
+        XCTAssertEqual(independentNoOp.outcomeText, "Already in Screening.")
+        XCTAssertFalse(independentNoOp.relocatesCard)
+    }
+
+    func testReduceMotionDisablesSpatialMoveAnimationButKeepsFeedback() {
+        let standard = PipelineStageMoveMotionPolicy.make(reduceMotion: false)
+        let reduced = PipelineStageMoveMotionPolicy.make(reduceMotion: true)
+
+        XCTAssertTrue(standard.allowsSpatialAnimation)
+        XCTAssertFalse(reduced.allowsSpatialAnimation)
+        XCTAssertTrue(reduced.keepsFocusVisible)
+        XCTAssertTrue(reduced.keepsTextFeedback)
+    }
+
+    func testVD204PipelineBoardLaneMappingRetainsPreciseStages() {
+        XCTAssertTrue(PipelineBoardLane.saved.includes(.saved))
+        XCTAssertFalse(PipelineBoardLane.saved.includes(.applied))
+        XCTAssertTrue(PipelineBoardLane.applied.includes(.applied))
+        XCTAssertFalse(PipelineBoardLane.applied.includes(.screening))
+        XCTAssertTrue(PipelineBoardLane.screening.includes(.screening))
+        XCTAssertFalse(PipelineBoardLane.applied.includes(.interviewing))
+        XCTAssertTrue(PipelineBoardLane.interviewing.includes(.interviewing))
+        XCTAssertTrue(PipelineBoardLane.offer.includes(.offer))
+        XCTAssertTrue(PipelineBoardLane.closed.includes(.closed))
+        XCTAssertFalse(PipelineBoardLane.closed.includes(.offer))
+        XCTAssertEqual(
+            PipelineBoardLane.displayedLanes(includesClosed: false),
+            [.saved, .applied, .screening, .interviewing, .offer]
+        )
+        XCTAssertEqual(
+            PipelineBoardLane.displayedLanes(includesClosed: true),
+            [.saved, .applied, .screening, .interviewing, .offer, .closed]
+        )
+    }
+
+    func testVD205PipelineBoardLaneStageAndDropTargetsAreOneToOneAndCanonical() {
+        XCTAssertEqual(PipelineBoardLane.allCases.map(\.stage), PipelineStage.allCases)
+        XCTAssertEqual(PipelineBoardLane.displayedLanes(includesClosed: false).count, 5)
+        XCTAssertEqual(PipelineBoardLane.displayedLanes(includesClosed: true).count, 6)
+        XCTAssertEqual(PipelineBoardLane.displayedLanes(includesClosed: false), [.saved, .applied, .screening, .interviewing, .offer])
+        XCTAssertEqual(PipelineBoardLane.displayedLanes(includesClosed: true), [.saved, .applied, .screening, .interviewing, .offer, .closed])
+
+        for lane in PipelineBoardLane.allCases {
+            XCTAssertEqual(lane.dropTarget, lane.stage)
+            for stage in PipelineStage.allCases {
+                XCTAssertEqual(lane.includes(stage), lane.stage == stage, "\(lane) must own only \(lane.stage).")
+            }
+        }
+    }
+
+    func testVD205AddOpportunityOriginResolvesHomeTableAndExactBoardContext() {
+        let boardContext = PipelineBoardReturnContext(
+            query: "Product",
+            stageFilter: "Screening",
+            includesClosed: true,
+            selectedOrAnchoredOpportunityID: "fixture-screening-id",
+            horizontalScrollLane: .offer
+        )
+
+        XCTAssertEqual(
+            boardContext,
+            PipelineBoardReturnContext(
+                query: "Product",
+                stageFilter: "Screening",
+                includesClosed: true,
+                selectedOrAnchoredOpportunityID: "fixture-screening-id",
+                horizontalScrollLane: .offer
+            )
+        )
+        XCTAssertEqual(
+            AddOpportunityOrigin.home.cancelDestination,
+            AddOpportunityCancelDestination(route: .home, showsBoard: false, boardContext: nil)
+        )
+        XCTAssertEqual(
+            AddOpportunityOrigin.pipelineTable.cancelDestination,
+            AddOpportunityCancelDestination(route: .pipeline, showsBoard: false, boardContext: nil)
+        )
+        XCTAssertEqual(
+            AddOpportunityOrigin.pipelineBoard(boardContext).cancelDestination,
+            AddOpportunityCancelDestination(route: .pipeline, showsBoard: true, boardContext: boardContext)
+        )
+
+        var origin: AddOpportunityOrigin? = .home
+        origin = AddOpportunityOrigin.replacing(origin, with: .pipelineTable)
+        XCTAssertEqual(origin, .pipelineTable)
+        origin = AddOpportunityOrigin.replacing(origin, with: .pipelineBoard(boardContext))
+        XCTAssertEqual(origin, .pipelineBoard(boardContext))
+    }
+
+    @MainActor
+    func testVD205DiscardNewOpportunityDraftIsExhaustivePureAndWriteFree() throws {
+        let store = try makeVD205Store()
+        let subject = try store.create(CreateOpportunity(
+            title: "Persisted subject",
+            company: "Rekon Labs",
+            stage: .screening,
+            nextAction: "Follow up",
+            dueAt: Date(timeIntervalSince1970: 1_746_576_000)
+        ))
+        let model = WorkspaceViewModel(
+            openWorkspace: { .ready(store) },
+            createWorkspace: { store },
+            separateLocalWorkspace: SeparateLocalWorkspaceDependencies(
+                selectedIdentity: { nil },
+                allocateAndPersistIdentity: { throw WorkspaceStoreError.injectedFailure },
+                open: { _ in .unavailable },
+                create: { _ in throw WorkspaceStoreError.injectedFailure },
+                clearSelection: {}
+            )
+        )
+        defer { model.teardown() }
+        model.start()
+        model.select(subject)
+
+        let storeOpportunities = try store.opportunities()
+        let storeActivityEvents = try store.activityEvents()
+        let storeStageHistory = try store.stageHistory(forOpportunityID: subject.id)
+        let storeNeedsAttention = try store.needsAttention()
+        let publishedProjection = VD205PublishedProjectionSnapshot(model: model)
+        let workspaceReady = model.workspaceReady
+        let canCreateWorkspace = model.canCreateWorkspace
+        let workspaceRequiresRecovery = model.workspaceRequiresRecovery
+
+        model.title = "Draft title"
+        model.company = "Draft company"
+        model.jobURL = "jobs.example.com/malformed"
+        model.jobDescription = "Draft description"
+        model.notes = "Draft notes"
+        model.compensation = "$210,000"
+        model.compensationMinimum = "200000"
+        model.compensationMaximum = "250000"
+        model.compensationPayPeriod = .month
+        model.location = "New York"
+        model.workArrangement = .hybrid
+        model.stage = .offer
+        model.nextAction = "Prepare offer review"
+        model.dueAt = Date(timeIntervalSince1970: 1_751_846_400)
+        model.hasDueDate = true
+        model.applicationDate = Date(timeIntervalSince1970: 1_704_067_200)
+        model.hasApplicationDate = true
+        model.responseEffectiveDate = Date(timeIntervalSince1970: 1_721_174_400)
+        model.stageChangedAt = Date(timeIntervalSince1970: 1_735_776_000)
+        model.responseState = .awaitingResponse
+        model.actionType = .other
+        model.actionCustomText = "Custom draft action"
+        model.createOpportunity()
+
+        XCTAssertEqual(model.addOpportunitySaveError, "Enter an absolute http or https job URL with a host.")
+        XCTAssertEqual(try store.opportunities(), storeOpportunities)
+        XCTAssertEqual(try store.activityEvents(), storeActivityEvents)
+        XCTAssertEqual(try store.stageHistory(forOpportunityID: subject.id), storeStageHistory)
+        XCTAssertEqual(try store.needsAttention(), storeNeedsAttention)
+        assertVD205PublishedProjection(VD205PublishedProjectionSnapshot(model: model), equals: publishedProjection)
+        XCTAssertEqual(model.workspaceReady, workspaceReady)
+        XCTAssertEqual(model.canCreateWorkspace, canCreateWorkspace)
+        XCTAssertEqual(model.workspaceRequiresRecovery, workspaceRequiresRecovery)
+
+        let validationStatusMessage = model.statusMessage
+        let beforeDiscard = Date.now
+        model.discardNewOpportunityDraft()
+        let afterDiscard = Date.now
+
+        XCTAssertEqual(model.title, "")
+        XCTAssertEqual(model.company, "")
+        XCTAssertEqual(model.jobURL, "")
+        XCTAssertEqual(model.jobDescription, "")
+        XCTAssertEqual(model.notes, "")
+        XCTAssertEqual(model.compensation, "")
+        XCTAssertEqual(model.compensationMinimum, "")
+        XCTAssertEqual(model.compensationMaximum, "")
+        XCTAssertEqual(model.location, "")
+        XCTAssertEqual(model.nextAction, "")
+        XCTAssertEqual(model.actionCustomText, "")
+        XCTAssertEqual(model.stage, .saved)
+        XCTAssertEqual(model.compensationPayPeriod, .year)
+        XCTAssertEqual(model.workArrangement, .notSpecified)
+        XCTAssertEqual(model.responseState, .noResponseRecorded)
+        XCTAssertEqual(model.actionType, .noAction)
+        XCTAssertFalse(model.hasApplicationDate)
+        XCTAssertFalse(model.hasDueDate)
+        XCTAssertNil(model.addOpportunitySaveError)
+        XCTAssertGreaterThanOrEqual(model.applicationDate, beforeDiscard)
+        XCTAssertLessThanOrEqual(model.applicationDate, afterDiscard)
+        XCTAssertGreaterThanOrEqual(model.responseEffectiveDate, beforeDiscard)
+        XCTAssertLessThanOrEqual(model.responseEffectiveDate, afterDiscard)
+        XCTAssertGreaterThanOrEqual(model.stageChangedAt, beforeDiscard)
+        XCTAssertLessThanOrEqual(model.stageChangedAt, afterDiscard)
+        XCTAssertGreaterThanOrEqual(model.dueAt, beforeDiscard)
+        XCTAssertLessThanOrEqual(model.dueAt, afterDiscard)
+
+        XCTAssertEqual(try store.opportunities(), storeOpportunities)
+        XCTAssertEqual(try store.activityEvents(), storeActivityEvents)
+        XCTAssertEqual(try store.stageHistory(forOpportunityID: subject.id), storeStageHistory)
+        XCTAssertEqual(try store.needsAttention(), storeNeedsAttention)
+        assertVD205PublishedProjection(VD205PublishedProjectionSnapshot(model: model), equals: publishedProjection)
+        XCTAssertEqual(model.workspaceReady, workspaceReady)
+        XCTAssertEqual(model.canCreateWorkspace, canCreateWorkspace)
+        XCTAssertEqual(model.workspaceRequiresRecovery, workspaceRequiresRecovery)
+        XCTAssertEqual(model.statusMessage, validationStatusMessage)
+    }
 
     @MainActor
     func testVisualFoundationUsesSemanticTokensAndTheExistingRekonEmblem() {
@@ -35,23 +354,122 @@ final class RekonPursuitTests: XCTestCase {
         XCTAssertGreaterThan(RekonVisualThemeContract.buttonFocusGlowOpacity(isFocused: true), 0)
     }
 
-    func testSelectedRailDestinationUsesOneLeadingAccentAndDoesNotDuplicateFocus() {
+    func testRailDestinationKeepsSelectionDistinctFromPointerAndKeyboardFocus() {
+        XCTAssertEqual(
+            RekonRailDestinationPresentation.interactionRegion,
+            .fullRoundedRow,
+            "Hover and activation must share the whole rounded navigation row, not only the icon and label."
+        )
         XCTAssertEqual(
             RekonRailDestinationPresentation.selectedIndicatorWidth(isSelected: true),
             RekonVisualThemeContract.railSelectedIndicatorWidth
         )
         XCTAssertEqual(
-            RekonRailDestinationPresentation.focusRingLineWidth(isSelected: true, isFocused: true),
-            2
+            RekonRailDestinationPresentation.outline(
+                isPointerHovering: false,
+                showsKeyboardFocus: false
+            ),
+            .none
         )
         XCTAssertEqual(
-            RekonRailDestinationPresentation.focusRingLineWidth(isSelected: false, isFocused: true),
-            2
+            RekonRailDestinationPresentation.outline(
+                isPointerHovering: true,
+                showsKeyboardFocus: false
+            ),
+            .pointerHover
         )
         XCTAssertEqual(
-            RekonRailDestinationPresentation.focusRingLineWidth(isSelected: false, isFocused: false),
+            RekonRailDestinationPresentation.outline(
+                isPointerHovering: true,
+                showsKeyboardFocus: true
+            ),
+            .pointerHover,
+            "Pointer hover uses cyan for both selected and unselected destinations."
+        )
+        XCTAssertEqual(
+            RekonRailDestinationPresentation.outline(
+                isPointerHovering: false,
+                showsKeyboardFocus: true
+            ),
+            .keyboardFocus,
+            "Keyboard focus must remain visible without reusing the cyan hover outline."
+        )
+        XCTAssertEqual(
+            RekonRailDestinationPresentation.focusRingLineWidth(for: .none),
             0
         )
+        XCTAssertEqual(
+            RekonRailDestinationPresentation.focusRingLineWidth(for: .pointerHover),
+            2
+        )
+        XCTAssertEqual(
+            RekonRailDestinationPresentation.focusRingLineWidth(for: .keyboardFocus),
+            2
+        )
+        XCTAssertEqual(
+            RekonRailDestinationPresentation.outline(
+                isPointerHovering: false,
+                showsKeyboardFocus: RekonRailDestinationPresentation.showsKeyboardFocus(
+                    isFocused: true,
+                    suppressingAfterPointerActivation: true
+                )
+            ),
+            .none
+        )
+        XCTAssertTrue(
+            RekonRailDestinationPresentation.showsKeyboardFocus(
+                isFocused: true,
+                suppressingAfterPointerActivation: false
+            )
+        )
+    }
+
+    func testControlSurfaceMakesNativeChildFocusVisuallyDistinctFromHover() {
+        XCTAssertEqual(
+            RekonControlSurfacePresentation.outline(
+                isPointerHovering: false,
+                isKeyboardFocused: false
+            ),
+            .idle
+        )
+        XCTAssertEqual(
+            RekonControlSurfacePresentation.outline(
+                isPointerHovering: true,
+                isKeyboardFocused: false
+            ),
+            .pointerHover
+        )
+        XCTAssertEqual(
+            RekonControlSurfacePresentation.outline(
+                isPointerHovering: false,
+                isKeyboardFocused: true
+            ),
+            .keyboardFocus
+        )
+        XCTAssertEqual(
+            RekonControlSurfacePresentation.borderWidth(for: .keyboardFocus),
+            RekonVisualThemeContract.controlBorderWidth(isFocused: true)
+        )
+    }
+
+    func testVD204PipelineNavySurfacePresentationContract() {
+        let expected: [(PipelineNavySurfaceInteractionState, PipelineNavySurfaceToken, PipelineNavySurfaceToken, CGFloat, Double)] = [
+            (.idle, .surface, .border, 1, 1),
+            (.pointerHover, .elevatedSurface, .accent, 1, 1),
+            (.keyboardFocus, .elevatedSurface, .violet, 2, 1),
+            (.pressed, .elevatedSurface, .accent, 1, 0.62),
+            (.selected, .elevatedSurface, .accent, 1, 1),
+            (.disabled, .surface, .border, 1, 0.42)
+        ]
+
+        for (state, fill, outline, borderWidth, opacity) in expected {
+            let presentation = PipelineNavySurfacePresentation.presentation(for: state)
+
+            XCTAssertEqual(presentation.fill, fill, "Unexpected fill for \(state)")
+            XCTAssertEqual(presentation.outline, outline, "Unexpected outline for \(state)")
+            XCTAssertEqual(presentation.borderWidth, borderWidth, "Unexpected border width for \(state)")
+            XCTAssertEqual(presentation.opacity, opacity, "Unexpected opacity for \(state)")
+        }
     }
 
     func testVisualFoundationUsesAUnifiedNavyWindowCanvasPolicy() {
@@ -76,7 +494,12 @@ final class RekonPursuitTests: XCTestCase {
     @MainActor
     func testWindowChromeConfiguratorAppliesNavyChromeWithoutAddingManagedSplitViewSubviews() throws {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+            contentRect: NSRect(
+                x: 0,
+                y: 0,
+                width: RekonVisualThemeContract.minimumWindowWidth,
+                height: RekonVisualThemeContract.minimumWindowHeight
+            ),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -105,6 +528,8 @@ final class RekonPursuitTests: XCTestCase {
         XCTAssertEqual(window.appearance?.name, .darkAqua)
         XCTAssertEqual(window.toolbarStyle, .automatic)
         XCTAssertTrue(window.styleMask.contains(.fullSizeContentView))
+        XCTAssertEqual(window.frame.size.width, RekonVisualThemeContract.minimumWindowWidth)
+        XCTAssertEqual(window.frame.size.height, RekonVisualThemeContract.minimumWindowHeight)
         let closeButton = try XCTUnwrap(window.standardWindowButton(.closeButton))
         let minimizeButton = try XCTUnwrap(window.standardWindowButton(.miniaturizeButton))
         let zoomButton = try XCTUnwrap(window.standardWindowButton(.zoomButton))
@@ -112,8 +537,10 @@ final class RekonPursuitTests: XCTestCase {
             XCTAssertFalse($0.isHidden)
             XCTAssertTrue($0.window === window)
         }
-        window.setFrame(NSRect(x: 0, y: 0, width: 1200, height: 760), display: false)
+        window.setFrame(NSRect(x: 0, y: 0, width: 1440, height: 900), display: false)
         window.layoutIfNeeded()
+        XCTAssertEqual(window.frame.size.width, 1440)
+        XCTAssertEqual(window.frame.size.height, 900)
         [closeButton, minimizeButton, zoomButton].forEach {
             XCTAssertFalse($0.isHidden)
             XCTAssertTrue($0.window === window)
@@ -192,11 +619,11 @@ final class RekonPursuitTests: XCTestCase {
             3
         )
         XCTAssertGreaterThanOrEqual(
-            contrastRatio(foreground: NSColor(RekonTheme.shellFocusRing), background: NSColor(RekonTheme.shellRailBackground)),
+            contrastRatio(foreground: NSColor(RekonTheme.shellPointerHoverRing), background: NSColor(RekonTheme.shellRailBackground)),
             3
         )
         XCTAssertGreaterThanOrEqual(
-            contrastRatio(foreground: NSColor(RekonTheme.shellSelectedFocusRing), background: NSColor(RekonTheme.shellSelectedSurface)),
+            contrastRatio(foreground: NSColor(RekonTheme.shellKeyboardFocusRing), background: NSColor(RekonTheme.shellRailBackground)),
             3
         )
     }
@@ -216,343 +643,7 @@ final class RekonPursuitTests: XCTestCase {
         return (max(first, second) + 0.05) / (min(first, second) + 0.05)
     }
 
-    func testVisualFixtureLaunchConfigurationIsExplicitAndIsolated() throws {
-        let configuration = try XCTUnwrap(
-            VisualFixtureLaunchConfiguration(
-                arguments: ["RekonPursuit", "-rekon-visual-fixture", "populated"],
-                environment: [:]
-            )
-        )
 
-        XCTAssertEqual(configuration.fixture, .populated)
-        XCTAssertEqual(configuration.timeZone.identifier, "GMT")
-        XCTAssertTrue(configuration.keychainNamespace.hasPrefix("com.rekonlabs.RekonPursuit.visual-fixture.direct-initializer.populated"))
-        XCTAssertTrue(configuration.root.path.contains("rekon-pursuit-visual-fixtures"))
-        XCTAssertFalse(configuration.root.path.contains("Application Support"))
-    }
-
-    func testVisualFixtureConfigurationsUsePerRunTemporaryRoots() throws {
-        let first = try XCTUnwrap(
-            VisualFixtureLaunchConfiguration(
-                arguments: ["RekonPursuit", "-rekon-visual-fixture", "populated"],
-                environment: ["REKON_VISUAL_FIXTURE_SESSION": "fixture-run-a"]
-            )
-        )
-        let second = try XCTUnwrap(
-            VisualFixtureLaunchConfiguration(
-                arguments: ["RekonPursuit", "-rekon-visual-fixture", "populated"],
-                environment: ["REKON_VISUAL_FIXTURE_SESSION": "fixture-run-b"]
-            )
-        )
-
-        XCTAssertNotEqual(first.root, second.root)
-        XCTAssertNotEqual(first.keychainNamespace, second.keychainNamespace)
-        XCTAssertTrue(first.root.path.contains("fixture-run-a"))
-        XCTAssertTrue(second.root.path.contains("fixture-run-b"))
-    }
-
-    func testVisualFixtureCurrentProcessRequiresTheXCTestEnvironment() throws {
-        let arguments = ["RekonPursuit", VisualFixtureLaunchConfiguration.argument, VisualFixtureID.populated.rawValue]
-        let session = "current-process-gate"
-
-        XCTAssertNil(
-            VisualFixtureLaunchConfiguration.currentProcess(
-                arguments: arguments,
-                environment: [VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: session]
-            )
-        )
-
-        let configuration = try XCTUnwrap(
-            VisualFixtureLaunchConfiguration.currentProcess(
-                arguments: arguments,
-                environment: [
-                    VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: session,
-                    VisualFixtureLaunchConfiguration.xctestConfigurationFilePathEnvironmentKey: "/tmp/RekonPursuit.xctestconfiguration"
-                ]
-            )
-        )
-        XCTAssertEqual(configuration.fixture, .populated)
-        XCTAssertTrue(configuration.root.path.contains(session))
-    }
-
-    func testVisualFixtureCleanupLaunchUsesTheSameParserWithoutRenderingAFixture() throws {
-        let environment = [
-            VisualFixtureLaunchConfiguration.xctestConfigurationFilePathEnvironmentKey: "/tmp/test.xctestconfiguration",
-            VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: "cleanup-session"
-        ]
-
-        let cleanupConfiguration = try XCTUnwrap(
-            VisualFixtureLaunchConfiguration.cleanupCurrentProcess(
-                arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.cleanupArgument, VisualFixtureID.empty.rawValue],
-                environment: environment
-            )
-        )
-
-        XCTAssertEqual(cleanupConfiguration.sessionRoot.lastPathComponent, "cleanup-session")
-        XCTAssertNil(
-            VisualFixtureLaunchConfiguration.currentProcess(
-                arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.cleanupArgument, VisualFixtureID.empty.rawValue],
-                environment: environment
-            )
-        )
-        XCTAssertFalse(
-            VisualFixtureProcessLaunch.currentProcess(
-                arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.cleanupArgument, VisualFixtureID.empty.rawValue],
-                environment: environment
-            ).requiresApplicationDependencies
-        )
-    }
-
-    @MainActor
-    func testVisualFixtureCleanupRemovesEveryPopulatedFixtureRootForTheSession() throws {
-        let session = "cleanup-all-\(UUID().uuidString)"
-        let environment = [
-            VisualFixtureLaunchConfiguration.xctestConfigurationFilePathEnvironmentKey: "/tmp/test.xctestconfiguration",
-            VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: session
-        ]
-        let configurations = try VisualFixtureID.allCases.map { fixture in
-            try XCTUnwrap(
-                VisualFixtureLaunchConfiguration(
-                    arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.argument, fixture.rawValue],
-                    environment: environment
-                )
-            )
-        }
-        for configuration in configurations {
-            try FileManager.default.createDirectory(at: configuration.root, withIntermediateDirectories: true)
-            try Data("fixture".utf8).write(to: configuration.root.appendingPathComponent("seed.txt"))
-        }
-
-        let cleanupConfiguration = try XCTUnwrap(
-            VisualFixtureLaunchConfiguration.cleanupCurrentProcess(
-                arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.cleanupArgument, VisualFixtureID.empty.rawValue],
-                environment: environment
-            )
-        )
-        VisualFixtureWorkspace.teardown(configuration: cleanupConfiguration)
-
-        for configuration in configurations {
-            XCTAssertFalse(
-                FileManager.default.fileExists(atPath: configuration.root.path),
-                "Cleanup must remove the populated \(configuration.fixture.rawValue) fixture root."
-            )
-        }
-    }
-
-    @MainActor
-    func testVisualFixturePathGuardRefusesToDeleteOutsideTheFixtureBase() throws {
-        let outsideRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent("rekon-pursuit-outside-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: outsideRoot, withIntermediateDirectories: true)
-        try Data("preserve".utf8).write(to: outsideRoot.appendingPathComponent("preserve.txt"))
-        defer { try? FileManager.default.removeItem(at: outsideRoot) }
-
-        XCTAssertFalse(VisualFixtureWorkspace.removeTemporaryFixtureRoot(outsideRoot))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: outsideRoot.path))
-    }
-
-    @MainActor
-    func testVisualFixtureCleanupRefusesAnIntermediateSessionSymlinkAndPreservesItsTarget() throws {
-        let testRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent("rekon-pursuit-fixture-symlink-test-\(UUID().uuidString)", isDirectory: true)
-        let fixtureBase = testRoot.appendingPathComponent("owned-fixtures", isDirectory: true)
-        let externalRoot = testRoot.appendingPathComponent("external-session", isDirectory: true)
-        let sessionRoot = fixtureBase.appendingPathComponent("session", isDirectory: true)
-        let sentinel = externalRoot.appendingPathComponent("preserve.txt")
-        try FileManager.default.createDirectory(at: fixtureBase, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: externalRoot, withIntermediateDirectories: true)
-        try Data("preserve".utf8).write(to: sentinel)
-        try FileManager.default.createSymbolicLink(at: sessionRoot, withDestinationURL: externalRoot)
-        defer { try? FileManager.default.removeItem(at: testRoot) }
-
-        XCTAssertFalse(
-            VisualFixtureWorkspace.removeTemporaryFixtureRoot(sessionRoot, fixtureBaseRoot: fixtureBase)
-        )
-        XCTAssertTrue(FileManager.default.fileExists(atPath: sentinel.path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: sessionRoot.path))
-    }
-
-    @MainActor
-    func testVisualFixtureCleanupRefusesASymlinkedFixtureBaseAndPreservesItsTarget() throws {
-        let testRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent("rekon-pursuit-fixture-base-symlink-test-\(UUID().uuidString)", isDirectory: true)
-        let fixtureBase = testRoot.appendingPathComponent("owned-fixtures", isDirectory: true)
-        let externalBase = testRoot.appendingPathComponent("external-fixtures", isDirectory: true)
-        let sessionRoot = fixtureBase.appendingPathComponent("session", isDirectory: true)
-        let externalSession = externalBase.appendingPathComponent("session", isDirectory: true)
-        let sentinel = externalSession.appendingPathComponent("preserve.txt")
-        try FileManager.default.createDirectory(at: externalSession, withIntermediateDirectories: true)
-        try Data("preserve".utf8).write(to: sentinel)
-        try FileManager.default.createSymbolicLink(at: fixtureBase, withDestinationURL: externalBase)
-        defer { try? FileManager.default.removeItem(at: testRoot) }
-
-        XCTAssertFalse(
-            VisualFixtureWorkspace.removeTemporaryFixtureRoot(sessionRoot, fixtureBaseRoot: fixtureBase)
-        )
-        XCTAssertTrue(FileManager.default.fileExists(atPath: sentinel.path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: externalSession.path))
-    }
-
-    @MainActor
-    func testVisualFixtureUsesFixedTimeAndReducedMotionContracts() throws {
-        let configuration = try XCTUnwrap(
-            VisualFixtureLaunchConfiguration(
-                arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.argument, VisualFixtureID.empty.rawValue],
-                environment: [VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: "fixed-time"]
-            )
-        )
-
-        XCTAssertEqual(configuration.now, VisualFixtureLaunchConfiguration.fixedNow)
-        XCTAssertEqual(configuration.timeZone.identifier, "GMT")
-        XCTAssertEqual(RekonVisualThemeContract.decorativeBackgroundOpacity(reduceMotion: false), 1)
-        XCTAssertEqual(RekonVisualThemeContract.decorativeBackgroundOpacity(reduceMotion: true), 0.45)
-        XCTAssertEqual(RekonVisualThemeContract.homeFocusAccessibilityIdentifier, AppDestination.home.accessibilityID)
-    }
-
-    @MainActor
-    func testAllVisualFixtureStatesReachTheirExpectedWorkspaceState() throws {
-        for fixture in VisualFixtureID.allCases {
-            let configuration = try XCTUnwrap(
-                VisualFixtureLaunchConfiguration(
-                    arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.argument, fixture.rawValue],
-                    environment: [VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: "state-\(fixture.rawValue)"]
-                )
-            )
-            defer { VisualFixtureWorkspace.teardown(configuration: configuration) }
-
-            let model = VisualFixtureWorkspace.makeViewModel(configuration: configuration)
-            model.start()
-
-            switch fixture {
-            case .empty:
-                XCTAssertTrue(model.canCreateWorkspace)
-                XCTAssertFalse(model.workspaceReady)
-            case .recovery:
-                XCTAssertTrue(model.workspaceRequiresRecovery)
-                XCTAssertFalse(model.workspaceReady)
-            case .error:
-                XCTAssertFalse(model.workspaceReady)
-                XCTAssertFalse(model.canCreateWorkspace)
-                XCTAssertFalse(model.workspaceRequiresRecovery)
-            case .populated, .archive, .documentRelink:
-                XCTAssertTrue(model.workspaceReady)
-                XCTAssertFalse(model.canCreateWorkspace)
-            }
-
-            model.teardown()
-        }
-    }
-
-    @MainActor
-    func testPopulatedVisualFixtureContainsDeterministicOpportunityContent() throws {
-        let configuration = try XCTUnwrap(
-            VisualFixtureLaunchConfiguration(
-                arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.argument, VisualFixtureID.populated.rawValue],
-                environment: [VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: "populated-content"]
-            )
-        )
-        defer { VisualFixtureWorkspace.teardown(configuration: configuration) }
-
-        let model = VisualFixtureWorkspace.makeViewModel(configuration: configuration)
-        model.start()
-
-        XCTAssertEqual(model.opportunities.count, 1)
-        XCTAssertEqual(model.opportunities.first?.title, "Fixture opportunity")
-        XCTAssertEqual(model.opportunities.first?.company, "Fixture employer")
-        XCTAssertEqual(model.opportunities.first?.jobURL, "https://jobs.example.test/fixture")
-        XCTAssertEqual(model.opportunities.first?.location, "Fixture location")
-        XCTAssertEqual(model.opportunities.first?.dueAt, configuration.now)
-        model.teardown()
-    }
-
-    @MainActor
-    func testDocumentRelinkVisualFixtureContainsASelectedRelinkRequiredReference() throws {
-        let configuration = try XCTUnwrap(
-            VisualFixtureLaunchConfiguration(
-                arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.argument, VisualFixtureID.documentRelink.rawValue],
-                environment: [VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: "document-relink-content"]
-            )
-        )
-        defer { VisualFixtureWorkspace.teardown(configuration: configuration) }
-
-        let model = VisualFixtureWorkspace.makeViewModel(configuration: configuration)
-        model.start()
-
-        XCTAssertEqual(model.selectedDocumentReferences.count, 1)
-        XCTAssertEqual(model.selectedDocumentReferences.first?.filename, "fixture-resume.pdf")
-        XCTAssertEqual(model.selectedDocumentReferences.first?.availability, .relinkRequired)
-        XCTAssertNil(model.selectedDocumentReferences.first?.bookmarkData)
-        XCTAssertEqual(model.documentReferenceSummary, DocumentReferenceSummary(availableCount: 0, relinkRequiredCount: 1))
-        model.teardown()
-    }
-
-    @MainActor
-    func testArchiveVisualFixtureConstructionCompletesOnTheMainActor() throws {
-        let configuration = try XCTUnwrap(
-            VisualFixtureLaunchConfiguration(
-                arguments: ["RekonPursuit", VisualFixtureLaunchConfiguration.argument, VisualFixtureID.archive.rawValue],
-                environment: [VisualFixtureLaunchConfiguration.fixtureSessionEnvironmentKey: "archive-construction"]
-            )
-        )
-        defer { VisualFixtureWorkspace.teardown(configuration: configuration) }
-
-        let model = VisualFixtureWorkspace.makeViewModel(configuration: configuration)
-        model.start()
-
-        XCTAssertTrue(model.workspaceReady)
-        XCTAssertEqual(model.portableArchiveCatalogue.count, 1)
-        model.teardown()
-    }
-
-    @MainActor
-    func testArchiveVisualFixtureSeedsVerifiedArchiveCatalogue() throws {
-        let configuration = try XCTUnwrap(
-            VisualFixtureLaunchConfiguration(
-                arguments: ["RekonPursuit", "-rekon-visual-fixture", "archive"],
-                environment: ["REKON_VISUAL_FIXTURE_SESSION": "archive-catalogue"]
-            )
-        )
-        defer { VisualFixtureWorkspace.teardown(configuration: configuration) }
-
-        let model = VisualFixtureWorkspace.makeViewModel(configuration: configuration)
-        model.start()
-
-        XCTAssertTrue(model.workspaceReady)
-        XCTAssertTrue(model.recoveryEnrollmentEnabled)
-        XCTAssertEqual(model.portableArchiveCatalogue.count, 1)
-        XCTAssertEqual(model.portableArchiveCatalogue.first?.createdAt, configuration.now)
-        XCTAssertEqual(model.portableArchiveCatalogue.first?.displayFilename, "Fixture Archive.rekonarchive")
-        XCTAssertEqual(model.portableArchiveCatalogue.first?.verificationState, "Verified")
-        XCTAssertEqual(model.portableArchiveCatalogue.first?.lifecycleState, .verified)
-        model.teardown()
-    }
-
-    @MainActor
-    func testArchiveVisualFixtureUsesItsDeclaredTimeZoneAtTheCalendarBoundary() throws {
-        let timeZone = try XCTUnwrap(TimeZone(identifier: "Pacific/Auckland"))
-        var utcCalendar = Calendar(identifier: .gregorian)
-        utcCalendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        let createdAt = try XCTUnwrap(
-            utcCalendar.date(from: DateComponents(year: 2025, month: 9, day: 1, hour: 12))
-        )
-        let configuration = VisualFixtureLaunchConfiguration(
-            fixture: .archive,
-            session: "archive-time-zone",
-            now: createdAt,
-            timeZone: timeZone
-        )
-        defer { VisualFixtureWorkspace.teardown(configuration: configuration) }
-
-        let model = VisualFixtureWorkspace.makeViewModel(configuration: configuration)
-        model.start()
-
-        let expectedExpiry = try XCTUnwrap(
-            configuration.fixtureCalendar.date(byAdding: .day, value: 30, to: createdAt)
-        )
-        XCTAssertEqual(model.portableArchiveCatalogue.first?.expiresAt, expectedExpiry)
-        XCTAssertEqual(configuration.fixtureCalendar.timeZone.identifier, timeZone.identifier)
-        model.teardown()
-    }
     @MainActor
     func testAIUsageLedgerFilterStartsWithUnboundedDefaults() {
         let filter = AIUsageLedgerFilter()
@@ -742,5 +833,104 @@ final class RekonPursuitTests: XCTestCase {
 
         XCTAssertEqual(harness.localeTimeZone.locale.identifier, "en_US_POSIX")
         XCTAssertEqual(harness.localeTimeZone.timeZone.secondsFromGMT(), 0)
+    }
+
+    @MainActor
+    private func makeVD205Store() throws -> WorkspaceStore {
+        let databaseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("rekon-vd205-discard-draft-\(UUID().uuidString).sqlite")
+        let database = try EncryptedDatabase.open(url: databaseURL, key: Data(repeating: 5, count: 32))
+        return try WorkspaceStore(database: database, actorID: "test", correlationID: "vd205")
+    }
+
+    @MainActor
+    private func assertVD205PublishedProjection(
+        _ actual: VD205PublishedProjectionSnapshot,
+        equals expected: VD205PublishedProjectionSnapshot,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(actual.opportunities, expected.opportunities, file: file, line: line)
+        XCTAssertEqual(actual.activityEvents, expected.activityEvents, file: file, line: line)
+        XCTAssertEqual(actual.needsAttention, expected.needsAttention, file: file, line: line)
+        XCTAssertEqual(actual.opportunityCount, expected.opportunityCount, file: file, line: line)
+        XCTAssertEqual(actual.activityCount, expected.activityCount, file: file, line: line)
+        XCTAssertEqual(actual.needsAttentionCount, expected.needsAttentionCount, file: file, line: line)
+        XCTAssertEqual(actual.selectedOpportunityID, expected.selectedOpportunityID, file: file, line: line)
+        XCTAssertEqual(actual.selectedContactID, expected.selectedContactID, file: file, line: line)
+        XCTAssertEqual(actual.selectedOpportunity, expected.selectedOpportunity, file: file, line: line)
+        XCTAssertEqual(actual.selectedStageHistory, expected.selectedStageHistory, file: file, line: line)
+        XCTAssertEqual(actual.selectedResponseHistory, expected.selectedResponseHistory, file: file, line: line)
+        XCTAssertEqual(actual.selectedTask, expected.selectedTask, file: file, line: line)
+        XCTAssertEqual(actual.contacts, expected.contacts, file: file, line: line)
+        XCTAssertEqual(actual.selectedContacts, expected.selectedContacts, file: file, line: line)
+        XCTAssertEqual(actual.selectedSameEmployerContacts, expected.selectedSameEmployerContacts, file: file, line: line)
+        XCTAssertEqual(actual.selectedOpportunityInteractions, expected.selectedOpportunityInteractions, file: file, line: line)
+        XCTAssertEqual(actual.selectedContactInteractions, expected.selectedContactInteractions, file: file, line: line)
+        XCTAssertEqual(actual.selectedContactOpportunities, expected.selectedContactOpportunities, file: file, line: line)
+        XCTAssertEqual(actual.selectedContactEmployerOpportunities, expected.selectedContactEmployerOpportunities, file: file, line: line)
+        XCTAssertEqual(actual.selectedReconciliationResults, expected.selectedReconciliationResults, file: file, line: line)
+        XCTAssertEqual(actual.selectedReconciliationTask, expected.selectedReconciliationTask, file: file, line: line)
+        XCTAssertEqual(actual.selectedDocumentReferences, expected.selectedDocumentReferences, file: file, line: line)
+        XCTAssertEqual(actual.csvImportPlan, expected.csvImportPlan, file: file, line: line)
+        XCTAssertEqual(actual.csvImportReportRows, expected.csvImportReportRows, file: file, line: line)
+        XCTAssertEqual(actual.portableArchiveCatalogue, expected.portableArchiveCatalogue, file: file, line: line)
+    }
+}
+
+@MainActor
+private struct VD205PublishedProjectionSnapshot {
+    let opportunities: [Opportunity]
+    let activityEvents: [ActivityEvent]
+    let needsAttention: [TaskReminder]
+    let opportunityCount: Int
+    let activityCount: Int
+    let needsAttentionCount: Int
+    let selectedOpportunityID: String
+    let selectedContactID: String
+    let selectedOpportunity: Opportunity?
+    let selectedStageHistory: [StageHistoryEntry]
+    let selectedResponseHistory: [ResponseHistoryEntry]
+    let selectedTask: TaskReminder?
+    let contacts: [Contact]
+    let selectedContacts: [Contact]
+    let selectedSameEmployerContacts: [Contact]
+    let selectedOpportunityInteractions: [OpportunityInteraction]
+    let selectedContactInteractions: [ContactInteraction]
+    let selectedContactOpportunities: [Opportunity]
+    let selectedContactEmployerOpportunities: [Opportunity]
+    let selectedReconciliationResults: [ReconciliationResult]
+    let selectedReconciliationTask: TaskReminder?
+    let selectedDocumentReferences: [DocumentReference]
+    let csvImportPlan: [CSVImportPlanRow]
+    let csvImportReportRows: [CSVImportReportRow]
+    let portableArchiveCatalogue: [PortableArchiveCatalogueRow]
+
+    init(model: WorkspaceViewModel) {
+        opportunities = model.opportunities
+        activityEvents = model.activityEvents
+        needsAttention = model.needsAttention
+        opportunityCount = model.opportunityCount
+        activityCount = model.activityCount
+        needsAttentionCount = model.needsAttentionCount
+        selectedOpportunityID = model.selectedOpportunityID
+        selectedContactID = model.selectedContactID
+        selectedOpportunity = model.selectedOpportunity
+        selectedStageHistory = model.selectedStageHistory
+        selectedResponseHistory = model.selectedResponseHistory
+        selectedTask = model.selectedTask
+        contacts = model.contacts
+        selectedContacts = model.selectedContacts
+        selectedSameEmployerContacts = model.selectedSameEmployerContacts
+        selectedOpportunityInteractions = model.selectedOpportunityInteractions
+        selectedContactInteractions = model.selectedContactInteractions
+        selectedContactOpportunities = model.selectedContactOpportunities
+        selectedContactEmployerOpportunities = model.selectedContactEmployerOpportunities
+        selectedReconciliationResults = model.selectedReconciliationResults
+        selectedReconciliationTask = model.selectedReconciliationTask
+        selectedDocumentReferences = model.selectedDocumentReferences
+        csvImportPlan = model.csvImportPlan
+        csvImportReportRows = model.csvImportReportRows
+        portableArchiveCatalogue = model.portableArchiveCatalogue
     }
 }

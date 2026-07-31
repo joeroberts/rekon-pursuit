@@ -20,10 +20,17 @@ struct CSVExportDocument: FileDocument {
 
 struct ContentView: View {
     @StateObject private var model: WorkspaceViewModel
+    private let homeDashboardNow: Date
+    private let homeDashboardCalendar: Calendar
     @State private var navigation = DailyNavigationState()
     @State private var opportunityRoute: OpportunityRoute?
+    @State private var pipelineQuery = ""
+    @State private var pipelineStageFilter = "All stages"
+    @State private var pipelineIncludesClosed = false
     @State private var showsPipelineBoard = false
     @State private var pipelineAnchorID: String?
+    @State private var pipelineHorizontalLane: PipelineBoardLane?
+    @State private var addOpportunityOrigin: AddOpportunityOrigin?
     @State private var pendingDeletion: Opportunity?
     @State private var pendingContactDeletion: Contact?
     @State private var taskToReschedule: TaskReminder?
@@ -32,9 +39,14 @@ struct ContentView: View {
     @State private var documentReferenceToRelink: DocumentReference?
     @State private var closureConfirmationID: String?
 
-    init(visualFixture: VisualFixtureLaunchConfiguration? = nil) {
-        let initialModel = visualFixture.map(VisualFixtureWorkspace.makeViewModel) ?? WorkspaceViewModel()
-        _model = StateObject(wrappedValue: initialModel)
+    init(
+        model: WorkspaceViewModel,
+        homeDashboardNow: Date = .now,
+        homeDashboardCalendar: Calendar = .current
+    ) {
+        _model = StateObject(wrappedValue: model)
+        self.homeDashboardNow = homeDashboardNow
+        self.homeDashboardCalendar = homeDashboardCalendar
     }
 
     var body: some View {
@@ -94,6 +106,8 @@ struct ContentView: View {
                     Text("Reschedule action").font(.title2.bold())
                     Text(task.title).foregroundStyle(.secondary)
                     DatePicker("New due date", selection: $rescheduledDueAt, displayedComponents: [.date, .hourAndMinute])
+                        .accessibilityLabel("New due date")
+                        .accessibilityIdentifier("home-reschedule-due-date")
                     HStack {
                         Button("Cancel") { taskToReschedule = nil }.keyboardShortcut(.cancelAction)
                         Spacer()
@@ -120,16 +134,31 @@ struct ContentView: View {
     @ViewBuilder private var dailyDestination: some View {
         Group {
             switch navigation.route {
-            case .home: HomeView(model: model, open: openAttentionTask, addOpportunity: { navigation.handle(.homeEmptyStateAdd) }, reschedule: { task in taskToReschedule = task; rescheduledDueAt = task.dueAt ?? .now })
-            case .pipeline: PipelineView(model: model, showsBoard: $showsPipelineBoard, anchorID: $pipelineAnchorID, open: openOpportunity, delete: { pendingDeletion = $0 }, addOpportunity: { navigation.handle(.pipelineAdd) }, importCSV: { navigation.handle(.pipelineImport) })
-            case .addOpportunity: AddOpportunityView(model: model)
-            case .importCSV: CSVImportView(model: model, chooseFile: chooseCSVFile, open: openOpportunity, finish: { navigation.select(.pipeline) })
+            case .home: HomeView(model: model, open: openAttentionTask, addOpportunity: { beginAddOpportunity(origin: .home) }, reschedule: { task in taskToReschedule = task; rescheduledDueAt = task.dueAt ?? .now }, now: homeDashboardNow, calendar: homeDashboardCalendar)
+            case .pipeline:
+                PipelineView(
+                    model: model,
+                    query: $pipelineQuery,
+                    stage: $pipelineStageFilter,
+                    includesClosed: $pipelineIncludesClosed,
+                    showsBoard: $showsPipelineBoard,
+                    anchorID: $pipelineAnchorID,
+                    horizontalLane: $pipelineHorizontalLane,
+                    open: openOpportunity,
+                    delete: { pendingDeletion = $0 },
+                    addOpportunity: beginPipelineAddOpportunity,
+                    importCSV: {
+                        addOpportunityOrigin = nil
+                        navigation.handle(.pipelineImport)
+                    }
+                )
+            case .addOpportunity: AddOpportunityView(model: model, cancel: cancelAddOpportunity)
+            case .importCSV: CSVImportView(model: model, chooseFile: chooseCSVFile, open: openOpportunity, finish: { addOpportunityOrigin = nil; navigation.select(.pipeline) })
             case .contacts: ContactsView(model: model, open: openOpportunity, delete: { pendingContactDeletion = $0 })
             case .activityAI: GlobalActivityView(model: model)
             case .settings: SettingsView(model: model)
             }
         }
-        .accessibilityIdentifier(navigation.route.accessibilityIdentifier)
     }
 
     @ViewBuilder private func routedOpportunityView(_ route: OpportunityRoute) -> some View {
@@ -144,6 +173,7 @@ struct ContentView: View {
     }
 
     private func openOpportunity(_ opportunity: Opportunity) {
+        addOpportunityOrigin = nil
         pipelineAnchorID = opportunity.id
         openRoute(.overview(opportunity.id))
     }
@@ -151,14 +181,52 @@ struct ContentView: View {
     private func openAttentionTask(_ task: TaskReminder) {
         guard model.navigateToRouteOpportunity(id: task.opportunityID) else { return }
         guard model.open(task) else { return }
+        addOpportunityOrigin = nil
         pipelineAnchorID = task.opportunityID
-        opportunityRoute = .overview(task.opportunityID)
+        opportunityRoute = task.requiresClosureConfirmation ? .reconcile(task.opportunityID) : .overview(task.opportunityID)
         navigation.select(.pipeline)
     }
 
     private func openRoute(_ route: OpportunityRoute) {
         guard model.navigateToRouteOpportunity(id: route.opportunityID) else { return }
+        addOpportunityOrigin = nil
         opportunityRoute = route
+    }
+
+    private func beginPipelineAddOpportunity() {
+        if showsPipelineBoard {
+            let context = PipelineBoardReturnContext(
+                query: pipelineQuery,
+                stageFilter: pipelineStageFilter,
+                includesClosed: pipelineIncludesClosed,
+                selectedOrAnchoredOpportunityID: pipelineAnchorID,
+                horizontalScrollLane: pipelineHorizontalLane
+            )
+            beginAddOpportunity(origin: .pipelineBoard(context))
+        } else {
+            beginAddOpportunity(origin: .pipelineTable)
+        }
+    }
+
+    private func beginAddOpportunity(origin: AddOpportunityOrigin) {
+        addOpportunityOrigin = AddOpportunityOrigin.replacing(addOpportunityOrigin, with: origin)
+        navigation.select(.addOpportunity)
+    }
+
+    private func cancelAddOpportunity() {
+        let origin = addOpportunityOrigin
+        let destination = origin?.cancelDestination ?? AddOpportunityOrigin.home.cancelDestination
+        model.discardNewOpportunityDraft()
+        showsPipelineBoard = destination.showsBoard
+        if let context = destination.boardContext {
+            pipelineQuery = context.query
+            pipelineStageFilter = context.stageFilter
+            pipelineIncludesClosed = context.includesClosed
+            pipelineAnchorID = context.selectedOrAnchoredOpportunityID
+            pipelineHorizontalLane = context.horizontalScrollLane
+        }
+        navigation.select(destination.route)
+        addOpportunityOrigin = nil
     }
 
     private var detailTitle: String {
@@ -172,17 +240,20 @@ struct ContentView: View {
 
     private func selectDestination(_ destination: DailyRoute) {
         guard opportunityRoute != nil else {
+            addOpportunityOrigin = nil
             navigation.select(destination)
             return
         }
         guard model.canLeaveOpportunityRoute() else { return }
         opportunityRoute = nil
+        addOpportunityOrigin = nil
         navigation.select(destination)
     }
 
     private func returnToPipeline() {
         guard model.canLeaveOpportunityRoute() else { return }
         opportunityRoute = nil
+        addOpportunityOrigin = nil
         navigation.select(.pipeline)
     }
 
@@ -230,6 +301,10 @@ private struct WorkspaceOnboardingView: View {
                             .accessibilityIdentifier("create-local-workspace")
                     } else if model.workspaceRequiresRecovery {
                         Text("Recovery is required before this workspace can be opened. Rekon Pursuit kept existing local material unchanged and will not create over it.").foregroundStyle(.secondary)
+                        Text("Only recovery actions are available until you choose or create a safe local workspace.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("recovery-only-workspace-gate")
                         Button("Recheck local workspace") { model.retryWorkspaceOpen() }.accessibilityIdentifier("recheck-local-workspace")
                         Button("Choose existing workspace folder…", action: chooseExistingWorkspaceFolder)
                             .accessibilityIdentifier("choose-existing-workspace-folder")
@@ -260,120 +335,6 @@ private struct WorkspaceOnboardingView: View {
         panel.canCreateDirectories = false
         let selectedURL = panel.runModal() == .OK ? panel.url : nil
         model.chooseExistingWorkspaceFolder(selectedURL)
-    }
-}
-
-private struct PipelineView: View {
-    @ObservedObject var model: WorkspaceViewModel
-    @Binding var showsBoard: Bool
-    @Binding var anchorID: String?
-    let open: (Opportunity) -> Void
-    let delete: (Opportunity) -> Void
-    let addOpportunity: () -> Void
-    let importCSV: () -> Void
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Pipeline").font(.largeTitle.bold())
-                Spacer()
-                Button("Import CSV", action: importCSV)
-                    .buttonStyle(RekonSecondaryButtonStyle())
-                    .accessibilityIdentifier("pipeline-import-csv")
-                Button("Add opportunity", action: addOpportunity)
-                    .buttonStyle(RekonPrimaryButtonStyle())
-                    .accessibilityIdentifier("pipeline-add-opportunity")
-            }
-            HStack {
-                TextField("Search opportunities", text: $model.opportunitySearch).accessibilityIdentifier("opportunity-search")
-                Picker("Stage", selection: $model.stageFilter) {
-                    Text("All stages").tag("All stages")
-                    ForEach(PipelineStage.allCases, id: \.self) { Text($0.rawValue).tag($0.rawValue) }
-                }
-                .frame(width: 170)
-                Picker("View", selection: $showsBoard) { Text("Table").tag(false); Text("Board").tag(true) }.pickerStyle(.segmented).frame(width: 145)
-            }
-            if model.filteredOpportunities.isEmpty {
-                FlexibleCenteredContent {
-                    ContentUnavailableView("No opportunities match", systemImage: "briefcase", description: Text("Try another search or add an opportunity."))
-                    Button("Add opportunity", action: addOpportunity)
-                        .buttonStyle(RekonPrimaryButtonStyle())
-                }
-            } else if showsBoard {
-                ScrollViewReader { proxy in
-                    ScrollView(.horizontal) {
-                        HStack(alignment: .top, spacing: 14) {
-                            ForEach(PipelineStage.allCases, id: \.self) { stage in
-                                ScrollViewReader { laneProxy in
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text(stage.rawValue).font(.headline)
-                                        ScrollView {
-                                            ForEach(model.filteredOpportunities.filter { $0.stage == stage }, id: \.id) { opportunity in
-                                                OpportunityCard(opportunity: opportunity) { anchorID = opportunity.id; open(opportunity) }
-                                                    .id(opportunity.id)
-                                            }
-                                        }
-                                    }
-                                    .onAppear {
-                                        guard let anchorID, let opportunity = model.opportunity(id: anchorID), opportunity.stage == stage else { return }
-                                        laneProxy.scrollTo(anchorID, anchor: .center)
-                                    }
-                                    .onChange(of: anchorID) { _, id in
-                                        guard let id, let opportunity = model.opportunity(id: id), opportunity.stage == stage else { return }
-                                        laneProxy.scrollTo(id, anchor: .center)
-                                    }
-                                }
-                                .id(stage)
-                                .frame(width: 210, alignment: .leading)
-                            }
-                        }.padding(.bottom, 4)
-                    }
-                    .onAppear {
-                        guard let anchorID, let opportunity = model.opportunity(id: anchorID) else { return }
-                        proxy.scrollTo(opportunity.stage, anchor: .center)
-                    }
-                }
-            } else {
-                ScrollViewReader { proxy in
-                    List {
-                        ForEach(model.filteredOpportunities, id: \.id) { opportunity in
-                            HStack {
-                                Button { anchorID = opportunity.id; open(opportunity) } label: { OpportunityRow(opportunity: opportunity) }
-                                    .buttonStyle(.plain)
-                                    .accessibilityIdentifier("pipeline-opportunity-\(opportunity.id)")
-                                    .accessibilityLabel(opportunity.title)
-                                Spacer()
-                                Button("Delete", role: .destructive) { delete(opportunity) }
-                            }
-                            .id(opportunity.id)
-                        }
-                    }
-                    .listStyle(.inset)
-                    .onAppear { if let anchorID { proxy.scrollTo(anchorID, anchor: .center) } }
-                }
-            }
-        }
-        .padding(28).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-}
-
-private struct OpportunityRow: View {
-    let opportunity: Opportunity
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(opportunity.title).font(.headline)
-            Text("\(opportunity.company) · \(opportunity.stage.rawValue)").font(.caption).foregroundStyle(RekonTheme.secondaryText)
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 3)
-    }
-}
-
-private struct OpportunityCard: View {
-    let opportunity: Opportunity
-    let open: () -> Void
-    var body: some View {
-        Button(action: open) { OpportunityRow(opportunity: opportunity).padding(10).background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: 10)).overlay(RoundedRectangle(cornerRadius: 10).stroke(RekonTheme.border, lineWidth: 1)) }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("pipeline-opportunity-\(opportunity.id)")
-            .accessibilityLabel(opportunity.title)
     }
 }
 
@@ -516,7 +477,25 @@ private struct ReconcilePostingView: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("A check never follows redirects, signs in, retries automatically, or changes the opportunity stage.").font(.caption).foregroundStyle(.secondary)
                                 if let url = URL(string: model.selectedJobURL), !model.selectedJobURL.isEmpty {
-                                    HStack { Link("Open job posting", destination: url); Spacer(); if model.isCheckingSelectedPublicURL { ProgressView(); Button("Cancel") { _ = model.selectRouteOpportunity(id: opportunityID); model.cancelSelectedPublicURLCheck() } } else { Button("Check public URL") { _ = model.selectRouteOpportunity(id: opportunityID); model.checkSelectedPublicURL() }.disabled(!model.canCheckSelectedPublicURL).accessibilityIdentifier("check-public-url") } }
+                                    HStack {
+                                        Link("Open job posting", destination: url)
+                                        Spacer()
+                                        if model.isCheckingSelectedPublicURL {
+                                            ProgressView()
+                                            Button("Cancel") {
+                                                _ = model.selectRouteOpportunity(id: opportunityID)
+                                                model.cancelSelectedPublicURLCheck()
+                                            }
+                                            .accessibilityIdentifier("cancel-public-url-check")
+                                        } else {
+                                            Button("Check public URL") {
+                                                _ = model.selectRouteOpportunity(id: opportunityID)
+                                                model.checkSelectedPublicURL()
+                                            }
+                                            .disabled(!model.canCheckSelectedPublicURL)
+                                            .accessibilityIdentifier("check-public-url")
+                                        }
+                                    }
                                 } else { Text("Add a job URL to review this opening.").foregroundStyle(.secondary) }
                             }
                         }
@@ -563,49 +542,7 @@ private struct ClosureConfirmationView: View {
 
 private struct MissingOpportunityView: View { let back: () -> Void; var body: some View { ContentUnavailableView("Opportunity unavailable", systemImage: "exclamationmark.triangle", description: Text("It may have been deleted while this screen was open.")); Button("Return to Pipeline", action: back) } }
 
-private struct HomeView: View {
-    @ObservedObject var model: WorkspaceViewModel; let open: (TaskReminder) -> Void; let addOpportunity: () -> Void; let reschedule: (TaskReminder) -> Void
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Home").font(.largeTitle.bold()).accessibilityIdentifier("home-content")
-            Text("Needs Attention").font(.title2.bold())
-            if model.needsAttention.isEmpty {
-                FlexibleCenteredContent {
-                    ContentUnavailableView("No next actions", systemImage: "checkmark.circle", description: Text("Add an opportunity when you are ready."))
-                    Button("Add an opportunity", action: addOpportunity)
-                        .buttonStyle(RekonPrimaryButtonStyle())
-                        .accessibilityIdentifier("show-add-opportunity")
-                }
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(model.needsAttention, id: \.id) { task in
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(task.title).font(.headline)
-                                    Text(task.dueAt?.formatted(date: .abbreviated, time: .shortened) ?? "No due date")
-                                        .foregroundStyle(RekonTheme.secondaryText)
-                                }
-                                Spacer()
-                                Button("Open") { open(task) }
-                                Button("Snooze 1 day") { model.snoozeOneDay(task) }
-                                Button("Reschedule…") { reschedule(task) }
-                                Button("Complete") { model.complete(task) }
-                            }
-                            .padding()
-                            .background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: 10))
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(RekonTheme.border, lineWidth: 1))
-                        }
-                    }
-                }
-            }
-        }
-        .padding(28)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-}
-
-private struct FlexibleCenteredContent<Content: View>: View {
+struct FlexibleCenteredContent<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -623,6 +560,7 @@ private struct FlexibleCenteredContent<Content: View>: View {
 
 private struct AddOpportunityView: View {
     @ObservedObject var model: WorkspaceViewModel
+    let cancel: () -> Void
 
     var body: some View {
         ScrollView {
@@ -657,6 +595,9 @@ private struct AddOpportunityView: View {
                             .accessibilityIdentifier("save-opportunity")
                             .keyboardShortcut(.defaultAction)
                             .disabled(model.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.company.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        Button("Cancel", action: cancel)
+                            .accessibilityIdentifier("cancel-add-opportunity")
+                            .keyboardShortcut(.cancelAction)
                         if let error = model.addOpportunitySaveError {
                             Text(error)
                                 .font(.caption)
@@ -1099,7 +1040,6 @@ private struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Workspace data stays on this Mac and is retained until you delete it. Deleted records leave the active workspace immediately; earlier encrypted archives may retain them until their displayed expiry.")
                             .foregroundStyle(.secondary)
-                        Toggle("Show closed opportunities in the pipeline", isOn: $model.showClosedOpportunities).accessibilityIdentifier("show-closed-opportunities")
                         if model.usingSeparateLocalWorkspace {
                             Text("You are using a separate local workspace. Your preserved workspace remains unchanged.").foregroundStyle(.secondary)
                             Button("Return to preserved workspace recovery") { model.returnToPreservedWorkspaceRecovery() }.accessibilityIdentifier("return-to-preserved-workspace-recovery")
