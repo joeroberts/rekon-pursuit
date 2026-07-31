@@ -107,6 +107,7 @@ Architecture verifies origin/scroll precedence and successor-ADR consistency. QA
 
 **Files:**
 - Modify: `RekonPursuit/PipelineView.swift`
+- Modify: `RekonPursuit/PipelineBoardView.swift` solely to remove its obsolete private `dropTarget` declaration and make any compile-only direct reference adjustment required to resolve the canonical property; no Board rendering, menu, scroll, focus, or interaction behavior
 - Modify: `RekonPursuit/ContentView.swift`
 - Modify: `RekonPursuit/WorkspaceViewModel.swift` only for `discardNewOpportunityDraft()`
 - Test: `RekonPursuitTests/RekonPursuitTests.swift`
@@ -156,9 +157,11 @@ xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -destinatio
   -only-testing:RekonPursuitTests/RekonPursuitTests/testVD205DiscardNewOpportunityDraftIsExhaustivePureAndWriteFree
 ```
 
-Expected: failure only for absent exact lane/drop, origin/destination, and discard contracts.
+Expected: failure only for absent exact lane/drop, origin/destination, and discard contracts. For the lane selector, the valid RED is that the current `dropTarget` is private/inaccessible and still implements the obsolete Applied → Screening mapping; do not add a second declaration before capturing RED.
 
 - [ ] **Step 3: Implement minimal contracts**
+
+Define the single canonical internal `PipelineBoardLane.dropTarget` in `PipelineView.swift` as `stage`. In the same GREEN implementation, remove the obsolete private `dropTarget` declaration from `PipelineBoardView.swift`; its existing direct `lane.dropTarget` use resolves to the canonical property. Make only a compile-required direct-reference adjustment if the compiler requires one. Do not change Board rendering, menu, scroll, focus, drop-delivery, or interaction behavior in Task 2.
 
 `ContentView` owns live `pipelineQuery`, `pipelineStageFilter`, `pipelineIncludesClosed`, `showsPipelineBoard`, `pipelineAnchorID`, `pipelineHorizontalLane`, and optional `addOpportunityOrigin`. `PipelineView` receives bindings for all except origin; `selectedTableID` stays local.
 
@@ -179,7 +182,7 @@ Re-run Step 2 with `green-unit` paths and all three selectors. Require three pas
 - Modify: `RekonPursuit/PipelineView.swift`
 - Test: `RekonPursuitTests/RekonPursuitTests.swift`
 
-**Consumes:** Task 2 bindings and exact lanes.
+**Consumes:** Task 2 bindings and exact lanes, including the single internal `PipelineBoardLane.dropTarget == stage` declared in `PipelineView.swift`; `PipelineBoardView.swift` no longer has a private duplicate.
 **Produces:** exact Board rendering/drop/scroll and Option-C actions.
 
 - [ ] **Step 1: Write failing direct contracts**
@@ -192,7 +195,7 @@ func testVD205RestoredHorizontalLaneWinsOverAnchorDerivedLane()
 @MainActor func testVD205ProductionMenuBuilderConsumesCanonicalActionsConfiguration()
 ```
 
-The first proves Applied → `.applied`, Screening → `.screening`, and `dropTarget == stage`. The second proves resolver precedence `restoredLane ?? anchorStage.map(PipelineBoardLane.forStage)`, specifically restored Offer wins over a Screening anchor. The menu test invokes the same production builder and asserts exactly two ordered outer items and one ordered six-stage submenu from `.canonical`.
+The first proves Applied → `.applied` and Screening → `.screening`, consuming Task 2's already-tested exact `dropTarget == stage` interface without redefining it. The second proves resolver precedence `restoredLane ?? anchorStage.map(PipelineBoardLane.forStage)`, specifically restored Offer wins over a Screening anchor. The menu test invokes the same production builder and asserts exactly two ordered outer items and one ordered six-stage submenu from `.canonical`.
 
 - [ ] **Step 2: Run RED**
 
