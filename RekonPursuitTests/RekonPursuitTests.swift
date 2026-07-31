@@ -111,7 +111,7 @@ final class RekonPursuitTests: XCTestCase {
 
         XCTAssertTrue(presentation.relocatesCard)
         XCTAssertEqual(presentation.presentedStage, .screening)
-        XCTAssertEqual(presentation.boardLane, .applied)
+        XCTAssertEqual(presentation.boardLane, .screening)
         XCTAssertEqual(presentation.outcomeText, "Moved to Screening.")
         XCTAssertTrue(presentation.isLiveOutcome)
 
@@ -170,6 +170,71 @@ final class RekonPursuitTests: XCTestCase {
                 XCTAssertEqual(lane.includes(stage), lane.stage == stage, "\(lane) must own only \(lane.stage).")
             }
         }
+    }
+
+    func testVD205PersistedAppliedAndScreeningPresentInTheirExactLanes() {
+        let opportunityID = "00000000-0000-4000-8000-000000000205"
+        let appliedPresentation = PipelineStageMovePresentation.make(
+            for: .persisted(opportunityID: opportunityID, from: .saved, to: .applied),
+            sourceStage: .saved
+        )
+        let screeningPresentation = PipelineStageMovePresentation.make(
+            for: .persisted(opportunityID: opportunityID, from: .applied, to: .screening),
+            sourceStage: .applied
+        )
+        let presentedLanes = [appliedPresentation.boardLane, screeningPresentation.boardLane]
+
+        XCTAssertEqual(presentedLanes, [.applied, .screening])
+        XCTAssertEqual(presentedLanes.map(\.dropTarget), [.applied, .screening])
+    }
+
+    func testVD205RestoredHorizontalLaneWinsOverAnchorDerivedLane() {
+        XCTAssertEqual(
+            PipelineBoardHorizontalLaneResolver.resolve(
+                restoredLane: .offer,
+                anchorStage: .screening
+            ),
+            .offer
+        )
+        XCTAssertEqual(
+            PipelineBoardHorizontalLaneResolver.resolve(
+                restoredLane: nil,
+                anchorStage: .screening
+            ),
+            .screening
+        )
+        XCTAssertNil(
+            PipelineBoardHorizontalLaneResolver.resolve(
+                restoredLane: nil,
+                anchorStage: nil
+            )
+        )
+    }
+
+    @MainActor
+    func testVD205ProductionMenuBuilderConsumesCanonicalActionsConfiguration() throws {
+        var editInvocationCount = 0
+        var movedTargets: [PipelineStage] = []
+        let menu = PipelineCardActionsMenuBuilder.makeMenu(
+            configuration: .canonical,
+            edit: { editInvocationCount += 1 },
+            move: { movedTargets.append($0) }
+        )
+
+        XCTAssertEqual(menu.items.map(\.title), ["Edit opportunity", "Move to stage…"])
+        let moveSubmenu = try XCTUnwrap(menu.items.last?.submenu)
+        XCTAssertEqual(
+            moveSubmenu.items.map(\.title),
+            ["Saved", "Applied", "Screening", "Interviewing", "Offer", "Closed"]
+        )
+        XCTAssertEqual(moveSubmenu.items.count, 6)
+
+        let editItem = try XCTUnwrap(menu.items.first)
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(editItem.action), to: editItem.target, from: editItem))
+        let screeningItem = moveSubmenu.items[2]
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(screeningItem.action), to: screeningItem.target, from: screeningItem))
+        XCTAssertEqual(editInvocationCount, 1)
+        XCTAssertEqual(movedTargets, [.screening])
     }
 
     func testVD205AddOpportunityOriginResolvesHomeTableAndExactBoardContext() {

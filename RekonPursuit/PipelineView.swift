@@ -30,6 +30,19 @@ nonisolated enum PipelineBoardLane: CaseIterable, Hashable {
     static func displayedLanes(includesClosed: Bool) -> [PipelineBoardLane] {
         includesClosed ? [.saved, .applied, .screening, .interviewing, .offer, .closed] : [.saved, .applied, .screening, .interviewing, .offer]
     }
+
+    static func forStage(_ stage: PipelineStage) -> PipelineBoardLane {
+        displayedLanes(includesClosed: true).first(where: { $0.includes(stage) }) ?? .saved
+    }
+}
+
+nonisolated enum PipelineBoardHorizontalLaneResolver {
+    static func resolve(
+        restoredLane: PipelineBoardLane?,
+        anchorStage: PipelineStage?
+    ) -> PipelineBoardLane? {
+        restoredLane ?? anchorStage.map(PipelineBoardLane.forStage)
+    }
 }
 
 nonisolated struct PipelineBoardReturnContext: Equatable {
@@ -124,6 +137,7 @@ struct PipelineView: View {
                     opportunities: visibleOpportunities,
                     includesClosed: includesClosed,
                     anchorID: $anchorID,
+                    horizontalLane: $horizontalLane,
                     open: open,
                     addOpportunity: addOpportunity
                 )

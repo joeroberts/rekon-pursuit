@@ -570,7 +570,7 @@ private struct AddOpportunityView: View {
                     TextField("Job title", text: $model.title).accessibilityIdentifier("opportunity-title")
                     TextField("Company", text: $model.company).accessibilityIdentifier("opportunity-company")
                     TextField("Job URL (optional)", text: $model.jobURL)
-                    if let warning = model.jobURLWarning { Text(warning).font(.caption).foregroundStyle(.orange) }
+                    if let warning = model.jobURLWarning { Text(warning).font(.caption).foregroundStyle(.orange).accessibilityIdentifier("add-opportunity-url-warning") }
                     Text("Job description").font(.caption).foregroundStyle(.secondary)
                     TextEditor(text: $model.jobDescription).frame(minHeight: 110)
                     Text("Notes").font(.caption).foregroundStyle(.secondary)

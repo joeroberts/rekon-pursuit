@@ -8,6 +8,69 @@ nonisolated struct PipelineStageMoveRequest: Equatable {
     let target: PipelineStage
 }
 
+nonisolated struct PipelineCardActionsConfiguration: Equatable {
+    let editTitle: String
+    let moveTitle: String
+    let moveTargets: [PipelineStage]
+
+    static let canonical = Self(
+        editTitle: "Edit opportunity",
+        moveTitle: "Move to stage…",
+        moveTargets: PipelineStage.allCases
+    )
+}
+
+@MainActor
+enum PipelineCardActionsMenuBuilder {
+    static func makeMenu(
+        configuration: PipelineCardActionsConfiguration,
+        edit: @escaping () -> Void,
+        move: @escaping (PipelineStage) -> Void
+    ) -> NSMenu {
+        let menu = NSMenu(title: "Opportunity actions")
+        menu.addItem(makeActionItem(title: configuration.editTitle, handler: edit))
+
+        let moveItem = NSMenuItem(title: configuration.moveTitle, action: nil, keyEquivalent: "")
+        let moveSubmenu = NSMenu(title: configuration.moveTitle)
+        configuration.moveTargets.forEach { stage in
+            moveSubmenu.addItem(
+                makeActionItem(title: stage.rawValue) {
+                    move(stage)
+                }
+            )
+        }
+        moveItem.submenu = moveSubmenu
+        menu.addItem(moveItem)
+        return menu
+    }
+
+    private static func makeActionItem(title: String, handler: @escaping () -> Void) -> NSMenuItem {
+        let actionTarget = PipelineCardActionTarget(handler: handler)
+        let item = NSMenuItem(
+            title: title,
+            action: #selector(PipelineCardActionTarget.performAction(_:)),
+            keyEquivalent: ""
+        )
+        item.target = actionTarget
+        item.representedObject = actionTarget
+        return item
+    }
+}
+
+@MainActor
+private final class PipelineCardActionTarget: NSObject {
+    private let handler: () -> Void
+
+    init(handler: @escaping () -> Void) {
+        self.handler = handler
+        super.init()
+    }
+
+    @objc func performAction(_ sender: NSMenuItem) {
+        handler()
+    }
+}
+
 /// The native drag boundary intentionally carries one UTF-8 identifier and
 /// nothing else. Every drop resolves that identifier against the current
 /// committed projection before a command can be dispatched.
@@ -106,18 +169,7 @@ nonisolated struct PipelineStageMovePresentation: Equatable {
     }
 
     private static func lane(for stage: PipelineStage) -> PipelineBoardLane {
-        switch stage {
-        case .saved:
-            .saved
-        case .applied, .screening:
-            .applied
-        case .interviewing:
-            .interviewing
-        case .offer:
-            .offer
-        case .closed:
-            .closed
-        }
+        PipelineBoardLane.forStage(stage)
     }
 }
 
@@ -176,6 +228,7 @@ struct PipelineBoardView: View {
     let opportunities: [Opportunity]
     let includesClosed: Bool
     @Binding var anchorID: String?
+    @Binding var horizontalLane: PipelineBoardLane?
     let open: (Opportunity) -> Void
     let addOpportunity: () -> Void
 
@@ -195,26 +248,26 @@ struct PipelineBoardView: View {
                     .accessibilityAddTraits(.updatesFrequently)
             }
 
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal) {
-                    HStack(alignment: .top, spacing: 16) {
-                        ForEach(PipelineBoardLane.displayedLanes(includesClosed: includesClosed), id: \.self) { lane in
-                            boardLane(lane)
-                                .id(lane)
-                                .frame(width: lane == .closed ? 230 : 270, alignment: .leading)
-                        }
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: 16) {
+                    ForEach(PipelineBoardLane.displayedLanes(includesClosed: includesClosed), id: \.self) { lane in
+                        boardLane(lane)
+                            .id(lane)
+                            .frame(width: 280, alignment: .leading)
                     }
-                    .padding(.bottom, 4)
                 }
-                .accessibilityIdentifier("pipeline-board-region")
-                .onAppear {
-                    guard let anchorID, let opportunity = model.opportunity(id: anchorID) else { return }
-                    proxy.scrollTo(PipelineBoardLane.forStage(opportunity.stage), anchor: .center)
-                }
-                .onChange(of: anchorID) { _, id in
-                    guard let id, let opportunity = model.opportunity(id: id) else { return }
-                    proxy.scrollTo(PipelineBoardLane.forStage(opportunity.stage), anchor: .center)
-                }
+                .padding(.bottom, 4)
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.viewAligned)
+            .scrollPosition(id: $horizontalLane, anchor: .center)
+            .accessibilityIdentifier("pipeline-board-region")
+            .accessibilityValue("Horizontal lane: \(accessibleHorizontalLane.title)")
+            .onAppear {
+                resolveHorizontalLaneFromAnchorIfNeeded()
+            }
+            .onChange(of: anchorID) { _, _ in
+                resolveHorizontalLaneFromAnchorIfNeeded()
             }
         }
         .background {
@@ -230,6 +283,25 @@ struct PipelineBoardView: View {
             EmptyView()
             #endif
         }
+    }
+
+    private var anchorStage: PipelineStage? {
+        guard let anchorID else { return nil }
+        return model.opportunity(id: anchorID)?.stage
+    }
+
+    private var accessibleHorizontalLane: PipelineBoardLane {
+        PipelineBoardHorizontalLaneResolver.resolve(
+            restoredLane: horizontalLane,
+            anchorStage: anchorStage
+        ) ?? PipelineBoardLane.displayedLanes(includesClosed: includesClosed).first ?? .saved
+    }
+
+    private func resolveHorizontalLaneFromAnchorIfNeeded() {
+        horizontalLane = PipelineBoardHorizontalLaneResolver.resolve(
+            restoredLane: horizontalLane,
+            anchorStage: anchorStage
+        )
     }
 
     private func boardLane(_ lane: PipelineBoardLane) -> some View {
@@ -263,6 +335,7 @@ struct PipelineBoardView: View {
                             ForEach(laneOpportunities, id: \.id) { opportunity in
                                 PipelineOpportunityMoveCard(
                                     opportunity: opportunity,
+                                    isAnchored: anchorID == opportunity.id,
                                     focusedMoveOpportunityID: $focusedMoveOpportunityID,
                                     open: {
                                         anchorID = opportunity.id
@@ -301,6 +374,8 @@ struct PipelineBoardView: View {
             )
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("pipeline-board-lane-\(lane.accessibilityName)")
+            .accessibilityLabel("\(lane.title) lane")
+            .accessibilityValue("\(laneOpportunities.count) opportunities")
             .onDrop(
                 of: [UTType.utf8PlainText.identifier],
                 delegate: PipelineStageDropDelegate(
@@ -473,6 +548,7 @@ private struct PipelineStageMoveHostOverlay: View {
 
 private struct PipelineOpportunityMoveCard: View {
     let opportunity: Opportunity
+    let isAnchored: Bool
     @Binding var focusedMoveOpportunityID: String?
     let open: () -> Void
     let move: (PipelineStageMoveRequest) -> Void
@@ -482,72 +558,68 @@ private struct PipelineOpportunityMoveCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .topTrailing) {
-                Button(action: open) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(opportunity.title)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(RekonTheme.primaryText)
-                                .lineLimit(2)
-                                .padding(.trailing, 70)
-                            HStack(spacing: 6) {
-                                PipelineEmployerMark(company: opportunity.company)
-                                Text(opportunity.company)
-                                    .font(.caption)
-                                    .foregroundStyle(RekonTheme.secondaryText)
-                                    .lineLimit(1)
-                                    .accessibilityIdentifier("pipeline-board-card-company-\(opportunity.id)")
-                            }
-                        }
-
-                        if let locality = opportunity.locationSummary {
-                            Label(locality, systemImage: "mappin.circle.fill")
+        ZStack(alignment: .topTrailing) {
+            Button(action: open) {
+                VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(opportunity.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(RekonTheme.primaryText)
+                            .lineLimit(2)
+                            .padding(.trailing, 42)
+                        HStack(spacing: 6) {
+                            PipelineEmployerMark(company: opportunity.company)
+                            Text(opportunity.company)
                                 .font(.caption)
                                 .foregroundStyle(RekonTheme.secondaryText)
                                 .lineLimit(1)
-                                .accessibilityIdentifier("pipeline-board-card-locality-\(opportunity.id)")
+                                .accessibilityIdentifier("pipeline-board-card-company-\(opportunity.id)")
                         }
-
-                        Divider().overlay(RekonTheme.borderSubtle)
-
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("Next action")
-                                .font(.caption2)
-                                .foregroundStyle(RekonTheme.secondaryText)
-                            Text(opportunity.nextAction.isEmpty ? "No next action" : opportunity.nextAction)
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(RekonTheme.primaryText)
-                                .lineLimit(2)
-                                .accessibilityIdentifier("pipeline-board-card-next-action-\(opportunity.id)")
-                        }
-
-                        HStack(spacing: 5) {
-                            Image(systemName: "calendar")
-                            Text(opportunity.dueAt.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "No due date")
-                                .lineLimit(1)
-                        }
-                        .font(.caption)
-                        .foregroundStyle(RekonTheme.secondaryText)
-                        .accessibilityIdentifier("pipeline-board-card-due-date-\(opportunity.id)")
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if let locality = opportunity.locationSummary {
+                        Label(locality, systemImage: "mappin.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(RekonTheme.secondaryText)
+                            .lineLimit(1)
+                            .accessibilityIdentifier("pipeline-board-card-locality-\(opportunity.id)")
+                    }
+
+                    Divider().overlay(RekonTheme.borderSubtle)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Next action")
+                            .font(.caption2)
+                            .foregroundStyle(RekonTheme.secondaryText)
+                        Text(opportunity.nextAction.isEmpty ? "No next action" : opportunity.nextAction)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(RekonTheme.primaryText)
+                            .lineLimit(2)
+                            .accessibilityIdentifier("pipeline-board-card-next-action-\(opportunity.id)")
+                    }
+
+                    HStack(spacing: 5) {
+                        Image(systemName: "calendar")
+                        Text(opportunity.dueAt.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "No due date")
+                            .lineLimit(1)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(RekonTheme.secondaryText)
+                    .accessibilityIdentifier("pipeline-board-card-due-date-\(opportunity.id)")
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("pipeline-opportunity-\(opportunity.id)")
-                .accessibilityLabel(opportunity.title)
-
-                PipelineStagePill(stage: opportunity.stage)
-                    .accessibilityIdentifier("pipeline-board-card-stage-\(opportunity.id)")
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("pipeline-opportunity-\(opportunity.id)")
+            .accessibilityLabel(opportunity.title)
 
-            PipelineStageMoveMenuControl(
+            PipelineCardActionsMenuControl(
                 opportunity: opportunity,
                 focusedOpportunityID: $focusedMoveOpportunityID,
+                open: open,
                 move: move
             )
-            .frame(maxWidth: .infinity, minHeight: 24)
+            .frame(width: 36, height: 36)
         }
         .padding(12)
         .background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: 12))
@@ -557,6 +629,7 @@ private struct PipelineOpportunityMoveCard: View {
         )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("pipeline-stage-move-card-\(opportunity.id)")
+        .accessibilityValue(isAnchored ? "Anchored" : "")
     }
 }
 
@@ -613,17 +686,18 @@ private struct PipelineBoardMoveShortcut: NSViewRepresentable {
     }
 }
 
-private struct PipelineStageMoveMenuControl: NSViewRepresentable {
+private struct PipelineCardActionsMenuControl: NSViewRepresentable {
     let opportunity: Opportunity
     @Binding var focusedOpportunityID: String?
+    let open: () -> Void
     let move: (PipelineStageMoveRequest) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
 
-    func makeNSView(context: Context) -> PipelineStageMoveMenuButton {
-        let button = PipelineStageMoveMenuButton(frame: .zero)
+    func makeNSView(context: Context) -> PipelineCardActionsMenuButton {
+        let button = PipelineCardActionsMenuButton(frame: .zero)
         button.target = context.coordinator
         button.action = #selector(Coordinator.presentMenu(_:))
         button.focusChanged = context.coordinator.focusChanged
@@ -631,13 +705,16 @@ private struct PipelineStageMoveMenuControl: NSViewRepresentable {
         return button
     }
 
-    func updateNSView(_ button: PipelineStageMoveMenuButton, context: Context) {
+    func updateNSView(_ button: PipelineCardActionsMenuButton, context: Context) {
         context.coordinator.parent = self
         button.focusChanged = context.coordinator.focusChanged
-        button.setAccessibilityIdentifier("pipeline-move-stage-\(opportunity.id)")
-        button.setAccessibilityLabel("Move to stage")
+        let accessibilityText = "Actions for \(opportunity.title)"
+        button.setAccessibilityIdentifier("pipeline-card-actions-\(opportunity.id)")
+        button.setAccessibilityLabel(accessibilityText)
+        button.setAccessibilityHelp(accessibilityText)
         button.baseAccessibilityValue = "Current stage: \(opportunity.stage.rawValue)"
-        button.toolTip = "Move to stage. Press Shift-Command-M to focus the first move control."
+        button.toolTip = accessibilityText
+        context.coordinator.markCurrentStage(in: button.menu, stage: opportunity.stage)
 
         if focusedOpportunityID == opportunity.id,
            button.window?.firstResponder !== button {
@@ -649,39 +726,45 @@ private struct PipelineStageMoveMenuControl: NSViewRepresentable {
     }
 
     final class Coordinator: NSObject {
-        var parent: PipelineStageMoveMenuControl
+        var parent: PipelineCardActionsMenuControl
 
-        init(parent: PipelineStageMoveMenuControl) {
+        init(parent: PipelineCardActionsMenuControl) {
             self.parent = parent
         }
 
-        func configureMenu(for button: PipelineStageMoveMenuButton) {
-            let menu = NSMenu(title: "Move to stage")
-            for (index, stage) in PipelineStage.allCases.enumerated() {
-                let item = NSMenuItem(
-                    title: stage.rawValue,
-                    action: #selector(selectStage(_:)),
-                    keyEquivalent: String(index + 1)
-                )
-                item.keyEquivalentModifierMask = []
-                item.tag = index
-                item.target = self
-                menu.addItem(item)
-            }
-            button.menu = menu
+        func configureMenu(for button: PipelineCardActionsMenuButton) {
+            button.menu = PipelineCardActionsMenuBuilder.makeMenu(
+                configuration: .canonical,
+                edit: { [weak self] in
+                    self?.parent.open()
+                },
+                move: { [weak self] stage in
+                    self?.submitMove(to: stage)
+                }
+            )
         }
 
-        @objc func presentMenu(_ button: PipelineStageMoveMenuButton) {
+        func markCurrentStage(in menu: NSMenu?, stage: PipelineStage) {
+            guard let moveItems = menu?.items.last?.submenu?.items else { return }
+            for (index, item) in moveItems.enumerated() {
+                guard PipelineCardActionsConfiguration.canonical.moveTargets.indices.contains(index) else {
+                    item.state = .off
+                    continue
+                }
+                item.state = PipelineCardActionsConfiguration.canonical.moveTargets[index] == stage ? .on : .off
+            }
+        }
+
+        @objc func presentMenu(_ button: PipelineCardActionsMenuButton) {
             button.window?.makeFirstResponder(button)
             button.presentMenu()
         }
 
-        @objc func selectStage(_ item: NSMenuItem) {
-            guard PipelineStage.allCases.indices.contains(item.tag) else { return }
+        private func submitMove(to stage: PipelineStage) {
             parent.move(
                 PipelineStageMoveRequest(
                     opportunityID: parent.opportunity.id,
-                    target: PipelineStage.allCases[item.tag]
+                    target: stage
                 )
             )
         }
@@ -696,7 +779,7 @@ private struct PipelineStageMoveMenuControl: NSViewRepresentable {
     }
 }
 
-private final class PipelineStageMoveMenuButton: NSButton {
+private final class PipelineCardActionsMenuButton: NSButton {
     var focusChanged: ((Bool) -> Void)?
     var baseAccessibilityValue = "" {
         didSet {
@@ -706,16 +789,14 @@ private final class PipelineStageMoveMenuButton: NSButton {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        title = "Move to stage"
-        image = NSImage(systemSymbolName: "arrow.right.circle", accessibilityDescription: nil)
-        imagePosition = .imageLeading
-        alignment = .left
-        font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .medium)
-        bezelStyle = .recessed
+        title = ""
+        image = NSImage(systemSymbolName: "ellipsis", accessibilityDescription: nil)
+        imagePosition = .imageOnly
+        bezelStyle = .texturedRounded
         setButtonType(.momentaryPushIn)
         setAccessibilityRole(.menuButton)
         wantsLayer = true
-        layer?.cornerRadius = 6
+        layer?.cornerRadius = 8
     }
 
     @available(*, unavailable)
@@ -804,10 +885,6 @@ private struct PipelineBoardEmptyLane: View {
 }
 
 private extension PipelineBoardLane {
-    static func forStage(_ stage: PipelineStage) -> PipelineBoardLane {
-        displayedLanes(includesClosed: true).first(where: { $0.includes(stage) }) ?? .saved
-    }
-
     var title: String {
         switch self {
         case .saved: "Saved"
