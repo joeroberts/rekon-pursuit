@@ -128,7 +128,7 @@ The lane test asserts `allCases.map(\.stage) == PipelineStage.allCases`, `lane.d
 
 The origin test uses non-default query `"Product"`, filter `"Screening"`, Include closed `true`, anchor `"fixture-screening-id"`, and horizontal lane `.offer`. It proves exact `Equatable` round-trip and destinations: Home → Home/Table false/no context; Table → Pipeline/Table false/no context; Board → Pipeline/Board true/exact context. It also proves every new Add entry replaces the prior token.
 
-The reset test opens an isolated store, seeds a subject, and snapshots `store.opportunities()`, `activityEvents()`, `stageHistory(forOpportunityID:)`, `needsAttention()`, all published arrays/counts/selection, workspace readiness, and `statusMessage`. Fill every Add field, including title/company/stage/nextAction/due date, URL/description/notes, legacy and structured compensation, pay period, location/work arrangement, application/response/stage dates, response state, action type/custom text, and toggles. Induce `addOpportunitySaveError` through the existing malformed-URL validation without a store write. After discard, assert exact defaults:
+The reset test opens an isolated store, seeds a subject, and snapshots `store.opportunities()`, `activityEvents()`, `stageHistory(forOpportunityID:)`, `needsAttention()`, all published arrays/counts/selection, and workspace readiness. Fill every Add field, including non-empty title/company, malformed `jobURL`, stage/nextAction/due date, description/notes, legacy and structured compensation, pay period, location/work arrangement, application/response/stage dates, response state, action type/custom text, and toggles. Explicitly call `createOpportunity()`. Rely on the existing pre-store URL validation already proved by `WorkspaceViewModelTests.testInvalidJobURLShowsAddOpportunitySaveErrorWithoutWriting`: require `addOpportunitySaveError == "Enter an absolute http or https job URL with a host."` and require the store opportunities/activity plus every persisted/projection snapshot to remain unchanged. Then snapshot that validation `statusMessage`, invoke `discardNewOpportunityDraft()`, and assert exact defaults:
 
 ```swift
 title/company/jobURL/jobDescription/notes/compensation/minimum/maximum/location/nextAction/actionCustomText == ""
@@ -143,7 +143,7 @@ addOpportunitySaveError == nil
 applicationDate/responseEffectiveDate/stageChangedAt/dueAt are within the call's before/after Date.now bounds
 ```
 
-Assert every store/published/status/selection/readiness snapshot is unchanged.
+Assert every original store/published/selection/readiness snapshot is unchanged and `statusMessage` still equals the post-validation value captured immediately before discard. This unit arrangement exercises `addOpportunitySaveError`; it is distinct from the computed `jobURLWarning` used by signed UI tests.
 
 - [ ] **Step 2: Run exact RED**
 
@@ -243,7 +243,7 @@ Lane oracle, in one selector: default IDs/counts saved/applied/screening/intervi
 
 Actions oracle first proves rendered card/actions control, `.menuButton`, exact label, tooltip (hover), keyboard focus after Shift-Command-M, and top-right frame. It then asserts ordered outer `["Edit opportunity", "Move to stage…"]`, ordered canonical submenu/current state, and card-body/Edit detail routing in independent attempts; only then assert old identifiers/control absent.
 
-Cancel and Escape use identical postconditions but distinct invocation. Before Add, record search value `Product`, stage selection `Screening`, Include closed, Product Designer anchor, and scroll to Offer. Assert `pipeline-board-region.value == "Horizontal lane: Offer"` and anchor card value `Anchored` after return, proving restored lane beats Screening anchor. Populate malformed URL and assert exact warning `Use an absolute http or https URL with a host. Imported legacy URLs are preserved until changed.` at `add-opportunity-url-warning`; also populate a next action and due date. Cancel clicks enabled `cancel-add-opportunity`; Escape sends Escape while that control is visible/enabled. Reopen Add and prove fields/warning cleared.
+Cancel and Escape use identical postconditions but distinct invocation. Before Add, record search value `Product`, stage selection `Screening`, Include closed, Product Designer anchor, and scroll to Offer. Assert `pipeline-board-region.value == "Horizontal lane: Offer"` and anchor card value `Anchored` after return, proving restored lane beats Screening anchor. Populate malformed URL and assert the computed `jobURLWarning` text `Use an absolute http or https URL with a host. Imported legacy URLs are preserved until changed.` at `add-opportunity-url-warning`; also populate a next action and due date. Do not click Save in either signed UI test: this oracle is the derived warning, not `addOpportunitySaveError`. Cancel clicks enabled `cancel-add-opportunity`; Escape sends Escape while that control is visible/enabled. Reopen Add and prove fields/warning cleared.
 
 Zero-write oracle captures before and same-session-relaunch after: summed Board card/lane counts, subject activity/history counts, number of `home-attention-*` cards, and `home-active-opportunities` value. All values must be equal.
 
@@ -278,4 +278,3 @@ Inspect signed wide/compact preview for readable horizontal five-lane Board, exa
 - [x] Drop target equals stage; production menu builder consumes the tested canonical configuration.
 - [x] URL warning, context, anchor, scroll, zero-write, retained matrix, RED/GREEN commands, and manual stop are executable.
 - [x] No placeholders or type/name mismatches remain; read-only boundaries are explicit.
-

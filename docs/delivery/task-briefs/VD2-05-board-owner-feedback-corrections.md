@@ -43,13 +43,13 @@ Core/store/schema/migrations/Core tests/VM tests, project/scheme, `AppShellView.
 
 ## Executable acceptance
 
-Pure signed selectors cover one-to-one `stage/dropTarget`, all three Add origins/exact context, exhaustive write-free reset, Applied/Screening presentation, horizontal-over-anchor precedence, and the production-consumed menu builder. Unit RED/GREEN commands must include the origin/context selector.
+Pure signed selectors cover one-to-one `stage/dropTarget`, all three Add origins/exact context, exhaustive write-free reset, Applied/Screening presentation, horizontal-over-anchor precedence, and the production-consumed menu builder. Unit RED/GREEN commands must include the origin/context selector. The discard test sets title/company plus malformed URL, snapshots store/projections, explicitly calls `createOpportunity()`, and relies on the pre-store validation proved by `WorkspaceViewModelTests.testInvalidJobURLShowsAddOpportunitySaveErrorWithoutWriting` to require a non-nil `addOpportunitySaveError` with unchanged store/activity. It then snapshots the validation `statusMessage`, discards, and proves the save error/draft clear while that status and every persisted/projection value remain unchanged.
 
 Signed lane proof asserts all five default/count IDs, conditional Closed, Senior Product Manager only in Applied, Product Designer only in Screening, and separate fresh-session native Saved → Applied/Screening moves with exact outcome, containment, relaunch, and +1 subject activity/history.
 
 Signed actions proof establishes the rendered card/button before absence assertions; checks role, label, hover tooltip, keyboard focus, top-right frame, ordered two-item menu, ordered six-stage submenu/current state, and independent card-body/Edit routing.
 
-Cancel and Escape each assert the same exact search/filter/closed/anchor/Offer-scroll restoration; malformed-URL warning `add-opportunity-url-warning` before and absence after; cleared next-action/due-date draft; and equal before/after-relaunch Board count, subject history/activity, Home attention-card count, and active-opportunity metric. Cancel clicks the enabled control; Escape sends Escape while it remains enabled.
+Cancel and Escape each assert the same exact search/filter/closed/anchor/Offer-scroll restoration; computed `jobURLWarning` at `add-opportunity-url-warning` before and absence after; cleared next-action/due-date draft; and equal before/after-relaunch Board count, subject history/activity, Home attention-card count, and active-opportunity metric. Neither signed UI test clicks Save or treats that derived warning as `addOpportunitySaveError`. Cancel clicks the enabled control; Escape sends Escape while it remains enabled.
 
 Retain, with only identifier retargeting: keyboard move, exact menu/current state, no-op/blocked/unavailable/write/projection/invalid/cancelled/outside source retention, Closed locality, exactly-one relaunch transition, and Reduce Motion focus/text selectors.
 
