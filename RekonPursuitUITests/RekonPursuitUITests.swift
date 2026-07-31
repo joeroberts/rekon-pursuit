@@ -755,7 +755,14 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertEqual(actions.label, "Actions for Senior iOS Engineer")
         XCTAssertEqual(actions.value as? String, "Current stage: Saved")
         actions.hover()
-        XCTAssertTrue(actions.isHittable)
+        let actionsTooltip = app.descendants(matching: .helpTag)
+            .matching(NSPredicate(format: "label == %@", "Actions for Senior iOS Engineer"))
+            .firstMatch
+        XCTAssertTrue(
+            actionsTooltip.waitForExistence(timeout: 3),
+            "Hover must expose the production NSButton tooltip/AXHelp text, not merely keep the actions control hittable."
+        )
+        XCTAssertEqual(actionsTooltip.label, actions.label)
         XCTAssertGreaterThan(actions.frame.minX, card.frame.midX)
         XCTAssertLessThanOrEqual(actions.frame.maxY, card.frame.maxY + 4)
 
@@ -870,7 +877,8 @@ final class RekonPursuitUITests: XCTestCase {
             baselineHomeAttention
         )
         XCTAssertEqual(app.descendants(matching: .any)["home-active-opportunities"].value as? String, baselineHomeActive)
-        openPipelineBoard(in: app)
+        let relaunchedProductDesignerID = configureBoardReturnContext(in: app)
+        XCTAssertEqual(relaunchedProductDesignerID, productDesignerID)
         XCTAssertEqual(boardCardCount(in: app, lanes: lanes), baselineBoardCount)
     }
 
@@ -1214,7 +1222,7 @@ final class RekonPursuitUITests: XCTestCase {
                 forDuration: 0.7,
                 thenDragTo: normalTarget.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
             )
-        XCTAssertTrue(normalApp.staticTexts["Moved to Screening."].waitForExistence(timeout: 5))
+        XCTAssertTrue(normalApp.staticTexts["Moved to Applied."].waitForExistence(timeout: 5))
         let normalObservation = normalApp.descendants(matching: .any)["pipeline-stage-move-motion-observation"]
         XCTAssertTrue(normalObservation.waitForExistence(timeout: 5))
         expectation(
@@ -1249,7 +1257,7 @@ final class RekonPursuitUITests: XCTestCase {
                 forDuration: 0.7,
                 thenDragTo: appliedLane.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
             )
-        XCTAssertTrue(app.staticTexts["Moved to Screening."].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Moved to Applied."].waitForExistence(timeout: 5))
         XCTAssertTrue(
             isContained(
                 app.buttons["pipeline-opportunity-\(opportunityID)"],
