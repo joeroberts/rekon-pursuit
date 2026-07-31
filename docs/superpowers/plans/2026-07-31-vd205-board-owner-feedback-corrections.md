@@ -2,157 +2,197 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make Board stages unambiguous, Add Opportunity safely cancellable back to Board, and Board card actions compact and accessible.
+**Goal:** Give Applied and Screening exact Board lanes/drop targets, make Add Opportunity safely cancellable to its true origin, and replace redundant card controls with one accessible actions menu.
 
-**Architecture:** Preserve Core and `WorkspaceViewModel.changeStage(_:to:)` as the only stage mutation boundary. Make `PipelineBoardLane` one-to-one with `PipelineStage`; lift only ephemeral Pipeline context from `PipelineView` to `ContentView`, above the Add route; and retain the typed `PipelineStageMoveRequest` for drag and menu moves.
+**Architecture:** Keep `PipelineStage`, `PipelineStageMoveRequest`, `StageMoveResult`, and `WorkspaceViewModel.changeStage(_:to:)` unchanged. A successor ADR first supersedes only VD2-04’s grouped-lane/inert-drop clauses; after fresh gates, `ContentView` owns live Pipeline state and an explicit Add origin, while `PipelineBoardView` consumes one-to-one lanes and one testable actions configuration.
 
 **Tech Stack:** Swift/SwiftUI/AppKit, XCTest/XCUITest, macOS 14, existing signed Debug UI-test host.
 
 ## Global Constraints
 
-- Retain exactly six canonical persisted stages: Saved, Applied, Screening, Interviewing, Offer, Closed.
-- No Core, store, schema, migration, provider, network, document, AI, security, test-host, project-file, dashboard, roadmap, evidence, or implementation-status change is released here.
-- If inspection proves a read-only path is needed, stop for Architecture/QA/TPM/Delivery authorization; do not expand scope.
-- Return context is transient UI state only: never Core, workspace, activity/history/task log, preferences, or launch arguments.
-- Preserve Table/right drawer, successful-save navigation, ID-only drag validation, reconciliation guard, rollback/outcome copy, Reduce Motion, fixture isolation, and signing.
-- Use unique `/private/tmp` DerivedData/result bundles and never set `CODE_SIGNING_ALLOWED=NO`.
-- The signed manual-first preview is the stop: no broad regression, independent post-implementation gates, status changes, or owner acceptance in this task.
+- Canonical persisted stages remain exactly Saved, Applied, Screening, Interviewing, Offer, Closed.
+- Core/store/schema/migrations, project/scheme, `AppShellView.swift`, visual theme, UI-test host/fixtures, dashboard, roadmap, evidence, and implementation/status files are read-only.
+- This planning revision does not edit source, tests, the approved spec, or any ADR.
+- Source/test work is blocked until the successor ADR exists and fresh Architecture, QA, TPM, and Delivery gates accept this corrected package.
+- Return state is transient `ContentView` state only; no workspace, Core, preference, activity, history, task, refresh, or status write.
+- Preserve successful-save behavior, Table/right drawer, ID-only drag validation, reconciliation, rollback/outcome copy, fixture isolation, and Reduce Motion.
+- Use unique `/private/tmp` DerivedData/result paths; never use `CODE_SIGNING_ALLOWED=NO`.
+- Stop after the signed Debug manual-first owner preview. No broad regression, final gates, status update, or successor release is authorized before owner approval.
 
-## File structure and interfaces
+## File and interface map
 
-**Writable:** `RekonPursuit/PipelineView.swift` (lane projection and bindings); `RekonPursuit/PipelineBoardView.swift` (exact drop targets, scroll binding, card actions); `RekonPursuit/ContentView.swift` (route-surviving return context and cancel callback); `RekonPursuit/WorkspaceViewModel.swift` (only a no-store draft reset if necessary); `RekonPursuitTests/RekonPursuitTests.swift`; `RekonPursuitUITests/RekonPursuitUITests.swift`.
+**Prerequisite architecture artifact (future Architect-owned task, not edited by this plan revision):**
+`docs/delivery/architecture/ADR-VD2-05-board-owner-feedback-lane-projection.md`.
 
-**Read-only:** `RekonPursuit/AppShellView.swift`; `RekonPursuitCore/Workspace/WorkspaceModels.swift`; `RekonPursuitCore/Workspace/WorkspaceStore.swift`; Core/VM tests; `RekonPursuit.xcodeproj/project.pbxproj`; `RekonPursuit/RekonVisualTheme.swift`; `RekonPursuitUITestHost/`; dashboard/roadmap/evidence/status files.
+**Writable after re-gates:** `RekonPursuit/PipelineView.swift`, `RekonPursuit/PipelineBoardView.swift`, `RekonPursuit/ContentView.swift`, `RekonPursuit/WorkspaceViewModel.swift` only for draft reset, `RekonPursuitTests/RekonPursuitTests.swift`, and `RekonPursuitUITests/RekonPursuitUITests.swift`.
+
+**Read-only:** every Global Constraints path, plus `RekonPursuitCoreTests/` and `RekonPursuitTests/WorkspaceViewModelTests.swift`.
 
 ```swift
-nonisolated enum PipelineBoardLane: CaseIterable, Equatable {
+nonisolated enum PipelineBoardLane: CaseIterable, Hashable {
     case saved, applied, screening, interviewing, offer, closed
     var stage: PipelineStage { get }
+    var dropTarget: PipelineStage { stage }
     func includes(_ stage: PipelineStage) -> Bool
     static func displayedLanes(includesClosed: Bool) -> [PipelineBoardLane]
 }
 
 nonisolated struct PipelineBoardReturnContext: Equatable {
-    var query: String
-    var stageFilter: String
-    var includesClosed: Bool
-    var selectedOrAnchoredOpportunityID: String?
-    var horizontalScrollLane: PipelineBoardLane?
+    let query: String
+    let stageFilter: String
+    let includesClosed: Bool
+    let selectedOrAnchoredOpportunityID: String?
+    let horizontalScrollLane: PipelineBoardLane?
+}
+
+nonisolated enum AddOpportunityOrigin: Equatable {
+    case home
+    case pipelineTable
+    case pipelineBoard(PipelineBoardReturnContext)
+}
+
+nonisolated struct AddOpportunityCancelDestination: Equatable {
+    let route: DailyRoute
+    let showsBoard: Bool
+    let boardContext: PipelineBoardReturnContext?
+}
+
+nonisolated struct PipelineCardActionsConfiguration: Equatable {
+    let editTitle: String
+    let moveTitle: String
+    let moveTargets: [PipelineStage]
+    static let canonical = Self(
+        editTitle: "Edit opportunity",
+        moveTitle: "Move to stage…",
+        moveTargets: PipelineStage.allCases
+    )
 }
 
 @MainActor func discardNewOpportunityDraft()
 ```
 
-`ContentView` owns the context. `PipelineView` binds query/filter/Include closed/anchor; `PipelineBoardView` binds `horizontalScrollLane` through the horizontal `.scrollPosition(id:)`, using lane IDs. The card’s AppKit menu has exactly two top-level titles—`Edit opportunity`, `Move to stage…`—and the latter has canonical six-stage children.
+Production menu construction must call one internal `PipelineCardActionsMenuBuilder.makeMenu(configuration: .canonical, edit:move:)`; the unit test calls that same builder/configuration. Production drops must pass `lane.dropTarget`, whose implementation is exactly `stage`.
 
 ---
 
-### Task 1: Approve the presentation-only boundary
+### Task 0: Successor ADR prerequisite
 
 **Files:**
-- Modify: this plan only if a gate correction is approved.
-- Read-only: controlling spec/VD2-05 plan/brief and the listed source/tests.
+- Create later by Architect: `docs/delivery/architecture/ADR-VD2-05-board-owner-feedback-lane-projection.md`
+- Read-only now: approved spec and `ADR-VD2-04-pipeline-fidelity-lane-mapping.md`
 
-**Consumes:** approved Board Owner-Feedback Corrections Design.
-**Produces:** Architecture, QA, TPM, and Delivery acceptance; Task 2 release only.
+**Consumes:** approved correction design and rejected Task 1 gates.
+**Produces:** one accepted architecture decision; no source/test release.
 
-- [ ] **Step 1: Record immutable contracts**
+- [ ] **Step 1: Author the successor decision**
 
-Record that `PipelineStage`, `PipelineStageMoveRequest`, `StageMoveResult`, and `WorkspaceViewModel.changeStage(_:to:)` remain unchanged and remain the sole writer path. Record that Core, project registration, fixture data, dashboard, and status are not authorized.
+The Architect records that the new ADR supersedes only VD2-04’s four-primary-lane grouping and inert-drop clauses. It establishes five default exact lanes plus conditional Closed and exact namesake drop targets, while preserving VD2-04 Table/right-drawer and every unrelated accepted presentation contract.
 
-- [ ] **Step 2: Approve return ownership**
+- [ ] **Step 2: Verify the decision boundary**
 
-Approve capture before Board → Add routing:
+The Architect states that no `PipelineStage`, persistence, schema, transaction, audit/history, reconciliation, fixture, project, or security contract changes. Any broader ADR change is rejected.
 
-```swift
-PipelineBoardReturnContext(
-  query: query, stageFilter: stageFilter, includesClosed: includesClosed,
-  selectedOrAnchoredOpportunityID: pipelineAnchorID,
-  horizontalScrollLane: boardHorizontalScrollLane
-)
-```
+### Task 1: Fresh pre-source gates
 
-Cancel restores it only when Add began from Board. Home Add and Table Add retain their existing behavior.
+**Files:** gate reports and Delivery release record only; no source/test edit.
 
-- [ ] **Step 3: Release the next dependency-safe task**
+**Consumes:** Task 0 successor ADR and this corrected plan/brief.
+**Produces:** named Task 2 release only.
 
-Architecture verifies no persistence contract change; QA accepts the selectors/zero-write oracle; TPM verifies dependencies; Delivery releases Task 2. No source/test edit precedes all four decisions.
+- [ ] **Step 1: Re-run independent gates**
 
-### Task 2: Test first—exact lanes and zero-write draft discard
+Architecture verifies origin/scroll precedence and successor-ADR consistency. QA verifies executable drop/menu/context/zero-write oracles. TPM verifies the held Board repair and this correction are reconciled without advancing roadmap/status. Delivery may release Task 2 only after all three accept; any reject holds all source/test work.
+
+### Task 2: RED/GREEN—origin, live context, exact lanes, pure reset
 
 **Files:**
 - Modify: `RekonPursuit/PipelineView.swift`
 - Modify: `RekonPursuit/ContentView.swift`
-- Modify: `RekonPursuit/WorkspaceViewModel.swift` only for draft reset
-- Modify: `RekonPursuitTests/RekonPursuitTests.swift`
+- Modify: `RekonPursuit/WorkspaceViewModel.swift` only for `discardNewOpportunityDraft()`
+- Test: `RekonPursuitTests/RekonPursuitTests.swift`
 
-**Consumes:** Task 1 approval.
-**Produces:** pure lane/context/draft contracts.
+**Consumes:** Task 1 release.
+**Produces:** exact pure contracts and live route-surviving state.
 
-- [ ] **Step 1: Write failing unit tests**
+- [ ] **Step 1: Write three failing tests**
 
-Replace the grouped-lane test with:
+Add exact selectors:
 
 ```swift
-func testVD205PipelineBoardLaneMappingIsOneToOneAndCanonical() {
-  XCTAssertEqual(PipelineBoardLane.allCases.map(\.stage), PipelineStage.allCases)
-  XCTAssertEqual(PipelineBoardLane.displayedLanes(includesClosed: false),
-                 [.saved, .applied, .screening, .interviewing, .offer])
-  XCTAssertEqual(PipelineBoardLane.displayedLanes(includesClosed: true),
-                 [.saved, .applied, .screening, .interviewing, .offer, .closed])
-  for lane in PipelineBoardLane.allCases {
-    for stage in PipelineStage.allCases { XCTAssertEqual(lane.includes(stage), lane.stage == stage) }
-  }
-}
-@MainActor func testDiscardNewOpportunityDraftClearsOnlyTransientAddFieldsAndError()
+func testVD205PipelineBoardLaneStageAndDropTargetsAreOneToOneAndCanonical()
+func testVD205AddOpportunityOriginResolvesHomeTableAndExactBoardContext()
+@MainActor func testVD205DiscardNewOpportunityDraftIsExhaustivePureAndWriteFree() throws
 ```
 
-The second test fills every Add field and error, invokes the reset, and proves default fields/error plus unchanged opportunities, activities, history, task/count projections. Add a pure context round-trip equality test for query/filter/Include closed/anchor/scroll lane without a workspace.
+The lane test asserts `allCases.map(\.stage) == PipelineStage.allCases`, `lane.dropTarget == lane.stage` for all six, `includes(stage) == (lane.stage == stage)`, five default lanes, and conditional sixth Closed.
 
-- [ ] **Step 2: Run RED**
+The origin test uses non-default query `"Product"`, filter `"Screening"`, Include closed `true`, anchor `"fixture-screening-id"`, and horizontal lane `.offer`. It proves exact `Equatable` round-trip and destinations: Home → Home/Table false/no context; Table → Pipeline/Table false/no context; Board → Pipeline/Board true/exact context. It also proves every new Add entry replaces the prior token.
 
-Run:
+The reset test opens an isolated store, seeds a subject, and snapshots `store.opportunities()`, `activityEvents()`, `stageHistory(forOpportunityID:)`, `needsAttention()`, all published arrays/counts/selection, workspace readiness, and `statusMessage`. Fill every Add field, including title/company/stage/nextAction/due date, URL/description/notes, legacy and structured compensation, pay period, location/work arrangement, application/response/stage dates, response state, action type/custom text, and toggles. Induce `addOpportunitySaveError` through the existing malformed-URL validation without a store write. After discard, assert exact defaults:
+
+```swift
+title/company/jobURL/jobDescription/notes/compensation/minimum/maximum/location/nextAction/actionCustomText == ""
+stage == .saved
+compensationPayPeriod == .year
+workArrangement == .notSpecified
+responseState == .noResponseRecorded
+actionType == .noAction
+hasApplicationDate == false
+hasDueDate == false
+addOpportunitySaveError == nil
+applicationDate/responseEffectiveDate/stageChangedAt/dueAt are within the call's before/after Date.now bounds
+```
+
+Assert every store/published/status/selection/readiness snapshot is unchanged.
+
+- [ ] **Step 2: Run exact RED**
 
 ```bash
 xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -destination 'platform=macOS' \
   -derivedDataPath /private/tmp/rekon-vd205-feedback-red-unit-20260731-dd \
   -resultBundlePath /private/tmp/rekon-vd205-feedback-red-unit-20260731.xcresult \
-  -only-testing:RekonPursuitTests/RekonPursuitTests/testVD205PipelineBoardLaneMappingIsOneToOneAndCanonical \
-  -only-testing:RekonPursuitTests/RekonPursuitTests/testDiscardNewOpportunityDraftClearsOnlyTransientAddFieldsAndError
+  -only-testing:RekonPursuitTests/RekonPursuitTests/testVD205PipelineBoardLaneStageAndDropTargetsAreOneToOneAndCanonical \
+  -only-testing:RekonPursuitTests/RekonPursuitTests/testVD205AddOpportunityOriginResolvesHomeTableAndExactBoardContext \
+  -only-testing:RekonPursuitTests/RekonPursuitTests/testVD205DiscardNewOpportunityDraftIsExhaustivePureAndWriteFree
 ```
 
-Expected: only absent exact lane/reset behavior; signing, fixture, database, or host failure is invalid RED.
+Expected: failure only for absent exact lane/drop, origin/destination, and discard contracts.
 
-- [ ] **Step 3: Implement the minimal presentation/reset boundary**
+- [ ] **Step 3: Implement minimal contracts**
 
-Make `stage` a total exact switch, `includes` equality, and five open plus conditional Closed ordering. Bind the lifted context through Pipeline/Board. Implement `discardNewOpportunityDraft()` by resetting exactly the existing post-save Add draft values/error, but never call `readyStore`, `create`, `refreshCounts`, or update `statusMessage`. Factor existing successful reset only if its observable success behavior remains unchanged.
+`ContentView` owns live `pipelineQuery`, `pipelineStageFilter`, `pipelineIncludesClosed`, `showsPipelineBoard`, `pipelineAnchorID`, `pipelineHorizontalLane`, and optional `addOpportunityOrigin`. `PipelineView` receives bindings for all except origin; `selectedTableID` stays local.
 
-- [ ] **Step 4: Run GREEN and enforce path scope**
+Every entry calls `beginAddOpportunity(origin:)` before selecting Add: Home passes `.home`; Pipeline reads `showsPipelineBoard` and passes `.pipelineTable` or a synchronously captured `.pipelineBoard(context)`. Each entry overwrites the token. Sidebar/other non-cancel departure clears it so stale Board context cannot affect later Add. Successful save neither consumes nor reinterprets it.
 
-Re-run Step 2 with `green-unit` derived/result paths; require both pass. Run `git diff --check` and inspect diffs for every read-only path; any read-only change stops the release.
+`cancelAddOpportunity()` snapshots the origin locally, calls discard, applies the exact destination/context, selects the destination, then clears the token. Cancel and Escape call this one callback.
 
-### Task 3: Test first—exact Board targets and Option-C actions
+Implement discard as a pure in-memory reset with the exhaustive defaults from Step 1. It must not call `readyStore`, `create`, `refreshCounts`, or mutate status/projections/selection/readiness. A private reset helper may be shared after successful create, but successful save retains its current refresh/status behavior.
+
+- [ ] **Step 4: Run exact GREEN**
+
+Re-run Step 2 with `green-unit` paths and all three selectors. Require three passes, signed test bundle, `git diff --check`, and zero new diff in every read-only path.
+
+### Task 3: RED/GREEN—scroll precedence, exact Board, production-linked actions
 
 **Files:**
 - Modify: `RekonPursuit/PipelineBoardView.swift`
 - Modify: `RekonPursuit/PipelineView.swift`
-- Modify: `RekonPursuitTests/RekonPursuitTests.swift`
+- Test: `RekonPursuitTests/RekonPursuitTests.swift`
 
-**Consumes:** Task 2.
-**Produces:** five readable open lanes, exact targets, ellipsis menu.
+**Consumes:** Task 2 bindings and exact lanes.
+**Produces:** exact Board rendering/drop/scroll and Option-C actions.
 
-- [ ] **Step 1: Write failing Board contracts**
+- [ ] **Step 1: Write failing direct contracts**
 
-Update persisted Screening presentation to expect `.screening`, add Applied expectation `.applied`, and add:
+Add/update:
 
 ```swift
-func testVD205CardActionsContainOnlyEditAndCanonicalMoveSubmenu() {
-  XCTAssertEqual(PipelineCardAction.topLevelTitles, ["Edit opportunity", "Move to stage…"])
-  XCTAssertEqual(PipelineCardAction.moveTargets, PipelineStage.allCases)
-}
+func testVD205PersistedAppliedAndScreeningPresentInTheirExactLanes()
+func testVD205RestoredHorizontalLaneWinsOverAnchorDerivedLane()
+@MainActor func testVD205ProductionMenuBuilderConsumesCanonicalActionsConfiguration()
 ```
 
-Add a focus assertion that Shift-Command-M targets `focusedActionsOpportunityID`, not the removed full-width move control.
+The first proves Applied → `.applied`, Screening → `.screening`, and `dropTarget == stage`. The second proves resolver precedence `restoredLane ?? anchorStage.map(PipelineBoardLane.forStage)`, specifically restored Offer wins over a Screening anchor. The menu test invokes the same production builder and asserts exactly two ordered outer items and one ordered six-stage submenu from `.canonical`.
 
 - [ ] **Step 2: Run RED**
 
@@ -160,80 +200,82 @@ Add a focus assertion that Shift-Command-M targets `focusedActionsOpportunityID`
 xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -destination 'platform=macOS' \
   -derivedDataPath /private/tmp/rekon-vd205-feedback-red-board-20260731-dd \
   -resultBundlePath /private/tmp/rekon-vd205-feedback-red-board-20260731.xcresult \
-  -only-testing:RekonPursuitTests/RekonPursuitTests/testPersistedResultUsesExactStageChipAndBoardLane \
-  -only-testing:RekonPursuitTests/RekonPursuitTests/testVD205CardActionsContainOnlyEditAndCanonicalMoveSubmenu
+  -only-testing:RekonPursuitTests/RekonPursuitTests/testVD205PersistedAppliedAndScreeningPresentInTheirExactLanes \
+  -only-testing:RekonPursuitTests/RekonPursuitTests/testVD205RestoredHorizontalLaneWinsOverAnchorDerivedLane \
+  -only-testing:RekonPursuitTests/RekonPursuitTests/testVD205ProductionMenuBuilderConsumesCanonicalActionsConfiguration
 ```
 
-Expected: only grouped Screening projection and absent actions contract.
+Expected: grouped Screening, anchor override, and old one-level menu fail.
 
-- [ ] **Step 3: Implement exact Board semantics**
+- [ ] **Step 3: Implement Board and menu**
 
-Use `lane.stage` as every drop delegate target; retain payload validation and the one `submit` call. Applied/Screening receive distinct container/count IDs and unique accessible names. Bind the horizontal scroll to the context lane ID without shrinking readable cards (270 open / existing 230 Closed only if visual review retains it).
+Bind lane IDs to horizontal `.scrollPosition(id:)`. A non-nil bound restored lane is applied first and cannot be overwritten by anchor `onAppear`/change; only nil horizontal state derives `PipelineBoardLane.forStage(anchor.stage)`. Anchor remains for card marking and lane-local vertical scroll. Board region keeps identifier `pipeline-board-region` and publishes exact AX value `Horizontal lane: <lane title>`; the anchored card publishes `Anchored`.
 
-Replace the pill and `PipelineStageMoveMenuControl` with compact top-right `PipelineCardActionsMenuControl`: identifier `pipeline-card-actions-<id>`; label/tooltip `Actions for <title>`; visible focus; sufficient hit frame. It contains only Edit (existing `open`) and a Move submenu in canonical order/current-stage state. Every Move creates the unchanged typed request; card body still opens details. Retarget focus shortcut and post-move focus to actions. Keep all failure/no-op/invalid/outside/reduce-motion behavior.
+Use fixed readable lane widths in horizontal scrolling. Render distinct lane/count/empty/drop containers for Applied and Screening. Every drop delegate receives `lane.dropTarget`.
+
+Build the compact top-right `pipeline-card-actions-<id>` from `PipelineCardActionsConfiguration.canonical`: ellipsis image; label, tooltip, and AX help `Actions for <title>`; focus ring and sufficient hit target. Outer menu is exactly Edit and Move; Move owns the six targets/current state. Edit/card body call existing `open`; Move creates the unchanged typed request. Remove stage pill and full-width control. Shift-Command-M and post-move focus target actions.
+
+Add identifier `add-opportunity-url-warning` to the existing derived warning. Do not create a failure fixture.
 
 - [ ] **Step 4: Run GREEN**
 
-Re-run Step 2 with `green-board` paths; require pass. Run `git diff --check`; verify production has no stage-pill, `pipeline-board-card-stage-`, full-width `PipelineStageMoveMenuControl`, or `pipeline-move-stage-` control.
+Re-run Step 2 with `green-board` paths. Require three passes and `git diff --check`. Verify production lacks `pipeline-board-card-stage-` and `pipeline-move-stage-`; positive menu-builder/card proof must precede absence checks.
 
-### Task 4: Test first—signed UI proof and manual-first stop
+### Task 4: Signed UI proof and manual-first stop
 
 **Files:**
-- Modify: `RekonPursuit/ContentView.swift`
-- Modify: `RekonPursuit/PipelineView.swift`
-- Modify: `RekonPursuit/PipelineBoardView.swift`
-- Modify: `RekonPursuitUITests/RekonPursuitUITests.swift`
+- Modify: the four authorized production files only as required by Tasks 2–3
+- Test: `RekonPursuitUITests/RekonPursuitUITests.swift`
 
-**Consumes:** Tasks 2–3.
-**Produces:** signed preview for owner review only.
+**Consumes:** Task 3.
+**Produces:** focused signed preview evidence.
 
-- [ ] **Step 1: Write failing signed UI tests**
+- [ ] **Step 1: Write four failing signed selectors**
 
 ```swift
 func testVD205BoardRendersExactAppliedAndScreeningLanesAndDropTargets() throws
-func testVD205BoardActionsMenuEditsAndMovesWithoutStageChipOrFullWidthMoveControl() throws
-func testVD205BoardCancelReturnsToBoardWithDraftDiscardedAndNoWrites() throws
-func testVD205BoardEscapeCancelsToSameBoardContextWithoutWrites() throws
+func testVD205BoardActionsMenuEditsAndMovesWithoutOldControls() throws
+func testVD205BoardCancelRestoresExactOriginContextAndWritesNothing() throws
+func testVD205BoardEscapeRestoresExactOriginContextAndWritesNothing() throws
 ```
 
-Lane test proves five default and conditional sixth Closed, distinct containers, Saved → Applied and a fresh-session Saved → Screening, relaunch, and exactly one new history/activity transition per real move. Actions test proves `pipeline-card-actions-<id>` role/label, two top-level actions, six submenu labels/current state, card body plus Edit detail route, removed controls absent, and Shift-Command-M/Space submenu keyboard use.
+Lane oracle, in one selector: default IDs/counts saved/applied/screening/interviewing/offer and no Closed; Include closed adds exactly Closed/count; Senior Product Manager is only in Applied and Product Designer only in Screening with distinct accessible names; fresh sessions perform native Saved → Applied and Saved → Screening, assert exact outcome/containment, relaunch stage, and +1 subject activity/history each.
 
-Cancel/Escape tests capture nonempty query, stage filter, Include closed, anchor, and horizontal lane; enter Add from Board; populate draft plus draft-only error; Cancel or Escape; assert Board/context/scroll restoration, blank reopened form, and baseline-equal opportunity/activity/history/task counts after relaunch. Escape must activate the same cancel callback.
+Actions oracle first proves rendered card/actions control, `.menuButton`, exact label, tooltip (hover), keyboard focus after Shift-Command-M, and top-right frame. It then asserts ordered outer `["Edit opportunity", "Move to stage…"]`, ordered canonical submenu/current state, and card-body/Edit detail routing in independent attempts; only then assert old identifiers/control absent.
 
-- [ ] **Step 2: Run signed RED**
+Cancel and Escape use identical postconditions but distinct invocation. Before Add, record search value `Product`, stage selection `Screening`, Include closed, Product Designer anchor, and scroll to Offer. Assert `pipeline-board-region.value == "Horizontal lane: Offer"` and anchor card value `Anchored` after return, proving restored lane beats Screening anchor. Populate malformed URL and assert exact warning `Use an absolute http or https URL with a host. Imported legacy URLs are preserved until changed.` at `add-opportunity-url-warning`; also populate a next action and due date. Cancel clicks enabled `cancel-add-opportunity`; Escape sends Escape while that control is visible/enabled. Reopen Add and prove fields/warning cleared.
 
-```bash
-xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -destination 'platform=macOS' \
-  -derivedDataPath /private/tmp/rekon-vd205-feedback-red-ui-20260731-dd \
-  -resultBundlePath /private/tmp/rekon-vd205-feedback-red-ui-20260731.xcresult \
-  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD205BoardRendersExactAppliedAndScreeningLanesAndDropTargets \
-  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD205BoardActionsMenuEditsAndMovesWithoutStageChipOrFullWidthMoveControl \
-  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD205BoardCancelReturnsToBoardWithDraftDiscardedAndNoWrites \
-  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD205BoardEscapeCancelsToSameBoardContextWithoutWrites
+Zero-write oracle captures before and same-session-relaunch after: summed Board card/lane counts, subject activity/history counts, number of `home-attention-*` cards, and `home-active-opportunities` value. All values must be equal.
+
+- [ ] **Step 2: Run signed RED then GREEN**
+
+Run the four selectors together with unique `red-ui` paths, implement only named behavior, then repeat with `green-ui` paths. RED is valid only for absent behavior; GREEN is exactly four pass/zero skip. Inspect result summary/details and verify app/host/test-bundle signatures using `codesign --verify --deep --strict --verbose=2`.
+
+- [ ] **Step 3: Preserve the retained matrix**
+
+Retarget only obsolete helper identifiers and run these signed selectors unchanged in meaning:
+
+```text
+testVD205BoardKeyboardMoveFocusesControlAndCompletes
+testVD205BoardMenuExposesExactTargetsAndCurrentStageAXState
+testVD205BoardNoOpBlockedUnavailableFailedCancelAndInvalidRetainSource
+testVD205BoardClosedFilterStaysSessionLocalDuringMove
+testVD205BoardHistoryContainsExactlyOneNewSubjectTransition
+testVD205BoardReduceMotionHasNoSpatialTransitionAndRetainsFocus
 ```
 
-Require named behavior failures only; verify signed product/host/test bundle with `codesign --verify --deep --strict --verbose=2`.
+This retains keyboard/menu activation; same-stage no-op; blocked Close; unavailable/write/projection failure; invalid/cancelled/outside drag source retention; Closed locality; exactly-one transition across relaunch; and Reduce Motion focus/text. Require six pass/zero skip, signatures, and `git diff --check`.
 
-- [ ] **Step 3: Implement shared cancellation routing**
+- [ ] **Step 4: Manual-first preview and stop**
 
-On Board Add, capture context then route Add. Pass `cancel: cancelAddOpportunity` into Add view. Render visible `Cancel` beside Save with `cancel-add-opportunity` and `.keyboardShortcut(.cancelAction)`. Shared callback resets draft, restores captured context, clears the one-shot marker, and immediately selects Pipeline without confirmation. Do not alter successful-save behavior.
-
-- [ ] **Step 4: Run signed GREEN and retained focused proof**
-
-Re-run Step 2 with unique `green-ui` paths. Then, separately, run retained signed selectors: `testVD205BoardNoOpBlockedUnavailableFailedCancelAndInvalidRetainSource`, `testVD205BoardClosedFilterStaysSessionLocalDuringMove`, `testVD205BoardHistoryContainsExactlyOneNewSubjectTransition`, and `testVD205BoardReduceMotionHasNoSpatialTransitionAndRetainsFocus`; update only their control identifiers to actions. Require zero skipped and inspect result summary/details/signatures plus `git diff --check`.
-
-- [ ] **Step 5: Build signed Debug preview and stop**
-
-Manually inspect wide/compact Board: horizontal readability, separate Applied/Screening headings/counts/drop zones, card body/Edit/Move paths, cancel/escape restored state, and Reduce Motion focus/outcome. Hand off the signed preview to the owner. Do not run broad regression or delivery updates.
+Inspect signed wide/compact preview for readable horizontal five-lane Board, exact Applied/Screening areas, menu/card routes, Home/Table/Board Cancel/Escape destinations, restored Offer-over-Screening precedence, and Reduce Motion. Hand off to owner and stop; do not run broad regression or update delivery state.
 
 ## Self-review
 
-- [x] Spec coverage: Tasks 2–4 cover lane/drop mapping; default/conditional lane count; persisted move/history; menu/card/body/keyboard/AX; removed controls; Cancel/Escape context and zero writes; retained outcomes/motion/Table.
-- [x] Placeholder scan: no TBD/TODO or undefined follow-up work.
-- [x] Type consistency: `PipelineBoardLane.stage`, `PipelineBoardReturnContext.horizontalScrollLane`, `discardNewOpportunityDraft()`, and `PipelineCardAction` use one spelling throughout.
-- [x] Scope: Core/persistence/project/test-host/status remain read-only and deviations stop work.
-
-## Execution handoff
-
-Plan saved to `docs/superpowers/plans/2026-07-31-vd205-board-owner-feedback-corrections.md`. Delivery must use the repository’s fresh Implementer → independent Code Reviewer/QA → Architecture/TPM/Delivery gate sequence, releasing one dependency-safe task at a time.
+- [x] Successor ADR and fresh Architecture/QA/TPM/Delivery re-gates precede source/test work.
+- [x] Home/Table/Board origins, stale-token replacement/clearing, live Pipeline ownership, and horizontal-over-anchor precedence are exact.
+- [x] Draft reset enumerates every Add-bound field and proves store/projection/status immutability.
+- [x] Drop target equals stage; production menu builder consumes the tested canonical configuration.
+- [x] URL warning, context, anchor, scroll, zero-write, retained matrix, RED/GREEN commands, and manual stop are executable.
+- [x] No placeholders or type/name mismatches remain; read-only boundaries are explicit.
 
