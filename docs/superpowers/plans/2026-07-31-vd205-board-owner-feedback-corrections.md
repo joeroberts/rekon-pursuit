@@ -107,13 +107,13 @@ Architecture verifies origin/scroll precedence and successor-ADR consistency. QA
 
 **Files:**
 - Modify: `RekonPursuit/PipelineView.swift`
-- Modify: `RekonPursuit/PipelineBoardView.swift` solely to remove its obsolete private `dropTarget` declaration so the existing production drop delegates consume the canonical property; no lane-container rendering, menu, scroll, or focus change
+- Modify: `RekonPursuit/PipelineBoardView.swift` solely to remove its obsolete private `dropTarget` declaration and add exactly three exhaustive `.screening` arms: `title` → `"Screening"`, `symbolName` → `"checklist"`, and `accent` → `RekonTheme.accent`; no other Board edit
 - Modify: `RekonPursuit/ContentView.swift`
 - Modify: `RekonPursuit/WorkspaceViewModel.swift` only for `discardNewOpportunityDraft()`
 - Test: `RekonPursuitTests/RekonPursuitTests.swift`
 
 **Consumes:** Task 1 release.
-**Produces:** exact pure contracts, live route-surviving state, and the intentional production-linked target change in which the existing Applied drop delegate requests `.applied` instead of the obsolete `.screening`.
+**Produces:** exact pure contracts, live route-surviving state, the intentional production-linked Applied drop change from `.screening` to `.applied`, and the basic live Screening lane title/icon/accent emitted by the existing generic Board rendering.
 
 - [ ] **Step 1: Write three failing tests**
 
@@ -157,11 +157,22 @@ xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -destinatio
   -only-testing:RekonPursuitTests/RekonPursuitTests/testVD205DiscardNewOpportunityDraftIsExhaustivePureAndWriteFree
 ```
 
-Expected: failure only for absent exact lane/drop, origin/destination, and discard contracts. For the lane selector, the valid RED is that the current `dropTarget` is private/inaccessible and still implements the obsolete Applied → Screening mapping; do not add a second declaration before capturing RED.
+Expected: failure only for absent exact lane/drop, origin/destination, and discard contracts. For the lane selector, the valid RED is that the current `dropTarget` is private/inaccessible and still implements the obsolete Applied → Screening mapping; do not add a second declaration before capturing RED. During GREEN, adding `.screening` to the canonical enum also makes the private `title`, `symbolName`, and `accent` switches non-exhaustive until the three authorized arms are added; that compile failure is part of the same exact-lane implementation boundary, not a reason to defer the arms to Task 3.
 
 - [ ] **Step 3: Implement minimal contracts**
 
-Define the single canonical internal `PipelineBoardLane.dropTarget` in `PipelineView.swift` as `stage`. In the same GREEN implementation, remove the obsolete private `dropTarget` declaration from `PipelineBoardView.swift`; its existing production drop delegates continue using `lane.dropTarget` and therefore intentionally change the Applied target from `.screening` to exact `.applied`. Task 2 authorizes exactly that live target behavior change and no delegate restructuring, lane-container rendering, menu, scroll, or focus change.
+Define the single canonical internal `PipelineBoardLane.dropTarget` in `PipelineView.swift` as `stage`. In the same GREEN implementation, remove the obsolete private `dropTarget` declaration from `PipelineBoardView.swift`; its existing production drop delegates continue using `lane.dropTarget` and therefore intentionally change the Applied target from `.screening` to exact `.applied`. Add only these required switch arms in that file:
+
+```swift
+// title
+case .screening: "Screening"
+// symbolName
+case .screening: "checklist"
+// accent
+case .screening: RekonTheme.accent
+```
+
+Task 2 therefore intentionally makes the basic Screening lane title/icon/accent live through the existing generic Board loop, in addition to changing the exact drop target. It authorizes no other Board edit: no delegate restructuring, bound-scroll change, Option-C menu, focus change, accessibility refinement, or richer lane-container work.
 
 `ContentView` owns live `pipelineQuery`, `pipelineStageFilter`, `pipelineIncludesClosed`, `showsPipelineBoard`, `pipelineAnchorID`, `pipelineHorizontalLane`, and optional `addOpportunityOrigin`. `PipelineView` receives bindings for all except origin; `selectedTableID` stays local.
 
@@ -182,8 +193,8 @@ Re-run Step 2 with `green-unit` paths and all three selectors. Require three pas
 - Modify: `RekonPursuit/PipelineView.swift`
 - Test: `RekonPursuitTests/RekonPursuitTests.swift`
 
-**Consumes:** Task 2 bindings and exact lanes, including the single internal `PipelineBoardLane.dropTarget == stage` declared in `PipelineView.swift`; `PipelineBoardView.swift` no longer has a private duplicate.
-**Produces:** distinct Applied/Screening lane rendering, bound horizontal scroll behavior, and Option-C actions; the exact production drop target is already complete in Task 2.
+**Consumes:** Task 2 bindings and exact lanes, including the single internal `PipelineBoardLane.dropTarget == stage`, no private duplicate, and the live Screening title `"Screening"`, symbol `"checklist"`, and `RekonTheme.accent` arm.
+**Produces:** bound horizontal scroll behavior, Option-C actions, actions focus behavior, accessibility refinements, and richer distinct Applied/Screening container proof; the basic Screening lane and exact production drop target are already live in Task 2.
 
 - [ ] **Step 1: Write failing direct contracts**
 
@@ -214,7 +225,7 @@ Expected: grouped Screening, anchor override, and old one-level menu fail.
 
 Bind lane IDs to horizontal `.scrollPosition(id:)`. A non-nil bound restored lane is applied first and cannot be overwritten by anchor `onAppear`/change; only nil horizontal state derives `PipelineBoardLane.forStage(anchor.stage)`. Anchor remains for card marking and lane-local vertical scroll. Board region keeps identifier `pipeline-board-region` and publishes exact AX value `Horizontal lane: <lane title>`; the anchored card publishes `Anchored`.
 
-Use fixed readable lane widths in horizontal scrolling. Render distinct lane/count/empty/drop containers for Applied and Screening. Retain the existing delegates' consumption of Task 2's exact `lane.dropTarget`; do not introduce or alter another target mapping in Task 3.
+Use fixed readable lane widths in horizontal scrolling. Retain Task 2's basic Screening title/icon/accent and exact delegate target, then add the bound-scroll and accessibility refinements needed for rich distinct lane/count/empty/drop-container proof. Do not introduce or alter another target mapping in Task 3.
 
 Build the compact top-right `pipeline-card-actions-<id>` from `PipelineCardActionsConfiguration.canonical`: ellipsis image; label, tooltip, and AX help `Actions for <title>`; focus ring and sufficient hit target. Outer menu is exactly Edit and Move; Move owns the six targets/current state. Edit/card body call existing `open`; Move creates the unchanged typed request. Remove stage pill and full-width control. Shift-Command-M and post-move focus target actions.
 
