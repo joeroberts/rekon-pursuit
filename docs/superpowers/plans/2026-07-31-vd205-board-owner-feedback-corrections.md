@@ -107,13 +107,13 @@ Architecture verifies origin/scroll precedence and successor-ADR consistency. QA
 
 **Files:**
 - Modify: `RekonPursuit/PipelineView.swift`
-- Modify: `RekonPursuit/PipelineBoardView.swift` solely to remove its obsolete private `dropTarget` declaration and make any compile-only direct reference adjustment required to resolve the canonical property; no Board rendering, menu, scroll, focus, or interaction behavior
+- Modify: `RekonPursuit/PipelineBoardView.swift` solely to remove its obsolete private `dropTarget` declaration so the existing production drop delegates consume the canonical property; no lane-container rendering, menu, scroll, or focus change
 - Modify: `RekonPursuit/ContentView.swift`
 - Modify: `RekonPursuit/WorkspaceViewModel.swift` only for `discardNewOpportunityDraft()`
 - Test: `RekonPursuitTests/RekonPursuitTests.swift`
 
 **Consumes:** Task 1 release.
-**Produces:** exact pure contracts and live route-surviving state.
+**Produces:** exact pure contracts, live route-surviving state, and the intentional production-linked target change in which the existing Applied drop delegate requests `.applied` instead of the obsolete `.screening`.
 
 - [ ] **Step 1: Write three failing tests**
 
@@ -125,7 +125,7 @@ func testVD205AddOpportunityOriginResolvesHomeTableAndExactBoardContext()
 @MainActor func testVD205DiscardNewOpportunityDraftIsExhaustivePureAndWriteFree() throws
 ```
 
-The lane test asserts `allCases.map(\.stage) == PipelineStage.allCases`, `lane.dropTarget == lane.stage` for all six, `includes(stage) == (lane.stage == stage)`, five default lanes, and conditional sixth Closed.
+The lane test asserts `allCases.map(\.stage) == PipelineStage.allCases`, `lane.dropTarget == lane.stage` for all six, `includes(stage) == (lane.stage == stage)`, five default lanes, and conditional sixth Closed. This is production-linked proof: the existing drop delegates consume this same `lane.dropTarget`, and no second target mapping may remain.
 
 The origin test uses non-default query `"Product"`, filter `"Screening"`, Include closed `true`, anchor `"fixture-screening-id"`, and horizontal lane `.offer`. It proves exact `Equatable` round-trip and destinations: Home → Home/Table false/no context; Table → Pipeline/Table false/no context; Board → Pipeline/Board true/exact context. It also proves every new Add entry replaces the prior token.
 
@@ -161,7 +161,7 @@ Expected: failure only for absent exact lane/drop, origin/destination, and disca
 
 - [ ] **Step 3: Implement minimal contracts**
 
-Define the single canonical internal `PipelineBoardLane.dropTarget` in `PipelineView.swift` as `stage`. In the same GREEN implementation, remove the obsolete private `dropTarget` declaration from `PipelineBoardView.swift`; its existing direct `lane.dropTarget` use resolves to the canonical property. Make only a compile-required direct-reference adjustment if the compiler requires one. Do not change Board rendering, menu, scroll, focus, drop-delivery, or interaction behavior in Task 2.
+Define the single canonical internal `PipelineBoardLane.dropTarget` in `PipelineView.swift` as `stage`. In the same GREEN implementation, remove the obsolete private `dropTarget` declaration from `PipelineBoardView.swift`; its existing production drop delegates continue using `lane.dropTarget` and therefore intentionally change the Applied target from `.screening` to exact `.applied`. Task 2 authorizes exactly that live target behavior change and no delegate restructuring, lane-container rendering, menu, scroll, or focus change.
 
 `ContentView` owns live `pipelineQuery`, `pipelineStageFilter`, `pipelineIncludesClosed`, `showsPipelineBoard`, `pipelineAnchorID`, `pipelineHorizontalLane`, and optional `addOpportunityOrigin`. `PipelineView` receives bindings for all except origin; `selectedTableID` stays local.
 
@@ -183,7 +183,7 @@ Re-run Step 2 with `green-unit` paths and all three selectors. Require three pas
 - Test: `RekonPursuitTests/RekonPursuitTests.swift`
 
 **Consumes:** Task 2 bindings and exact lanes, including the single internal `PipelineBoardLane.dropTarget == stage` declared in `PipelineView.swift`; `PipelineBoardView.swift` no longer has a private duplicate.
-**Produces:** exact Board rendering/drop/scroll and Option-C actions.
+**Produces:** distinct Applied/Screening lane rendering, bound horizontal scroll behavior, and Option-C actions; the exact production drop target is already complete in Task 2.
 
 - [ ] **Step 1: Write failing direct contracts**
 
@@ -214,7 +214,7 @@ Expected: grouped Screening, anchor override, and old one-level menu fail.
 
 Bind lane IDs to horizontal `.scrollPosition(id:)`. A non-nil bound restored lane is applied first and cannot be overwritten by anchor `onAppear`/change; only nil horizontal state derives `PipelineBoardLane.forStage(anchor.stage)`. Anchor remains for card marking and lane-local vertical scroll. Board region keeps identifier `pipeline-board-region` and publishes exact AX value `Horizontal lane: <lane title>`; the anchored card publishes `Anchored`.
 
-Use fixed readable lane widths in horizontal scrolling. Render distinct lane/count/empty/drop containers for Applied and Screening. Every drop delegate receives `lane.dropTarget`.
+Use fixed readable lane widths in horizontal scrolling. Render distinct lane/count/empty/drop containers for Applied and Screening. Retain the existing delegates' consumption of Task 2's exact `lane.dropTarget`; do not introduce or alter another target mapping in Task 3.
 
 Build the compact top-right `pipeline-card-actions-<id>` from `PipelineCardActionsConfiguration.canonical`: ellipsis image; label, tooltip, and AX help `Actions for <title>`; focus ring and sufficient hit target. Outer menu is exactly Edit and Move; Move owns the six targets/current state. Edit/card body call existing `open`; Move creates the unchanged typed request. Remove stage pill and full-width control. Shift-Command-M and post-move focus target actions.
 
