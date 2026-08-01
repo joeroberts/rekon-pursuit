@@ -1,174 +1,229 @@
 # VD2-07x Reference-faithful Recovery & archives implementation plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (- [ ]) syntax for tracking.
 
-**Goal:** Deliver the approved dark four-section Settings dashboard, including the Recovery protected-export success dialog, without changing product behavior.
+**Goal:** Deliver the approved four-section Settings dashboard and root-owned protected-export success dialog without changing recovery, archive, export, workspace, fixture, or privacy behavior.
 
-**Architecture:** `ContentView` remains root owner of the workspace model, every recovery/export sheet and alert, and the success-dialog binding. `WorkspaceViewModel` emits only a safe post-success display filename after its existing verified export call returns. `SettingsView` owns local tab selection and uses display-safe data plus existing callbacks.
+**Architecture:** WorkspaceViewModel owns a filename-only, store-scoped export-completion event and an opaque operation token. ContentView projects that event at the root, closes only the existing export sheet after valid success, and owns Done. SettingsView owns only local tab/focus state and receives safe display values and callbacks.
 
-**Tech Stack:** Swift 6, SwiftUI, XCTest/XCUITest, existing signed Debug macOS targets, deterministic `REKON_UI_TEST_HOST` fixtures, and the existing Rekon visual theme.
+**Tech Stack:** Swift 6, SwiftUI, XCTest/XCUITest, existing signed Debug macOS targets, deterministic REKON_UI_TEST_HOST fixtures, and the existing Rekon visual theme.
 
 ## Global constraints
 
-- The controlling visual authority is `docs/superpowers/specs/2026-08-01-vd207-reference-faithful-recovery-screen-design.md`.
-- Preserve the global five-destination rail, root route ownership, and Settings-local non-persisted selection.
-- The success dialog is impossible by default and appears only after the existing verified protected-export write succeeds. It is never a test switch or a fixture state.
-- Never pass a recovery key, URL, bookmark, checksum, signature, document name, or document metadata into Settings display state, a fixture, process argument, screenshot, attachment, source, log, or report.
-- The only new UI success datum is `displayFilename`; the destination wording remains `Selected local folder`.
-- Do not change recovery-key verification, archive/export/purge/restore/expiry, workspace, document, AI, cloud, Gmail, Calendar, storage, migration, fixture-launch, signing, entitlement, or network behavior.
-- Preserve all existing busy, disabled, error, cancellation, no-write, no-overwrite, inactive-restore, and separate-workspace contracts.
-- The shared worktree is dirty. Never stage a whole file, reset/revert user work, normalize unrelated diffs, or update dashboard/roadmap/progress files. Delivery creates hunk-isolated checkpoints only after independent acceptance.
-- The interrupted prior Task 2 work is unaccepted. It may be inspected and selectively reworked, but never counts as evidence.
-- VD2-08 and its accepted accessibility/recovery automation debts remain open.
+- The controlling visual authority is docs/superpowers/specs/2026-08-01-vd207-reference-faithful-recovery-screen-design.md.
+- Preserve the five-destination rail, DailyRoute.settings, root file-panel/sheet/alert ownership, and local non-persisted Settings selection.
+- ProtectedExportSuccess has exactly displayFilename: String. No review, URL, parent identity, key, bookmark, receipt, fingerprint, checksum, archive row, document value, store identity, or operation token may cross into Settings, fixtures, logs, screenshots, attachments, or reports.
+- The fixed destination copy is Selected local folder. Success is absent at launch and after every cancel/failure/stale completion. It is never a fixture state, launch argument, demo control, or product test switch.
+- Do not change recovery-key verification, archive/export/purge/restore/expiry semantics, Core workers, storage, migration, fixtures, launch parsing, signing, entitlements, routing, AI/cloud/Gmail/Calendar behavior, or network behavior.
+- Preserve busy, disabled, error, cancellation, no-write, no-overwrite, inactive-restore, and separate-workspace contracts. A lower-layer export that finishes after cancellation may retain its existing lower-layer outcome, but it must not publish UI success.
+- The shared worktree is dirty. Record the baseline first. Never reset/reformat unrelated work, stage a whole dirty file, or update dashboard, roadmap, or progress artifacts.
+- Task 1 may be RED only for explicitly named, not-yet-rendered visual selector/card assertions. Every operation, event, root-presentation, fixture, route, accessibility, and lower-layer safety assertion must be green with zero skip and zero expected failure.
 
-## Files and boundaries
+## Files and interfaces
 
-- `RekonPursuit/WorkspaceViewModel.swift`: safe transient export-success event, emitted only on real verified success.
-- `RekonPursuit/ContentView.swift`: root-owned success overlay and dismissal; current export sheets/errors remain root-owned.
-- `RekonPursuit/SettingsView.swift`: local icon tabs, four reference-faithful Settings sections, and display-only dialog.
-- `RekonPursuit.xcodeproj/project.pbxproj`: only narrow two-target registration if the existing dirty graph does not already contain it.
-- `RekonPursuitTests/WorkspaceViewModelTests.swift`: real injected-destination success/no-mutation proof.
-- `RekonPursuitUITests/RekonPursuitUITests.swift`: dashboard/tab/default-success-absence/compact-focus and safety proofs.
-- `RekonPursuitUITestHostTests/RekonPursuitUITestHostTests.swift`: display-state/action-card disabled-state proofs without fixture changes.
+| Path | Responsibility |
+| --- | --- |
+| RekonPursuit/WorkspaceViewModel.swift | Opaque token lifecycle, safe completion event, and a test-injected creation closure whose production default calls the current store method. |
+| RekonPursuit/ContentView.swift | Root event projection, close order, overlay, and Done binding. |
+| RekonPursuit/SettingsView.swift | Safe root-presentation value/binding, local tabs, four display-only panels, and string-only dialog. |
+| RekonPursuitTests/WorkspaceViewModelTests.swift | Real-write/root projection, exhaustive no-event, gated-cancel, and workspace-transition tests. |
+| RekonPursuitUITests/RekonPursuitUITests.swift | Fixture-driven reference selector/copy/control/compact/screenshot evidence. |
+| RekonPursuitUITestHostTests/RekonPursuitUITestHostTests.swift | Pure safe display-state tests only; fixture construction is read-only. |
+
+The sole test seam is an initializer dependency local to WorkspaceViewModel:
+
+~~~
+private let createProtectedExport:
+    (WorkspaceStore, ProtectedExportReview, RecoveryKey) async throws -> Void
+
+// Production default.
+{ store, review, recoveryKey in
+    _ = try await store.createProtectedExport(review: review, recoveryKey: recoveryKey)
+}
+~~~
+
+It is not a Setting, launch argument, fixture field, environment value, route, or UI control. The positive test uses the production default and a real injected destination. The gated-cancel test constructs its model with the gated closure; its review still calls the real store review path before confirmation enters that gate.
 
 ---
 
-### Task 1: Define the visual RED and safe real-export event
+### Task 1: Test-first event lifecycle, root projection, and visual RED
 
-**Files:**
+**Files:** Modify only the six files named above. Do not modify project membership, fixture host, fixture code, Core, signing, entitlements, or launch parsing.
 
-- Modify: `RekonPursuit/WorkspaceViewModel.swift`
-- Modify: `RekonPursuit/SettingsView.swift`
-- Modify: `RekonPursuit/ContentView.swift`
-- Modify: `RekonPursuitTests/WorkspaceViewModelTests.swift`
-- Modify: `RekonPursuitUITests/RekonPursuitUITests.swift`
-- Modify: `RekonPursuitUITestHostTests/RekonPursuitUITestHostTests.swift`
-
-**Consumes:** accepted selector tests at `7b92d50c08d379e2823becdc961e5c2737044259`, deterministic `archive` and `populated` fixtures, `ProtectedExportReview.displayFilename`, and the existing injected `protectedExportDestination` dependency.
-
-**Produces:** named RED selectors, a safe transient success event, and tests that prove the event occurs only after an actual export write.
+**Produces:** green operation/event/root tests; the complete pre-existing safety baseline; and three mechanically classifiable visual RED methods.
 
 - [ ] **Step 1: Record the dirty baseline**
 
-```bash
+~~~
 git status --short
 git diff -- RekonPursuit/WorkspaceViewModel.swift RekonPursuit/ContentView.swift RekonPursuit/SettingsView.swift RekonPursuitTests/WorkspaceViewModelTests.swift RekonPursuitUITests/RekonPursuitUITests.swift RekonPursuitUITestHostTests/RekonPursuitUITestHostTests.swift
 git hash-object RekonPursuit.xcodeproj/project.pbxproj
-```
+~~~
 
-Expected: record only pre-existing and interrupted-task hunks; stage nothing.
+Expected: record baseline only and stage nothing.
 
-- [ ] **Step 2: Add three failing UI contracts**
+- [ ] **Step 2: Add four deterministic reference UI methods before rendering**
 
-Add these `@MainActor` methods to `RekonPursuitUITests/RekonPursuitUITests.swift`:
-
-```swift
+~~~
 func testVD207ReferenceRecoveryDashboardKeepsRailAndUsesCardComposition()
 func testVD207ReferenceRecoveryDoesNotInventExportSuccess()
 func testVD207ReferenceTabsKeepKeyboardSelectionAtCompactWidth()
 func testVD207ReferenceOtherSettingsSectionsUseTruthfulInformationalCards()
-```
+~~~
 
-The archive fixture dashboard test navigates with `sidebar-settings` and asserts the selected rail plus these exact identifiers:
+Each method first proves a ready named fixture, selected sidebar-settings rail, and applicable existing Settings panel/summary. Use XCTContext.runActivity(named:) once per required visual selector/card. Each assertion activity name and assertion message starts exactly VD2-07x RED: unrendered visual selector . Do not use XCTExpectFailure, XCTSkip, a generic timeout, or a blanket expected-failure classification. If named visual selectors are missing, record every named absence and return before Task-2 copy/control assertions; thus Task 1 has no non-visual RED.
 
-```swift
-["settings-reference-tab-strip", "settings-reference-tab-recovery-archives", "settings-recovery-overview-card", "settings-recovery-status-enrollment", "settings-recovery-status-state", "settings-recovery-archive-detail-card", "settings-recovery-action-create", "settings-recovery-action-purge", "settings-recovery-action-restore", "settings-recovery-protected-export"]
-```
+The Recovery method uses archive, proves the existing settings-section-recovery-archives-panel and exact settings-archive-summary-* value created=2025-05-06T12:00:00Z;expires=2025-06-05T12:00:00Z;lifecycle=Verified, and preserves the existing action/error/cancel checks. Its only declared visual RED selectors are:
 
-It asserts the existing archive accessibility value is exactly `created=2025-05-06T12:00:00Z;expires=2025-06-05T12:00:00Z;lifecycle=Verified` and no descendant label/value contains `fixture-document-hash`, `application/pdf`, `/private/`, or `recovery key`. The default-success test asserts `settings-protected-export-success-dialog` is absent without attempting export. The compact test uses `populated`, tabs to `settings-section-document-references`, asserts `Not selected; Keyboard focus`, presses Space, then asserts `Selected; Keyboard focus` and selected global rail.
+~~~
+settings-reference-tab-strip
+settings-reference-tab-recovery-archives
+settings-recovery-overview-card
+settings-recovery-status-enrollment
+settings-recovery-status-state
+settings-recovery-archive-detail-card
+settings-recovery-action-create
+settings-recovery-action-purge
+settings-recovery-action-restore
+settings-recovery-protected-export
+~~~
 
-The fourth method uses `document-relink` and asserts the following exact cards after selecting each local tab:
+When green, it rejects fixture-document-hash, application/pdf, /private/, and recovery key from every Recovery descendant label/value, retains the fixed archive facts, and checks enabled/cancel/error action behavior.
 
-```swift
-["settings-workspace-overview-card", "settings-workspace-recovery-card", "settings-workspace-return-card"]
-["settings-document-overview-card", "settings-document-available-card", "settings-document-relink-card", "settings-document-privacy-card"]
-["settings-ai-overview-card", "settings-ai-assistant-card", "settings-ai-email-calendar-card", "settings-ai-cloud-card", "settings-ai-privacy-card"]
-```
+Extend testVD207SettingsRecoveryPresentationPreservesBusyDisabledAndInactiveCandidateContracts without changing fixture construction, launch parsing, or host routing. Construct only safe SettingsArchiveSummary values and assert the exact overview facts for all three states: not enrolled is Recovery key not set up / Set up a recovery key to protect this workspace.; enrolled with no archive is Recovery key enrolled / No verified archive available; enrolled with a verified archive is Recovery key enrolled / Verified archive available. Retain the existing create/export/purge/restore enabled and busy predicates, progress text, retained-purge status, and inactive-candidate assertions. Task 2 renders these same safe properties in settings-recovery-status-enrollment and settings-recovery-status-state.
 
-It asserts `settings-document-reference-summary` still reports only the aggregate count; the document panel has no button, link, menu button, text field, switch, or checkbox descendants; and the AI panel has the same absence checks plus required unavailable words `No cloud services`, `Not configured`, `Not connected`, and `Offline`.
+The default-success method uses ready archive, enters Settings, proves the rail and Recovery panel, and asserts settings-protected-export-success-dialog does not exist. It never attempts export and must be green in both matrices.
 
-- [ ] **Step 3: Add the failing real-export unit contract**
+The compact method uses populated at compact size. Before any RED assertion, it proves settings-section-workspace, settings-section-recovery-archives, settings-section-document-references, and settings-section-ai-connections are all present, hittable, and keyboard reachable. Starting on Recovery, tab to each non-selected section, assert exactly Not selected; Keyboard focus, press Space, assert exactly Selected; Keyboard focus and the matching existing panel, and assert sidebar-settings remains selected. It then records only settings-reference-tab-strip and settings-reference-tab-recovery-archives as visual RED selectors. When rendered, the same sequence proves every labeled tab remains in the vertical compact stack and is not rerouted.
 
-Add async `testVerifiedProtectedExportPublishesSafeSuccessOnlyAfterWritingAndDismissesWithoutWorkspaceMutation()` in `WorkspaceViewModelTests`. Generate `RecoveryKey` only in process memory; inject one exact non-existent temporary `.rekonexport` URL; create an active opportunity; review and confirm export; wait while `isCreatingProtectedExport`; and assert:
+The other-sections method uses document-relink. Before visual RED checks, it proves the existing aggregate summary is exactly 0 available · 1 require relinking, the existing Document/AI panels, their no-actionable-descendant conditions, and no fixture-resume.pdf, fixture-document-hash, application/pdf, or /private/ label/value disclosure. Its only declared visual RED selectors are:
 
-```swift
-XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
-XCTAssertEqual(model.protectedExportSuccess?.displayFilename, destination.lastPathComponent)
-XCTAssertFalse(model.protectedExportSuccess!.displayFilename.contains("/"))
-model.dismissProtectedExportSuccess()
-XCTAssertNil(model.protectedExportSuccess)
-XCTAssertEqual(model.opportunities.map(\.id), activeIDsBefore)
-```
+~~~
+settings-workspace-overview-card
+settings-workspace-recovery-card
+settings-workspace-return-card
+settings-document-overview-card
+settings-document-available-card
+settings-document-relink-card
+settings-document-privacy-card
+settings-ai-overview-card
+settings-ai-assistant-card
+settings-ai-email-calendar-card
+settings-ai-cloud-card
+settings-ai-privacy-card
+~~~
 
-Before review, after cancellation, and after review error, success must be nil. Deferred cleanup removes only the generated destination. No key is logged or attached.
+When green, it asserts Workspace copy Local workspace, Workspace status / Active, Storage / Local only, and Returning does not modify the active workspace. The no-separate-workspace return card reports No preserved workspace available; Disabled and has no button/link/menu-button descendant. It asserts Document cards Available / 0 and Needs relinking / 1, privacy copy that names and locations stay private, and no button, link, menu button, text field, switch, or checkbox. It asserts AI activity / No activity recorded, Connection status / Offline, and exact status pairs AI assistant / Not configured, Email & calendar / Not connected, Cloud sync / Not configured, also with no actionable descendants.
 
-- [ ] **Step 4: Extend the existing display-state host test**
+- [ ] **Step 3: Add four green model contracts before the event implementation**
 
-Extend `testVD207SettingsRecoveryPresentationPreservesBusyDisabledAndInactiveCandidateContracts` to assert truthful overview wording and action enabled states for not-enrolled, enrolled/no archive, verified archive, exporting, and restoring presentation values. Construct only `SettingsArchiveSummary` display values; do not change fixture construction, launch parsing, or host routing.
+Add these async tests to WorkspaceViewModelTests:
 
-- [ ] **Step 5: Run focused RED evidence**
+~~~
+func testVerifiedProtectedExportPublishesSafeSuccessAndRootPresentationOnlyAfterRealWriting() async throws
+func testProtectedExportSuccessRemainsNilForEveryNonSuccessBranch() async throws
+func testCancellingConfirmedProtectedExportInvalidatesInFlightOperation() async throws
+func testProtectedExportSuccessClearsForEveryWorkspaceTransition() async throws
+~~~
 
-```bash
-xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -configuration Debug -destination 'platform=macOS,arch=arm64' -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceRecoveryDashboardKeepsRailAndUsesCardComposition -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceRecoveryDoesNotInventExportSuccess -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceTabsKeepKeyboardSelectionAtCompactWidth -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceOtherSettingsSectionsUseTruthfulInformationalCards -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207SettingsRecoveryRetainsArchiveTruthAndRootOwnedCancellation -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207SettingsSecondaryNavigationDefaultsToRecoveryAndKeepsGlobalRail -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testVD207SettingsRecoveryPresentationPreservesBusyDisabledAndInactiveCandidateContracts -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testVerifiedProtectedExportPublishesSafeSuccessOnlyAfterWritingAndDismissesWithoutWorkspaceMutation -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testCancellingReviewedProtectedExportClearsReviewWithoutWritingOrChangingActiveWorkspace -only-testing:RekonPursuitTests/ProtectedExportTests/testReviewBindsDestinationParentIdentity -only-testing:RekonPursuitTests/ProtectedExportTests/testSourceRevisionChangeRejectsReviewedExportWithoutCreatingAFile -only-testing:RekonPursuitTests/ProtectedExportTests/testExistingTargetIsRejectedWithoutOverwritingIt -derivedDataPath /private/tmp/rekon-vd207x-task-1-red-dd -resultBundlePath /private/tmp/rekon-vd207x-task-1-red.xcresult
-```
+testVerifiedProtectedExportPublishesSafeSuccessAndRootPresentationOnlyAfterRealWriting creates an enrolled real store and active opportunity, injects one exact non-existent temporary .rekonexport destination, and uses the production default creation closure. It asserts nil before review/confirmation, waits only for isCreatingProtectedExport, then asserts the output exists, the event equals destination.lastPathComponent, and the filename contains no slash. Construct SettingsRootModalPresentation from the event and assert isProtectedExportSuccessPresented is true, protectedExportSuccessDisplayFilename equals destination.lastPathComponent, and protectedExportSuccessDestinationLabel equals Selected local folder. Call SettingsRootModalBindings.dismissProtectedExportSuccess { model.dismissProtectedExportSuccess() }; then assert false root presentation, nil event, unchanged output, and unchanged active IDs. Do not log/attach the key or destination path; defer removes only the generated output.
 
-Expected: signed fixture host and all existing safety tests pass. New composition selectors/event are the only allowed RED. Any build, signing, fixture, rail, or baseline failure blocks the task.
+testProtectedExportSuccessRemainsNilForEveryNonSuccessBranch uses independently constructed models/destinations and asserts nil event, false root presentation, applicable no-output/no-overwrite, and unchanged active IDs for each branch:
 
-- [ ] **Step 6: Implement the minimum safe success event**
+1. before review and after invalid confirmation/re-entry;
+2. destination cancellation with protectedExportDestination: { nil };
+3. review failure against an occupied destination;
+4. stale source after valid review followed by a real source revision;
+5. write failure after valid review when the destination becomes occupied before confirmation;
+6. fresh review after a prior real success; and
+7. cancelProtectedExport after a prior real success.
 
-In `WorkspaceViewModel.swift`, add adjacent to current protected-export state:
+Use generated temporary paths only, compare preserved bytes for occupied outputs, and remove only generated files. Existing Core source-change/no-overwrite tests do not substitute for these event assertions.
 
-```swift
+For every invalid/review/write failure branch, also assert the existing safe protectedExportErrorMessage remains non-empty when that branch currently exposes an error. The existing signed UI selector testVD207SettingsRecoveryRetainsArchiveTruthAndRootOwnedCancellation retains its protected-export-error accessibility label/value assertion while proving the success dialog remains absent after the error/cancel path.
+
+For testCancellingConfirmedProtectedExportInvalidatesInFlightOperation, add private actor GatedProtectedExportCreate with waitUntilStarted() and release() continuations. Complete a valid real review, call confirmProtectedExport, wait for the injected creation closure to enter, call the existing model.cancelProtectedExport(), release the gate, and wait until isCreatingProtectedExport is false. Assert nil event, false root success presentation, no generated gated output, cleared review/error state, and unchanged active IDs. The test does not claim a changed lower-layer cancellation/write contract.
+
+testProtectedExportSuccessClearsForEveryWorkspaceTransition first creates a real event for a distinct model/destination before each action, then asserts nil event and false root presentation. It explicitly exercises every public path that calls apply or clearWorkspaceDerivedState: start normal replacement, createWorkspaceIfNeeded, createSeparateLocalWorkspace, returnToPreservedWorkspaceRecovery, successful and failed restoreEncryptedBackup(from:), chooseExistingWorkspaceFolder external replacement and cancellation-to-recovery, closeWorkspace, and teardown. Preserve each path's existing active-ID contract: unchanged for non-replacing exits, replaced only where that existing transition replaces the workspace. Use the existing bookmark/separate-workspace test fixtures without exposing a key or path.
+
+- [ ] **Step 4: Implement the token-scoped event**
+
+Add adjacent to current protected-export state:
+
+~~~
 struct ProtectedExportSuccess: Equatable {
     let displayFilename: String
 }
 
+private struct ProtectedExportOperationToken: Equatable {
+    let value = UUID()
+}
+
 @Published private(set) var protectedExportSuccess: ProtectedExportSuccess?
+private var protectedExportOperationToken = ProtectedExportOperationToken()
+
+private func invalidateProtectedExportOperation() {
+    protectedExportOperationToken = ProtectedExportOperationToken()
+    protectedExportSuccess = nil
+}
 
 func dismissProtectedExportSuccess() {
     protectedExportSuccess = nil
 }
-```
+~~~
 
-After `createProtectedExport` returns successfully and the existing `self.store === store` guard passes, assign `.init(displayFilename: review.displayFilename)`. Clear it before a fresh review and in `cancelProtectedExport()`. Never retain/publish the destination URL, parent identity, fingerprint, key, or receipt. Extend `SettingsRootModalPresentation` with this optional event and a root-only dismissal helper.
+Call invalidateProtectedExportOperation before every new review, in cancelProtectedExport(), in every review/confirm invalid-input, destination-cancel, catch, and stale/early-return terminal branch, at the start of clearWorkspaceDerivedState(), and in apply before replacing or leaving the current store. Confirmation captures let operationToken = protectedExportOperationToken before its task. Its only event publication is:
 
-- [ ] **Step 7: Re-run focused evidence**
+~~~
+guard self.protectedExportOperationToken == operationToken, self.store === store else { return }
+self.protectedExportSuccess = .init(displayFilename: review.displayFilename)
+~~~
 
-Run the command in Step 5 unchanged. Expected: the real-export unit and display-state host test now pass; only the three new reference UI methods remain RED.
+The injected production-default closure is called at the existing store-create location. No Core/export behavior changes. A current-token failure invalidates before publishing the existing safe error. A stale token/store completion may finish only its own busy bookkeeping; it cannot mutate review, error, status, or success.
+
+Extend SettingsRootModalPresentation with only protectedExportSuccess: ProtectedExportSuccess?, isProtectedExportSuccessPresented, protectedExportSuccessDisplayFilename, and fixed protectedExportSuccessDestinationLabel. Add only:
+
+~~~
+static func dismissProtectedExportSuccess(
+    dismissProtectedExportSuccess: () -> Void
+) {
+    dismissProtectedExportSuccess()
+}
+~~~
+
+ContentView projects model.protectedExportSuccess into this value. Task 1 does not render a dialog or close a sheet.
+
+- [ ] **Step 5: Run the exact signed Task 1 matrix**
+
+Run the Task 1 brief matrix verbatim with /private/tmp/rekon-vd207x-task-1-red-dd and /private/tmp/rekon-vd207x-task-1-red.xcresult.
+
+Expected: every event/root, fixture-host, recovery UI, archive, purge, restore, separate-workspace, and Core selector runs exactly once and passes with zero skip/expected failure. Only the three reference methods fail, and only in declared VD2-07x RED: unrendered visual selector activities. Inspect the result summary and test list.
 
 ---
 
-### Task 2: Render the four reference sections, icon tabs, and real success dialog
+### Task 2: Render the reference panels and root dialog
 
-**Files:**
+**Files:** Modify SettingsView.swift, ContentView.swift, RekonPursuitUITests.swift, and necessary Task-2 test/host files. Modify project.pbxproj only if SettingsView.swift is not already registered once in both app targets; isolate only source-reference/build-file/two target-membership hunks.
 
-- Modify: `RekonPursuit/SettingsView.swift`
-- Modify: `RekonPursuit/ContentView.swift`
-- Modify: `RekonPursuit.xcodeproj/project.pbxproj` only if narrow source registration is necessary
-- Modify: `RekonPursuitUITests/RekonPursuitUITests.swift`
-- Modify: `RekonPursuitUITestHostTests/RekonPursuitUITestHostTests.swift`
+**Consumes:** accepted Task 1 token/event contract and green operation baseline.
 
-**Consumes:** Task 1 safe success event; `SettingsRecoveryPresentation`; `RekonTheme`, `RekonCard`, and `RekonPrimaryButtonStyle`; and the approved reference design.
+**Produces:** all four reference panels, root-owned dialog, full green matrix, and named screenshot evidence.
 
-**Produces:** all four dark reference-faithful Settings sections and root-owned dialog. The dialog can occur only after Task 1's verified success event.
+- [ ] **Step 1: Prove project membership**
 
-- [ ] **Step 1: Prove project membership before modifying it**
-
-```bash
+~~~
 git hash-object RekonPursuit.xcodeproj/project.pbxproj
 git diff -- RekonPursuit.xcodeproj/project.pbxproj
 rg -n "SettingsView.swift" RekonPursuit.xcodeproj/project.pbxproj
-```
+~~~
 
-Expected: if `SettingsView.swift` is already referenced exactly once by both app targets, leave the project file untouched. Otherwise change only the file reference, build file, and the two necessary target memberships; do not normalize unrelated dirty project entries.
+Expected: leave the project file untouched when both memberships already exist.
 
-- [ ] **Step 2: Render accessible icon-and-label reference tabs**
+- [ ] **Step 2: Render tabs and safe display panels**
 
-Replace text-only local selector buttons in `SettingsView` with a focused `SettingsReferenceTab` that receives `SettingsSection`, selection/focus state, and action. Use `folder`, `externaldrive`, `doc`, and `link`; use cyan icon/text plus a cyan bottom rule in the selected tab cell; use cool-gray inactive text and a full-width divider. The root selector gets `settings-reference-tab-strip`; recovery tab also gets `settings-reference-tab-recovery-archives`; existing section identifiers stay unchanged.
+Render SettingsReferenceTab with folder, externaldrive, doc, and link; cool-gray inactive icon/copy; cyan selected icon/copy/bottom rule; generous target; the existing section identifiers; and a full-width divider. Preserve:
 
-Keep this exact behavior:
-
-```swift
+~~~
 .focusable()
 .focused($focusedSection, equals: section)
 .onKeyPress(.space) {
@@ -176,130 +231,97 @@ Keep this exact behavior:
     return .handled
 }
 .accessibilityValue(selectorAccessibilityValue(for: section))
-```
+~~~
 
-`ViewThatFits` may switch only the complete labeled tab row to a vertical compact stack. It must not hide a tab or turn local selection into a route.
+ViewThatFits may replace only the complete labeled tab row with a complete labeled vertical stack. Render Recovery from SettingsArchiveSummary only and retain the existing action closures/disabled/busy/error/cancel predicates. Render Workspace, Document, and AI exactly to the Task-1 green copy/control rules. Use RekonCard, RekonTheme.borderSubtle, RekonTheme.success, RekonTheme.secondaryText, and existing primary style; do not alter theme values.
 
-- [ ] **Step 3: Render the Recovery dashboard from display-safe values**
+- [ ] **Step 3: Render the root-owned string-only success dialog**
 
-Replace the generic `GroupBox("Recovery & archives")` with these private views in `SettingsView.swift`:
+Define:
 
-```swift
-SettingsRecoveryOverviewCard(recovery: recovery)
-SettingsRecoveryArchiveDetailCard(summaries: recovery.archiveSummaries)
-SettingsRecoveryActionRow(
-    recovery: recovery,
-    beginRecoveryKeyEnrollment: beginRecoveryKeyEnrollment,
-    presentArchiveCreation: presentArchiveCreation,
-    presentProtectedExport: presentProtectedExport,
-    presentRetainedDataPurge: presentRetainedDataPurge,
-    choosePortableArchiveForRestore: choosePortableArchiveForRestore
-)
-```
-
-The overview uses an emerald `checkmark.shield` decorative visual paired with enrollment/recovery text facts. The archive card contains only the current summary values. The action row has three large labeled cards for archive creation, retained-data management, and restore. `Export protected copy` remains a visible primary action in the archive-detail surface and has both `settings-recovery-protected-export` and the existing `create-protected-export` compatibility identifier. Preserve all current disabled/progress/incomplete-purge/inactive-candidate values.
-
-Use `RekonCard`, `RekonTheme.borderSubtle`, `RekonTheme.success`, and `RekonTheme.secondaryText` for the reference's navy cards, thin outlines, emerald verified state, and muted facts. Do not create a duplicate visual theme or alter shared theme values.
-
-- [ ] **Step 4: Render the remaining three reference sections without new behavior**
-
-Replace the generic Workspace, Document references, and AI & connections groups with private `SettingsView` child views using the same `RekonCard` hero/card system.
-
-Workspace renders a cyan `folder` hero with `Local workspace`, `Workspace status` / `Active`, and `Storage` / `Local only`; a `Workspace recovery` explanatory card; and a final return card. The return card is visibly disabled with no action when `usingSeparateLocalWorkspace` is false. When true, it exposes only the existing `returnToPreservedWorkspaceRecovery` callback. Use the three workspace identifiers from the Task 1 test.
-
-Document references renders a cyan `doc` hero, existing aggregate Available and Needs relinking facts, two matching count cards, and a privacy information card. Use the five document identifiers from the Task 1 test. The only source values are `DocumentReferenceSummary.availableCount` and `.relinkRequiredCount`; do not add a document control or metadata field.
-
-AI & connections renders a cool-violet `link` hero with no-cloud/no-activity/offline facts, three status-only cards for AI assistant, Email & calendar, and Cloud sync, plus a privacy information card. Use the five AI identifiers from the Task 1 test. All cards are non-actionable; do not add a setup button, link, or configuration state.
-
-- [ ] **Step 5: Render the root-owned success dialog**
-
-Define `SettingsProtectedExportSuccessDialog` in `SettingsView.swift`:
-
-```swift
+~~~
 struct SettingsProtectedExportSuccessDialog: View {
     let displayFilename: String
     let dismiss: () -> Void
 }
-```
+~~~
 
-Its root identifier is `settings-protected-export-success-dialog`; it renders `checkmark.circle`, `Protected copy exported`, the safe filename, `Selected local folder`, the non-secret key reminder, and a `Done` button with identifier `settings-protected-export-success-done` using `RekonPrimaryButtonStyle`. It accepts no URL or key.
+Its root identifier is settings-protected-export-success-dialog. It renders checkmark.circle, Protected copy exported, the supplied filename, Selected local folder, the non-secret recovery-key reminder, and a Done button identified settings-protected-export-success-done using RekonPrimaryButtonStyle. It accepts no review, URL, key, bookmark, receipt, fingerprint, archive row, document value, or model.
 
-`ContentView` overlays it above the Settings/AppShell content only while `SettingsRootModalPresentation.isProtectedExportSuccessPresented` is true. It closes the export sheet only after the model event is non-nil. Done invokes the root dismissal helper only. Existing cancel/error sheets stay root-owned and never trigger the dialog.
+At ContentView root, observe non-nil success, then set only isPresentingProtectedExport = false and protectedExportReentry = "" before overlaying the dialog. Do not clear the event at that point. Present only while settingsRootModalPresentation.isProtectedExportSuccessPresented. Existing cancel/error sheets stay root-owned and cannot overlay success. Done calls only SettingsRootModalBindings.dismissProtectedExportSuccess { model.dismissProtectedExportSuccess() }; it does not mutate route, workspace, review, export, or recovery state.
 
-- [ ] **Step 6: Make the reference contract green**
+- [ ] **Step 4: Turn reference tests green and attach fixture evidence**
 
-```bash
-xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -configuration Debug -destination 'platform=macOS,arch=arm64' -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceRecoveryDashboardKeepsRailAndUsesCardComposition -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceRecoveryDoesNotInventExportSuccess -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceTabsKeepKeyboardSelectionAtCompactWidth -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceOtherSettingsSectionsUseTruthfulInformationalCards -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207SettingsRecoveryRetainsArchiveTruthAndRootOwnedCancellation -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207SettingsSecondaryNavigationDefaultsToRecoveryAndKeepsGlobalRail -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testVD207SettingsRecoveryPresentationPreservesBusyDisabledAndInactiveCandidateContracts -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testVerifiedProtectedExportPublishesSafeSuccessOnlyAfterWritingAndDismissesWithoutWorkspaceMutation -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testCancellingReviewedProtectedExportClearsReviewWithoutWritingOrChangingActiveWorkspace -only-testing:RekonPursuitTests/ProtectedExportTests/testReviewBindsDestinationParentIdentity -only-testing:RekonPursuitTests/ProtectedExportTests/testSourceRevisionChangeRejectsReviewedExportWithoutCreatingAFile -only-testing:RekonPursuitTests/ProtectedExportTests/testExistingTargetIsRejectedWithoutOverwritingIt -derivedDataPath /private/tmp/rekon-vd207x-task-2-green-dd -resultBundlePath /private/tmp/rekon-vd207x-task-2-green.xcresult
-```
+Keep the four Task-1 methods and every exact assertion. Once their visual gates exist, attach signed-host screenshots after each selected section with XCTAttachment(screenshot: app.screenshot()), lifetime keepAlways, and these exact names:
 
-Expected: each named test executes once and passes; no selector fails, skips, or is marked expected failure.
+~~~
+VD2-07x-wide-workspace
+VD2-07x-wide-recovery
+VD2-07x-wide-document-references
+VD2-07x-wide-ai-connections
+VD2-07x-compact-workspace
+VD2-07x-compact-recovery
+VD2-07x-compact-document-references
+VD2-07x-compact-ai-connections
+~~~
 
-- [ ] **Step 7: Capture wide and compact visual evidence**
+Never attach a recovery key, raw file panel, absolute path, or document metadata.
 
-```bash
+- [ ] **Step 5: Run the exact signed Task 2 matrix**
+
+Run the Task 1 brief matrix verbatim, changing only result paths to /private/tmp/rekon-vd207x-task-2-green-dd and /private/tmp/rekon-vd207x-task-2-green.xcresult.
+
+Expected: every selector, including all four event tests and all four reference methods, runs exactly once with zero failures, skips, and expected failures.
+
+- [ ] **Step 6: Produce and inspect visual evidence**
+
+~~~
+mkdir -p /private/tmp/rekon-vd207x-visual-evidence
 xcrun xcresulttool get test-results summary --path /private/tmp/rekon-vd207x-task-2-green.xcresult
 xcrun xcresulttool get test-results tests --path /private/tmp/rekon-vd207x-task-2-green.xcresult
-xcrun xcresulttool export attachments --path /private/tmp/rekon-vd207x-task-2-green.xcresult --output-path /private/tmp/rekon-vd207x-task-2-attachments
-find /private/tmp/rekon-vd207x-task-2-attachments -maxdepth 2 -type f -print
-```
+xcrun xcresulttool export attachments --path /private/tmp/rekon-vd207x-task-2-green.xcresult --output-path /private/tmp/rekon-vd207x-visual-evidence/fixture-attachments
+find /private/tmp/rekon-vd207x-visual-evidence -type f -print
+~~~
 
-Expected: inspect every retained artifact. It must show the global rail, icon tab hierarchy, cyan active rule, large recovery overview, archive/action cards, and dark dialog hierarchy when available; it must contain no key, absolute path, or document metadata. If the selected tests create no attachment, record that fact and capture a named signed-app image outside the repository before review.
+Open the eight named fixture attachments beside the approved reference images. Compare global rail, Settings hierarchy, cyan active icon/text/rule, outlined cards, wide/compact layout, Recovery action row, Workspace disabled return card, aggregate-only Document cards, and AI unavailable treatment. Inspect every image for recovery keys, absolute paths, document names, hashes, bookmarks, checksums, MIME types, and other document metadata; reject any disclosure.
+
+For the dialog, build and launch the signed normal Debug app. A tester uses an ordinary enrolled local workspace, their own recovery key, and a newly empty local destination to complete the existing review/confirmation flow. Do not record or screenshot the key, destination chooser, or raw path. With the dialog visible, save exactly /private/tmp/rekon-vd207x-visual-evidence/VD2-07x-real-export-success.png with the macOS screenshot tool, select Done, and verify the active workspace is unchanged. Inspect it beside the reference: it shows only safe filename, Selected local folder, reminder, and Done. Record pass/fail and the outside-repository image path; do not commit the image.
 
 ---
 
-### Task 3: Verify signed behavior and release owner testing
+### Task 3: Signed verification and gated handoff
 
-**Files:**
+- [ ] **Step 1: Build and verify both signed targets**
 
-- Modify only for a separately approved concrete defect: Task 2's allowlist.
-- Evidence only: unique `/private/tmp/rekon-vd207x-task-3-*` paths outside the repository.
-
-**Consumes:** Task 2 green result, narrow source/project diff, and retained visual evidence.
-
-**Produces:** a signed verification package for independent Code Review, QA, Architecture, Security/privacy, TPM, Delivery, and product-owner testing.
-
-- [ ] **Step 1: Build both actual apps with Debug signing**
-
-```bash
+~~~
 xcodebuild build -project RekonPursuit.xcodeproj -scheme RekonPursuit -configuration Debug -destination 'platform=macOS,arch=arm64' -derivedDataPath /private/tmp/rekon-vd207x-task-3-app-dd
 xcodebuild build -project RekonPursuit.xcodeproj -scheme RekonPursuitUITestHost -configuration Debug -destination 'platform=macOS,arch=arm64' -derivedDataPath /private/tmp/rekon-vd207x-task-3-host-dd
-find /private/tmp/rekon-vd207x-task-3-app-dd /private/tmp/rekon-vd207x-task-3-host-dd -name '*.app' -type d -print
-```
-
-Expected: resolved signed main-app and fixture-host paths. Never disable signing.
-
-- [ ] **Step 2: Verify signing and source scope**
-
-Run this exact signature verification after Step 1:
-
-```bash
 find /private/tmp/rekon-vd207x-task-3-app-dd /private/tmp/rekon-vd207x-task-3-host-dd -name '*.app' -type d -print0 | while IFS= read -r -d '' app_path; do
   codesign --verify --deep --strict "$app_path"
   codesign -dvv "$app_path"
 done
-```
+~~~
 
-Then run:
+- [ ] **Step 2: Inspect scope and checkpoint accepted hunks only**
 
-```bash
+~~~
 git diff --check
 git diff -- RekonPursuit/WorkspaceViewModel.swift RekonPursuit/ContentView.swift RekonPursuit/SettingsView.swift RekonPursuit.xcodeproj/project.pbxproj RekonPursuitTests/WorkspaceViewModelTests.swift RekonPursuitUITests/RekonPursuitUITests.swift RekonPursuitUITestHostTests/RekonPursuitUITestHostTests.swift
-```
+git diff --cached --name-only
+git diff --cached
+git diff --cached --check
+~~~
 
-Expected: strict verification succeeds. The isolated checkpoint contains only the safe event, root overlay, reference dashboard, tests, and any necessary narrow registration.
+Expected: only event/token/root/visual/test hunks; no fixture-host, launch parser, Core, signing, entitlement, network, key, path, or document-metadata hunk.
 
-- [ ] **Step 3: Obtain independent decisions in order**
+- [ ] **Step 3: Obtain independent release decisions**
 
-1. Code Review: visual/spec fidelity, allowlist, root ownership, and no model/store/file/key leakage into Settings.
-2. QA: exact full command, no skips, compact/wide visual evidence, archive/export safety selectors, safe artifact contents.
-3. Architecture: presentation-only model event, local tabs, and root ownership; any deviation needs an ADR.
-4. Security/privacy: key/document/path redaction, success trigger, fixture isolation, no network/configuration effect, and signing/entitlement non-change.
-5. TPM and Delivery: all decisions, evidence, checkpoint, risks, and release of only owner testing.
-
-- [ ] **Step 4: Hand the signed build to the owner**
-
-Owner checks the global rail remains visible; Recovery opens by default; wide/compact tabs and cards match the reference; a real successful protected export alone reveals the dialog; Done changes no workspace state; and no key, path, or document metadata is displayed.
+1. Code Review verifies visual/spec fidelity, exact allowlist, and code quality.
+2. QA verifies both result bundles, zero skips, exact RED-to-green transition, and visual evidence.
+3. Architecture verifies token/store lifetime, root ownership, and no boundary widening.
+4. Security/privacy verifies gated cancellation, no event after failure/transition, all artifacts, and no sensitive transport.
+5. TPM and Delivery record risks, evidence paths, approvals, and product-owner handoff.
 
 ## Completion evidence
 
-VD2-07x is complete only after a hunk-isolated Task 2 checkpoint, signed focused matrix, signing/source/visual evidence, all independent decisions, and explicit product-owner hands-on acceptance are recorded. VD2-08 remains open.
+VD2-07x is complete only after hunk-isolated accepted checkpoints, both exact signed matrices, strict signing verification, all nine visual images, independent approvals, and product-owner acceptance. VD2-08 remains open.

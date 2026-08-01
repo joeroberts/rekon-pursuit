@@ -1,88 +1,74 @@
 # VD2-07x — Reference-faithful Settings Task 1 brief
 
-**Status:** Planning complete. No implementation is released by this brief. A
-Delivery Manager may release Task 1 only after independent Architecture, QA,
-Security/privacy, TPM, and Delivery approval is recorded.
+**Status:** Amended after Architecture, QA, and Security/privacy preimplementation NEEDS CHANGE decisions. No implementation is released by this brief. Delivery may release Task 1 only after fresh independent Architecture, QA, Security/privacy, TPM, and Delivery approvals are recorded.
 
 ## Controlling artifacts
 
-- `docs/superpowers/specs/2026-08-01-vd207-reference-faithful-recovery-screen-design.md`
-- `docs/superpowers/plans/2026-08-01-vd207-reference-faithful-recovery-screen.md`
-- `.superpowers/sdd/2026-08-01-vd207-reference-faithful-recovery-screen/task-1-brief.md`
-- `docs/delivery/task-briefs/VD2-07-settings-information-architecture.md`
+- docs/superpowers/specs/2026-08-01-vd207-reference-faithful-recovery-screen-design.md
+- docs/superpowers/plans/2026-08-01-vd207-reference-faithful-recovery-screen.md
+- docs/delivery/reviews/VD2-07x-preimplementation-architecture-2026-08-01.md
+- docs/delivery/reviews/VD2-07x-preimplementation-qa-2026-08-01.md
+- docs/delivery/reviews/VD2-07x-preimplementation-security-privacy-2026-08-01.md
+- docs/delivery/task-briefs/VD2-07-settings-information-architecture.md
 
-## Task 1 objective and boundary
+## Objective, ownership, and scope
 
-Define the signed, deterministic RED contract for the approved four-section
-Settings reference, then add only the minimal transient model event needed to
-prove that a protected-export success can occur after a real verified write.
-Task 1 does **not** render the reference tabs, Recovery dashboard, Workspace,
-Document references, AI & connections, or the success dialog. Those are the
-single presentation release of Task 2.
+Task 1 creates the signed deterministic RED contract for the four-section reference and adds only the minimum model/root presentation seam needed to prove a protected-export success follows a real verified write. Task 1 does not render reference tabs, panels, responsive layout, action-card styling, or the success dialog; Task 2 alone renders them.
 
-The eventual target comprises all four local, non-persisted sections:
+ContentView remains owner of WorkspaceViewModel, global route, recovery-key text, file panel, all sheets/alerts, destination selection, export error/cancel behavior, root success projection, and action dispatch. SettingsView owns only local selected/focused section state and display-safe values plus callbacks. It may not own a model, route, persistence, URL, key, bookmark, review, file panel, sheet, or invented success.
 
-| Section | Eventual reference contract covered by Task 1 tests |
+The four eventual local sections stay non-persisted:
+
+| Section | Testable presentation boundary |
 | --- | --- |
-| Workspace | cyan local-workspace hero, recovery explanation, and truthful disabled-or-existing return card |
-| Recovery & archives | selected cyan icon tab, recovery overview, safe archive facts, action cards, and real-export-only success dialog |
-| Document references | aggregate-only hero/count/privacy cards with no document metadata or actionable controls |
-| AI & connections | truthful unavailable status cards with no setup, cloud, Gmail, Calendar, or network control |
-
-The global five-destination rail, root route, and existing sheet/alert/file-panel
-ownership remain unchanged. Settings-local selection remains Recovery by
-default, keyboard-operable, local to the view, and non-persisted.
+| Workspace | Local workspace, Active, Local only, recovery assurance, and disabled-or-existing preserved-workspace return. |
+| Recovery & archives | Cyan selected tab, safe overview/catalogue/action cards, and real-write-only root success. |
+| Document references | Aggregate counts/privacy only; no document metadata or actionable control. |
+| AI & connections | Offline/unconfigured informational cards only; no setup, cloud, Gmail, Calendar, or network control. |
 
 ## Task 1 allowlist
 
-Only these paths may receive newly authored Task 1 hunks after the dirty
-baseline is recorded:
-
-| Path | Narrow permitted purpose |
+| Path | Permitted authored hunk |
 | --- | --- |
-| `RekonPursuit/WorkspaceViewModel.swift` | Introduce the transient, filename-only post-write success event and its clearing/dismissal behavior. |
-| `RekonPursuit/ContentView.swift` | Pass the event into the existing root modal presentation seam and expose a root-only dismissal callback; do not add an overlay or alter current sheets. |
-| `RekonPursuit/SettingsView.swift` | Extend display-only `SettingsRootModalPresentation`/bindings and, if required by the host test, pure recovery display-state helpers. Do not alter a `View` body, selectors, cards, or dialog. |
-| `RekonPursuitTests/WorkspaceViewModelTests.swift` | Add the real-write, safe-event/no-workspace-mutation contract. |
-| `RekonPursuitUITests/RekonPursuitUITests.swift` | Add the four deterministic reference UI contracts. |
-| `RekonPursuitUITestHostTests/RekonPursuitUITestHostTests.swift` | Extend the existing pure recovery-presentation state test only. |
+| RekonPursuit/WorkspaceViewModel.swift | Filename-only event, opaque token/invalidation, and local test-injected creation closure whose default calls the unchanged store API. |
+| RekonPursuit/ContentView.swift | Root presentation projection and root-only success dismissal callback. No overlay or sheet close in Task 1. |
+| RekonPursuit/SettingsView.swift | SettingsRootModalPresentation safe event projection and root binding helper only; no View body, card, selector, or dialog changes. |
+| RekonPursuitTests/WorkspaceViewModelTests.swift | Four named event/root/token/workspace-transition contracts. |
+| RekonPursuitUITests/RekonPursuitUITests.swift | Four named deterministic reference UI contracts. |
+| RekonPursuitUITestHostTests/RekonPursuitUITestHostTests.swift | Extend the existing pure Settings recovery presentation-state test only. |
 
-## Explicitly not allowed in Task 1
+## Explicitly prohibited
 
-- No change to `RekonPursuit.xcodeproj/project.pbxproj`, app-shell/global-route
-  code, theme values, fixture construction/identities, launch parsing, test
-  host routing, signing, entitlements, or product-test switch.
-- No `RekonPursuitCore/**`, store, schema, migration, workspace, recovery-key,
-  archive, export-review/write, purge, restore, expiry, document-reference,
-  AI/cloud, Gmail, Calendar, network, or persistence behavior change.
-- No rendering or source release for the reference tabs, any of the four card
-  sections, responsive layout, action-card styling, or the protected-export
-  success dialog. No Settings-owned model, URL, key, bookmark, route, sheet,
-  persistent preference, or invented success state.
-- No modification of dashboard, roadmap, progress, delivery evidence, or
-  unrelated dirty hunks. No fixture key, absolute path, document name, hash,
-  bookmark, MIME type, checksum, fingerprint, receipt, or recovery-key value
-  may be placed in source, process arguments, logs, screenshots, attachments,
-  or reports.
+- No project graph, app-shell/global-route, theme, fixture construction/identity, fixture host, launch parsing, signing, entitlement, product-test switch, or network change.
+- No RekonPursuitCore change; no store/schema/migration/persistence/recovery/archive/export-review/export-write/purge/restore/expiry/document/AI/cloud/Gmail/Calendar behavior change.
+- No fixture/default/demo success, launch input, environment transport, raw destination/key/review transport, or test UI control.
+- No source, process argument, log, attachment, screenshot, report, or test name containing a recovery key, absolute destination path, document filename, hash, bookmark, MIME type, checksum, fingerprint, receipt, or document metadata.
+- No dashboard, roadmap, progress, result bundle, generated artifact, unrelated dirty hunk, whole-file staging, reset, or reformat.
 
-## Test-first RED contract
+## Test-first contracts
 
-### 1. Add the four reference UI selectors before visual implementation
+### Reference UI RED rules
 
-Add these `@MainActor` methods to `RekonPursuitUITests/RekonPursuitUITests.swift`:
+Add these exact methods:
 
-```swift
+~~~
 func testVD207ReferenceRecoveryDashboardKeepsRailAndUsesCardComposition()
 func testVD207ReferenceRecoveryDoesNotInventExportSuccess()
 func testVD207ReferenceTabsKeepKeyboardSelectionAtCompactWidth()
 func testVD207ReferenceOtherSettingsSectionsUseTruthfulInformationalCards()
-```
+~~~
 
-The archive-fixture Recovery test enters through `sidebar-settings`, confirms
-the global Settings rail remains selected, and requires all of these eventual
-reference identifiers:
+Every method begins with a ready deterministic fixture, selected sidebar-settings rail, and current applicable panel/summary proof. Missing Task-2 visuals are recorded individually with XCTContext.runActivity and an assertion message beginning exactly VD2-07x RED: unrendered visual selector . No XCTExpectFailure, XCTSkip, generic timeout, fixture/route failure, focus query failure, or non-selector copy failure may count as RED. When any declared visual selector is absent, record every declared absence then return before Task-2 copy/control assertions. This is a failing test, not a skip.
 
-```text
+The archive Recovery test must keep its existing fixed value exactly:
+
+~~~
+created=2025-05-06T12:00:00Z;expires=2025-06-05T12:00:00Z;lifecycle=Verified
+~~~
+
+Its only Task-1 RED selectors are:
+
+~~~
 settings-reference-tab-strip
 settings-reference-tab-recovery-archives
 settings-recovery-overview-card
@@ -93,181 +79,252 @@ settings-recovery-action-create
 settings-recovery-action-purge
 settings-recovery-action-restore
 settings-recovery-protected-export
-```
+~~~
 
-It must assert the current archive accessibility value exactly equals
-`created=2025-05-06T12:00:00Z;expires=2025-06-05T12:00:00Z;lifecycle=Verified`.
-Panel-scoped labels and values must not contain `fixture-document-hash`,
-`application/pdf`, `/private/`, or `recovery key` (case-insensitive where the
-query supports it).
+Before those RED checks it proves archive fixture readiness, existing Recovery panel/action IDs, active rail, fixed archive summary, and existing cancellation/error behavior. After Task 2 it additionally rejects fixture-document-hash, application/pdf, /private/, and recovery key in all Recovery labels/values.
 
-The default-success test uses a ready fixture without starting export and
-asserts `settings-protected-export-success-dialog` does not exist. It must not
-use a launch argument, fixture field, or demo control to simulate success.
+Extend testVD207SettingsRecoveryPresentationPreservesBusyDisabledAndInactiveCandidateContracts without fixture, launch-parser, or host-routing changes. Construct only safe SettingsArchiveSummary values. It must assert not enrolled as Recovery key not set up / Set up a recovery key to protect this workspace.; enrolled/no archive as Recovery key enrolled / No verified archive available; and enrolled/verified archive as Recovery key enrolled / Verified archive available. Retain every existing create/export/purge/restore enabled/busy predicate, progress text, retained-purge status, and inactive-candidate assertion. Task 2 renders these values in settings-recovery-status-enrollment and settings-recovery-status-state.
 
-The compact-width test uses `populated`, requires
-`settings-reference-tab-strip`, focuses
-`settings-section-document-references`, observes the exact value `Not
-selected; Keyboard focus`, presses Space, then observes `Selected; Keyboard
-focus`, the document panel, and a still-selected `sidebar-settings` rail.
+The default-success test uses a ready archive fixture, proves the existing Recovery panel/rail, and asserts settings-protected-export-success-dialog is absent without starting export. It is green in Task 1 and Task 2.
 
-The other-sections test uses `document-relink` and, after local selection,
-requires these exact eventual card identifiers:
+The compact test uses populated with compact window size. It proves all four existing labels/selectors are present, hittable, and keyboard reachable:
 
-```text
+~~~
+settings-section-workspace
+settings-section-recovery-archives
+settings-section-document-references
+settings-section-ai-connections
+~~~
+
+Starting at Recovery, it tabs to each non-selected section, asserts exactly Not selected; Keyboard focus, presses Space, asserts exactly Selected; Keyboard focus and matching panel, and asserts sidebar-settings remains selected. Only after those green baseline semantics does it record these Task-1 RED selectors:
+
+~~~
+settings-reference-tab-strip
+settings-reference-tab-recovery-archives
+~~~
+
+After Task 2 the exact loop proves all four labeled reference tabs remain present/reachable in compact vertical layout.
+
+The document-relink test first proves exact existing aggregate summary 0 available · 1 require relinking, current Document/AI panels, no button/link/menu button/text field/switch/checkbox descendants, and absence of fixture-resume.pdf, fixture-document-hash, application/pdf, and /private/ in labels/values. Its only Task-1 RED selectors are:
+
+~~~
 settings-workspace-overview-card
 settings-workspace-recovery-card
 settings-workspace-return-card
-
 settings-document-overview-card
 settings-document-available-card
 settings-document-relink-card
 settings-document-privacy-card
-
 settings-ai-overview-card
 settings-ai-assistant-card
 settings-ai-email-calendar-card
 settings-ai-cloud-card
 settings-ai-privacy-card
-```
+~~~
 
-`settings-document-reference-summary` must remain aggregate-only. The document
-and AI panels must each have no descendant button, link, menu button, text
-field, switch, or checkbox. The document panel must disclose no fixture
-filename, path, hash, or MIME sentinel. The AI panel must include the truthful
-unavailable words `No cloud services`, `Not configured`, `Not connected`, and
-`Offline`, without implying a capability or setup action.
+After Task 2 it proves exact Workspace text Local workspace, Workspace status / Active, Storage / Local only, and Returning does not modify the active workspace. It requires No preserved workspace available; Disabled and no actionable return-card descendant where no separate workspace is active. It requires Document card facts Available / 0 and Needs relinking / 1 plus privacy wording that names and locations stay private. It requires AI activity / No activity recorded, Connection status / Offline, and exact AI assistant / Not configured, Email & calendar / Not connected, and Cloud sync / Not configured. The Document and AI no-control/no-metadata assertions remain active after every visual card exists.
 
-### 2. Add the real-export unit contract before its implementation
+### Green event, root, and token contracts
 
-Add async
-`testVerifiedProtectedExportPublishesSafeSuccessOnlyAfterWritingAndDismissesWithoutWorkspaceMutation()`
-to `WorkspaceViewModelTests`. It generates a `RecoveryKey` only in process
-memory, injects one exact non-existent temporary `.rekonexport` destination,
-creates an active opportunity, reviews and confirms the export, and waits only
-while `isCreatingProtectedExport` is true.
+Add these exact async WorkspaceViewModelTests methods:
 
-The assertions are normative:
+~~~
+func testVerifiedProtectedExportPublishesSafeSuccessAndRootPresentationOnlyAfterRealWriting() async throws
+func testProtectedExportSuccessRemainsNilForEveryNonSuccessBranch() async throws
+func testCancellingConfirmedProtectedExportInvalidatesInFlightOperation() async throws
+func testProtectedExportSuccessClearsForEveryWorkspaceTransition() async throws
+~~~
 
-```swift
-XCTAssertTrue(FileManager.default.fileExists(atPath: destination.path))
-XCTAssertEqual(model.protectedExportSuccess?.displayFilename, destination.lastPathComponent)
-XCTAssertFalse(model.protectedExportSuccess!.displayFilename.contains("/"))
-model.dismissProtectedExportSuccess()
-XCTAssertNil(model.protectedExportSuccess)
-XCTAssertEqual(model.opportunities.map(\.id), activeIDsBefore)
-```
+The positive test creates an enrolled real store and active opportunity, uses the existing protectedExportDestination injection with one exact non-existent generated .rekonexport URL, and uses the production-default creation closure. It asserts nil before review/confirmation; after real write, it asserts output existence, event displayFilename equals destination.lastPathComponent, filename contains no slash, and active IDs are unchanged. It constructs SettingsRootModalPresentation from the event and proves it exposes only the safe filename and Selected local folder. Its simulated Done path calls only SettingsRootModalBindings.dismissProtectedExportSuccess { model.dismissProtectedExportSuccess() }, then proves event/root presentation are absent and output/active IDs are unchanged. It never passes a review, URL, key, receipt, archive row, document value, store, or model into Settings presentation.
 
-Before review, after destination cancellation, and after review/write error,
-the event must be `nil`. Deferred cleanup removes only that generated
-destination. The test must neither log nor attach a recovery key.
+The exhaustive nil test uses independent model/destination subcases. In every row it asserts protectedExportSuccess == nil, false root success presentation, applicable no-output/no-overwrite, and unchanged active IDs:
 
-### 3. Extend the pure display-state test
+| Branch | Deterministic setup |
+| --- | --- |
+| Invalid confirmation/re-entry | Complete a valid review, call confirmProtectedExport with invalid entry. |
+| Destination cancellation | Use protectedExportDestination: { nil }, then call review. |
+| Review failure | Review against an already occupied generated output. |
+| Stale/source-changed | Complete valid review, change real source revision, then confirm. |
+| Write failure | Complete valid review, create occupied output before confirm, then preserve its bytes. |
+| Fresh review | Create real success, start a new valid review, then assert prior event cleared before/during review. |
+| Cancel | Create real success, call cancelProtectedExport, then assert prior event cleared. |
 
-Extend
-`testVD207SettingsRecoveryPresentationPreservesBusyDisabledAndInactiveCandidateContracts`
-using only constructed `SettingsArchiveSummary` display values. It must cover
-truthful Recovery overview wording and existing action states for not enrolled,
-enrolled with no archive, verified archive, exporting, and restoring. Fixture
-construction, launch parsing, and host routing are read-only.
+Use generated temporary artifacts only and remove only those generated artifacts. The existing Core no-overwrite/source-change tests supplement but never replace these event assertions.
 
-## Minimal safe transient success event
+For every invalid/review/write failure branch, assert the existing safe protectedExportErrorMessage is non-empty where the current flow exposes an error. The signed UI testVD207SettingsRecoveryRetainsArchiveTruthAndRootOwnedCancellation retains its protected-export-error accessibility label/value assertion and verifies success dialog absence after its error/cancel path.
 
-After the unit contract exists, add a `ProtectedExportSuccess: Equatable`
-value adjacent to current protected-export state. It has exactly one datum:
-`displayFilename`. `WorkspaceViewModel` publishes it as an optional,
-private-set transient event and provides a dismissal method that only clears the
-event.
+The gated-cancel test adds a private GatedProtectedExportCreate actor with waitUntilStarted() and release() continuations. Construct the model with that creation closure, complete a valid real store review, wait until confirmation enters the gate, call existing model.cancelProtectedExport(), release the gate, then wait until isCreatingProtectedExport is false. It proves nil event, false root presentation, no gated output, cleared review/error, and unchanged active IDs. It does not claim a lower-layer write cancellation or alter its contract.
 
-The model assigns the event only after the existing
-`createProtectedExport(review:recoveryKey:)` call returns successfully and its
-existing store-identity guard still holds. Its value derives from
-`ProtectedExportReview.displayFilename`, never from the destination URL. A
-fresh export review and `cancelProtectedExport()` clear any prior success;
-cancel, invalid re-entry, review failure, stale review, and write failure never
-publish it.
+The every-workspace-transition test first creates a real success for a distinct model/destination before each case. It then proves nil event and false root presentation after every public route through apply or clearWorkspaceDerivedState: start normal replacement, createWorkspaceIfNeeded, createSeparateLocalWorkspace, returnToPreservedWorkspaceRecovery, successful restoreEncryptedBackup(from:), failed restoreEncryptedBackup(from:), chooseExistingWorkspaceFolder external replacement, chooseExistingWorkspaceFolder cancellation-to-recovery, closeWorkspace, and teardown. It preserves existing active-ID semantics per route and uses existing bookmark/separate-workspace fixtures only.
 
-The event must never retain, publish, derive, or log a destination URL/parent
-identity, bookmark, receipt, recovery key, key-derived material, checksum,
-fingerprint, document metadata, or workspace mutation. It does not change the
-review-before-write flow, no-overwrite behavior, archive/purge/restore state,
-or active workspace.
+### Required event implementation
 
-`ContentView` remains the only root owner: it may project this event through
-`SettingsRootModalPresentation` and offer a root-only dismissal helper. Task 1
-must not present a success view, close the existing export sheet, or change
-error/cancellation presentation. Task 2 alone consumes the event to show the
-dialog after a real success.
+Add exactly one safe payload:
 
-## Exact signed Task 1 matrix and classification
+~~~
+struct ProtectedExportSuccess: Equatable {
+    let displayFilename: String
+}
+~~~
 
-First, the just-added unit test may be run alone to demonstrate the narrowly
-expected compile-time RED for the absent event symbol. That is test-first
-evidence only; it is not a signed-matrix result and cannot be used to classify
-a build failure as acceptable.
+Keep a private opaque ProtectedExportOperationToken containing UUID. Store a current token next to protected-export state. invalidateProtectedExportOperation creates a new token and clears protectedExportSuccess.
 
-After the minimal event is present, run this exact signed Debug matrix:
+Invalidate before every new review, invalid review input, destination cancellation, review failure, confirmation invalid input, confirmation failure, stale/early return, cancelProtectedExport, clearWorkspaceDerivedState, and every apply transition that replaces or leaves the store. Confirmation captures the current token before it starts. After the existing createProtectedExport call returns, the sole success assignment follows this guard:
 
-```bash
-xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -configuration Debug -destination 'platform=macOS,arch=arm64' -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceRecoveryDashboardKeepsRailAndUsesCardComposition -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceRecoveryDoesNotInventExportSuccess -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceTabsKeepKeyboardSelectionAtCompactWidth -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceOtherSettingsSectionsUseTruthfulInformationalCards -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207SettingsRecoveryRetainsArchiveTruthAndRootOwnedCancellation -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207SettingsSecondaryNavigationDefaultsToRecoveryAndKeepsGlobalRail -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testVD207SettingsRecoveryPresentationPreservesBusyDisabledAndInactiveCandidateContracts -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testVerifiedProtectedExportPublishesSafeSuccessOnlyAfterWritingAndDismissesWithoutWorkspaceMutation -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testCancellingReviewedProtectedExportClearsReviewWithoutWritingOrChangingActiveWorkspace -only-testing:RekonPursuitTests/ProtectedExportTests/testReviewBindsDestinationParentIdentity -only-testing:RekonPursuitTests/ProtectedExportTests/testSourceRevisionChangeRejectsReviewedExportWithoutCreatingAFile -only-testing:RekonPursuitTests/ProtectedExportTests/testExistingTargetIsRejectedWithoutOverwritingIt -derivedDataPath /private/tmp/rekon-vd207x-task-1-red-dd -resultBundlePath /private/tmp/rekon-vd207x-task-1-red.xcresult
-```
+~~~
+guard self.protectedExportOperationToken == operationToken, self.store === store else { return }
+self.protectedExportSuccess = .init(displayFilename: review.displayFilename)
+~~~
 
-The only allowed final REDs are selector/panel absences in these three
-not-yet-rendered reference tests:
+A stale token/store completion can finish only its own busy bookkeeping. It must not publish success or mutate review/error/status. The model event is never persisted or transported to Settings. The injected creation closure defaults exactly to the existing store.createProtectedExport call and is never configured by fixture/launch/UI behavior.
 
-1. `testVD207ReferenceRecoveryDashboardKeepsRailAndUsesCardComposition`
-2. `testVD207ReferenceTabsKeepKeyboardSelectionAtCompactWidth`
-3. `testVD207ReferenceOtherSettingsSectionsUseTruthfulInformationalCards`
+SettingsRootModalPresentation gains only protectedExportSuccess, isProtectedExportSuccessPresented, protectedExportSuccessDisplayFilename, and fixed protectedExportSuccessDestinationLabel. SettingsRootModalBindings gains only dismissProtectedExportSuccess(dismissProtectedExportSuccess:). ContentView projects the event and exposes the root-only callback; Task 1 must not render the dialog or close the sheet.
 
-`testVD207ReferenceRecoveryDoesNotInventExportSuccess` must pass because
-success is not a fixture/default state. The real-export unit test, pure host
-display-state test, both existing Settings UI safety tests, reviewed-export
-cancellation test, and all three lower-layer protected-export safety tests must
-pass once with no skip or expected-failure marker. A compile, signing, fixture,
-host, route, global-rail, accessibility-query, baseline-safety, or unrelated
-test failure blocks Task 1; it is never valid RED evidence.
+## Exact signed Task 1 matrix
 
-## Dirty-baseline and hunk-isolated checkpoint rules
+Run this command after the event implementation. The Task 2 matrix below repeats the same exact selector set; only its DerivedData/result paths differ.
 
-1. Before editing, record `git status --short`, the unstaged diffs for every
-   allowlisted source/test path, and
-   `git hash-object RekonPursuit.xcodeproj/project.pbxproj`. Do not stage
-   anything while recording the baseline.
-2. Treat the existing `SettingsView.swift`, `ContentView.swift`, and test-path
-   changes as unaccepted work. Do not reformat, move, amend, stage, or cite
-   those hunks as Task 1 evidence. If the untracked Settings file must be made
-   patch-selectable, use `git add -N RekonPursuit/SettingsView.swift` only;
-   then stage just authored hunks with `git add -p`.
-3. A Task 1 checkpoint may contain only the allowlisted Task 1 hunks. It must
-   not include a whole dirty file merely because that file also contains the
-   new hunk. Do not stage project registration, UI rendering, fixture changes,
-   dashboard/roadmap/progress updates, result bundles, or temporary artifacts.
-4. Before a checkpoint, inspect `git diff --cached --name-only` and the full
-   `git diff --cached` against this allowlist; then run
-   `git diff --cached --check`. Any extra path, pre-existing hunk, whitespace
-   error, generated output, or unreconciled baseline difference rejects the
-   checkpoint.
-5. Preserve the unique `.xcresult` outside the repository and record its
-   per-selector result. Do not commit test artifacts. A later reviewer must be
-   able to distinguish the three named visual REDs from every required green
-   safety result without relying on a working-tree diff.
+~~~
++xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -configuration Debug -destination 'platform=macOS,arch=arm64'  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceRecoveryDashboardKeepsRailAndUsesCardComposition  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceRecoveryDoesNotInventExportSuccess  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceTabsKeepKeyboardSelectionAtCompactWidth  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceOtherSettingsSectionsUseTruthfulInformationalCards  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207SettingsSecondaryNavigationDefaultsToRecoveryAndKeepsGlobalRail  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207SettingsSecondaryNavigationIsKeyboardOperableAtCompactWidth  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207SettingsRecoveryRetainsArchiveTruthAndRootOwnedCancellation  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207SettingsDocumentAndAISectionsStayAggregateAndUnavailable  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207SettingsRelaunchKeepsFixtureTruthAndResetsLocalSelection  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testRecoveryFixtureShowsOnlyRecoveryActionsAndDoesNotOpenAWorkspace  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testVD202FixtureHostPublishesAProofThatLiveStoresAreUnavailable  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testVisualFixtureLaunchConfigurationIsExplicitAndIsolated  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testVisualFixtureConfigurationsUsePerRunTemporaryRoots  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testVisualFixtureUsesFixedTimeAndReducedMotionContracts  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testArchiveVisualFixtureConstructionCompletesOnTheMainActor  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testArchiveVisualFixtureSeedsVerifiedArchiveCatalogue  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testArchiveVisualFixtureUsesItsDeclaredTimeZoneAtTheCalendarBoundary  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testDocumentRelinkVisualFixtureContainsASelectedRelinkRequiredReference  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testVD207SettingsRecoveryPresentationPreservesBusyDisabledAndInactiveCandidateContracts  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testVerifiedProtectedExportPublishesSafeSuccessAndRootPresentationOnlyAfterRealWriting  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testProtectedExportSuccessRemainsNilForEveryNonSuccessBranch  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testCancellingConfirmedProtectedExportInvalidatesInFlightOperation  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testProtectedExportSuccessClearsForEveryWorkspaceTransition  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testRefreshIncludesLifecycleAwareDocumentReferenceSummary  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testPortableArchiveBusyStateRejectsDuplicateAndWorkspaceSwitch  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testPortableArchiveRestoreKeepsSecurityScopeUntilExplicitConfirmationCompletes  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testMalformedPortableArchiveRecoveryKeyRemainsVisibleUntilDismissed  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testPortableArchiveVerificationFailureRemainsVisibleUntilDismissed  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testCancellingAwaitedPortableArchiveVerificationReleasesScopeExactlyOnceAfterWorkerFinishes  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testCancellingAwaitedPortableArchiveRestoreReleasesScopeExactlyOnceAfterWorkerFinishes  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testPortableArchiveControlsStayDisabledThroughoutAwaitedVerificationAndRestore  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testProtectedExportReviewFailureRemainsVisibleForCorrection  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testCancellingReviewedProtectedExportClearsReviewWithoutWritingOrChangingActiveWorkspace  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testRelaunchPrefersSelectedSeparateWorkspaceAndRetainsOpportunity  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testReturnToPreservedRecoveryClosesSeparateStoreAndChangesOnlySelector  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testVD207SettingsRootModalBindingsDismissWithoutChangingActiveWorkspace  \
+  -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testExpiryAtBoundaryRemovesOnlyVerifiedMatchingRegularArchive  \
+  -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testRetainedDataPurgeRemovesDeletedOpportunityReconciliationAndTombstoneMaterial  \
+  -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testRetainedDataPurgeRejectsWrongKeyBeforeWritingJobOrLease  \
+  -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testVerifiedArchiveRestoresIntoANewInactiveWorkspaceWithoutChangingSource  \
+  -only-testing:RekonPursuitCoreTests/ProtectedExportTests/testReviewBindsDestinationParentIdentity  \
+  -only-testing:RekonPursuitCoreTests/ProtectedExportTests/testSourceRevisionChangeRejectsReviewedExportWithoutCreatingAFile  \
+  -only-testing:RekonPursuitCoreTests/ProtectedExportTests/testExistingTargetIsRejectedWithoutOverwritingIt  \
+  -derivedDataPath /private/tmp/rekon-vd207x-task-1-red-dd  \
+  -resultBundlePath /private/tmp/rekon-vd207x-task-1-red.xcresult
+~~~
 
-## Task 2 release prerequisite
+Expected: every named event/root/fixture/recovery/lower-layer selector executes once, passes, and has zero skip/expected-failure marker. The three named reference methods are the only failures, and their result activities are exclusively the declared unrendered visual selector messages. Compile, signing, host, fixture, rail, route, accessibility, baseline, or operation/event failure blocks Task 1.
 
-Task 2 remains blocked until all of the following are recorded:
+## Exact signed Task 2 matrix
 
-1. Task 1 has a hunk-isolated checkpoint containing only the safe transient
-   event and its allowlisted contracts, plus the cached-diff inspection and
-   `git diff --cached --check` evidence.
-2. Independent QA confirms the exact signed matrix: every named safety test
-   ran once and passed without skip, and only the three declared unrendered
-   selector/panel absences are RED.
-3. Architecture confirms root-owned presentation and filename-only event
-   boundaries; Security/privacy confirms no key, path, bookmark, fingerprint,
-   checksum, receipt, or document metadata crosses into Settings or evidence.
-4. TPM and Delivery record the dirty-baseline risk, exact RED classification,
-   artifact locations, and dependency-safe approval to release the one
-   presentation task.
+Run this exact command after rendering. It deliberately retains every Task 1 selector and changes only the paths.
 
-Only then may a fresh Task 2 implementer render the approved four-section
-reference design and root-owned dialog. VD2-08 remains out of scope.
+~~~
++xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -configuration Debug -destination 'platform=macOS,arch=arm64'  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceRecoveryDashboardKeepsRailAndUsesCardComposition  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceRecoveryDoesNotInventExportSuccess  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceTabsKeepKeyboardSelectionAtCompactWidth  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceOtherSettingsSectionsUseTruthfulInformationalCards  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207SettingsSecondaryNavigationDefaultsToRecoveryAndKeepsGlobalRail  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207SettingsSecondaryNavigationIsKeyboardOperableAtCompactWidth  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207SettingsRecoveryRetainsArchiveTruthAndRootOwnedCancellation  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207SettingsDocumentAndAISectionsStayAggregateAndUnavailable  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207SettingsRelaunchKeepsFixtureTruthAndResetsLocalSelection  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testRecoveryFixtureShowsOnlyRecoveryActionsAndDoesNotOpenAWorkspace  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testVD202FixtureHostPublishesAProofThatLiveStoresAreUnavailable  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testVisualFixtureLaunchConfigurationIsExplicitAndIsolated  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testVisualFixtureConfigurationsUsePerRunTemporaryRoots  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testVisualFixtureUsesFixedTimeAndReducedMotionContracts  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testArchiveVisualFixtureConstructionCompletesOnTheMainActor  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testArchiveVisualFixtureSeedsVerifiedArchiveCatalogue  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testArchiveVisualFixtureUsesItsDeclaredTimeZoneAtTheCalendarBoundary  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testDocumentRelinkVisualFixtureContainsASelectedRelinkRequiredReference  \
+  -only-testing:RekonPursuitUITestHostTests/RekonPursuitUITestHostTests/testVD207SettingsRecoveryPresentationPreservesBusyDisabledAndInactiveCandidateContracts  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testVerifiedProtectedExportPublishesSafeSuccessAndRootPresentationOnlyAfterRealWriting  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testProtectedExportSuccessRemainsNilForEveryNonSuccessBranch  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testCancellingConfirmedProtectedExportInvalidatesInFlightOperation  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testProtectedExportSuccessClearsForEveryWorkspaceTransition  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testRefreshIncludesLifecycleAwareDocumentReferenceSummary  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testPortableArchiveBusyStateRejectsDuplicateAndWorkspaceSwitch  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testPortableArchiveRestoreKeepsSecurityScopeUntilExplicitConfirmationCompletes  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testMalformedPortableArchiveRecoveryKeyRemainsVisibleUntilDismissed  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testPortableArchiveVerificationFailureRemainsVisibleUntilDismissed  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testCancellingAwaitedPortableArchiveVerificationReleasesScopeExactlyOnceAfterWorkerFinishes  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testCancellingAwaitedPortableArchiveRestoreReleasesScopeExactlyOnceAfterWorkerFinishes  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testPortableArchiveControlsStayDisabledThroughoutAwaitedVerificationAndRestore  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testProtectedExportReviewFailureRemainsVisibleForCorrection  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testCancellingReviewedProtectedExportClearsReviewWithoutWritingOrChangingActiveWorkspace  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testRelaunchPrefersSelectedSeparateWorkspaceAndRetainsOpportunity  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testReturnToPreservedRecoveryClosesSeparateStoreAndChangesOnlySelector  \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testVD207SettingsRootModalBindingsDismissWithoutChangingActiveWorkspace  \
+  -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testExpiryAtBoundaryRemovesOnlyVerifiedMatchingRegularArchive  \
+  -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testRetainedDataPurgeRemovesDeletedOpportunityReconciliationAndTombstoneMaterial  \
+  -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testRetainedDataPurgeRejectsWrongKeyBeforeWritingJobOrLease  \
+  -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testVerifiedArchiveRestoresIntoANewInactiveWorkspaceWithoutChangingSource  \
+  -only-testing:RekonPursuitCoreTests/ProtectedExportTests/testReviewBindsDestinationParentIdentity  \
+  -only-testing:RekonPursuitCoreTests/ProtectedExportTests/testSourceRevisionChangeRejectsReviewedExportWithoutCreatingAFile  \
+  -only-testing:RekonPursuitCoreTests/ProtectedExportTests/testExistingTargetIsRejectedWithoutOverwritingIt  \
+  -derivedDataPath /private/tmp/rekon-vd207x-task-2-green-dd  \
+  -resultBundlePath /private/tmp/rekon-vd207x-task-2-green.xcresult
+~~~
+
+Expected: every named selector runs exactly once with zero failure, zero skip, and zero expected failure.
+
+## Task 2 release and evidence requirements
+
+Task 2 is blocked until Task 1 has a hunk-isolated checkpoint containing only allowed event/root/test hunks, the cached diff has been inspected, git diff --cached --check passes, and independent Architecture/QA/Security/privacy/TPM/Delivery approvals are recorded.
+
+After green Task 2, retain these signed-host XCTest attachments outside the repository:
+
+~~~
+VD2-07x-wide-workspace
+VD2-07x-wide-recovery
+VD2-07x-wide-document-references
+VD2-07x-wide-ai-connections
+VD2-07x-compact-workspace
+VD2-07x-compact-recovery
+VD2-07x-compact-document-references
+VD2-07x-compact-ai-connections
+~~~
+
+The Task 2 tests attach them with XCTAttachment screenshot and keepAlways after the section is selected/rendered. Export attachments using:
+
+~~~
+mkdir -p /private/tmp/rekon-vd207x-visual-evidence
+xcrun xcresulttool get test-results summary --path /private/tmp/rekon-vd207x-task-2-green.xcresult
+xcrun xcresulttool get test-results tests --path /private/tmp/rekon-vd207x-task-2-green.xcresult
+xcrun xcresulttool export attachments --path /private/tmp/rekon-vd207x-task-2-green.xcresult --output-path /private/tmp/rekon-vd207x-visual-evidence/fixture-attachments
+find /private/tmp/rekon-vd207x-visual-evidence -type f -print
+~~~
+
+Open each image beside the approved reference, checking rail, cyan selected rule, hierarchy, cards, wide/compact response, disabled/unavailable treatment, and the forbidden-content list. A tester then uses the signed normal Debug app and an ordinary enrolled local workspace to complete a real existing export to an empty local destination. Without recording the key, chooser, or path, capture the visible dialog at exactly /private/tmp/rekon-vd207x-visual-evidence/VD2-07x-real-export-success.png, press Done, and prove active workspace IDs stay unchanged. The dialog image must show only safe filename, Selected local folder, reminder, and Done. It is never committed.
+
+## Dirty-baseline and checkpoint rules
+
+1. Before edits record status, all allowlisted source/test diffs, and the project-file hash. Stage nothing.
+2. Treat existing source/test hunks as unaccepted. Use git add -N only for an untracked SettingsView.swift when necessary, then git add -p for authored hunks.
+3. A Task 1 checkpoint contains only allowlisted Task 1 hunks. It contains no project registration, rendered UI, fixture change, dashboard/roadmap/progress update, result bundle, or temporary artifact.
+4. Before checkpoint inspect git diff --cached --name-only and full git diff --cached, then run git diff --cached --check. Any extra path, old hunk, whitespace error, generated output, or unreconciled baseline difference rejects the checkpoint.
+5. Preserve each unique xcresult outside the repository. Review its summary/test list to prove every selector ran once with no skip; retain per-selector Task-1 RED versus green evidence.
+
+VD2-08 and its accepted accessibility/recovery automation debts remain out of scope.
