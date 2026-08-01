@@ -1,16 +1,22 @@
-# VD2-07x — Reference-faithful Recovery & archives design
+# VD2-07x — Reference-faithful Settings screen design
 
 **Date:** 2026-08-01
 **Status:** Product-owner approved. This document supersedes the visual
 composition portions of `2026-08-01-vd207-settings-information-architecture-design.md`.
-**Controlling reference:** `/Users/jroberts/Downloads/Generated image 3 (1).png`
+**Controlling references:**
+
+- `/Users/jroberts/Downloads/Generated image 3 (1).png`
+- `/Users/jroberts/Downloads/Codex Image Aug 1, 2026, 03_08_32 PM.png`
+- `/Users/jroberts/Downloads/Codex Image Aug 1, 2026, 03_09_00 PM.png`
+- `/Users/jroberts/Downloads/Codex Image Aug 1, 2026, 03_09_49 PM.png`
+- `/Users/jroberts/Downloads/Codex Image Aug 1, 2026, 03_10_50 PM.png`
 
 ## Purpose and scope
 
 The Settings screen must look and feel like the approved dark desktop reference,
-not like a generic heading, text-button, and panel stack. The reference governs
-the entire **Recovery & archives** surface: its hierarchical composition,
-tab treatment, status overview, archive/action cards, and protected-export
+not like a generic heading, text-button, and panel stack. The references govern
+all four local sections: their common tab treatment, hero/status composition,
+cards, disabled/unavailable treatment, and the Recovery protected-export
 success dialog.
 
 The existing global app rail remains visible and unchanged. The four Settings
@@ -87,6 +93,46 @@ state.
 - Existing export error and cancellation behavior remain root-owned and visible
   through the current presentation flow; a cancel/error never produces success.
 
+### Workspace visual contract
+
+The Workspace tab follows the same hero-plus-cards pattern:
+
+1. A large outlined hero presents a cyan folder symbol, `Local workspace`,
+   `Workspace status` / `Active`, and `Storage` / `Local only`. These are
+   current local facts, not a new workspace-status system.
+2. An outlined `Workspace recovery` card explains the existing preserved
+   workspace safety contract: returning does not modify the active workspace.
+3. The final return card presents the real current state. When no separate
+   workspace is active, it is visibly disabled, says no preserved workspace is
+   available, and has no action. When a separate workspace is active, it
+   exposes the existing return-to-preserved-workspace action and nothing else.
+
+### Document references visual contract
+
+The Document references tab stays aggregate-only while matching the reference:
+
+1. Its hero uses a cyan document symbol, `Document references`, and the
+   statement that it tracks availability without exposing file details.
+2. Two hero facts and two outlined count cards show existing `Available` and
+   `Needs relinking` totals. Cyan denotes available; amber denotes relinking.
+3. A muted information card states that document names and locations stay
+   private. No document rows, paths, bookmarks, hashes, MIME types, filenames,
+   open/relink/remove buttons, or controls are rendered.
+
+### AI & connections visual contract
+
+The AI & connections tab is a truthful unavailable-capability status surface:
+
+1. Its hero uses the cool-violet chain symbol, `AI & connections`, and states
+   that no cloud services are connected. The facts are `AI activity` / `No
+   activity recorded` and `Connection status` / `Offline`.
+2. Three outlined informational cards describe `AI assistant` / `Not
+   configured`, `Email & calendar` / `Not connected`, and `Cloud sync` / `Not
+   configured`. They are status cards, not links or setup controls.
+3. A muted information card says that the workspace remains local and private.
+   No AI, cloud, Gmail, Calendar, budget, consent, configuration, or network
+   control may be implied or introduced.
+
 ## Ownership and data boundary
 
 `ContentView` remains owner of the workspace model, global route, all recovery
@@ -113,6 +159,11 @@ Debug app and deterministic fixture host:
   reflow at compact width;
 - Recovery renders the overview, archive detail, and three truthful action
   cards without exposing sensitive archive/document data;
+- Workspace, Document references, and AI & connections each render the
+  matching hero/card composition, use the approved accent/status colors paired
+  with text, preserve tab keyboard semantics, and do not invent capabilities;
+- document counts remain aggregate-only and the unavailable AI cards contain
+  no actionable descendant controls;
 - current lower-layer archive, purge, restore, separate-workspace, and export
   safety contracts still run once, pass, and have no skip;
 - a success dialog is impossible before confirmation, cancellation, or error;
