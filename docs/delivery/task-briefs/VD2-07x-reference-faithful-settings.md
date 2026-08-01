@@ -222,13 +222,13 @@ xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -configurat
   -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testRelaunchPrefersSelectedSeparateWorkspaceAndRetainsOpportunity  \
   -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testReturnToPreservedRecoveryClosesSeparateStoreAndChangesOnlySelector  \
   -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testVD207SettingsRootModalBindingsDismissWithoutChangingActiveWorkspace  \
-  -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testExpiryAtBoundaryRemovesOnlyVerifiedMatchingRegularArchive  \
-  -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testRetainedDataPurgeRemovesDeletedOpportunityReconciliationAndTombstoneMaterial  \
-  -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testRetainedDataPurgeRejectsWrongKeyBeforeWritingJobOrLease  \
-  -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testVerifiedArchiveRestoresIntoANewInactiveWorkspaceWithoutChangingSource  \
-  -only-testing:RekonPursuitCoreTests/ProtectedExportTests/testReviewBindsDestinationParentIdentity  \
-  -only-testing:RekonPursuitCoreTests/ProtectedExportTests/testSourceRevisionChangeRejectsReviewedExportWithoutCreatingAFile  \
-  -only-testing:RekonPursuitCoreTests/ProtectedExportTests/testExistingTargetIsRejectedWithoutOverwritingIt  \
+  -only-testing:RekonPursuitTests/PortableArchiveTests/testExpiryAtBoundaryRemovesOnlyVerifiedMatchingRegularArchive  \
+  -only-testing:RekonPursuitTests/PortableArchiveTests/testRetainedDataPurgeRemovesDeletedOpportunityReconciliationAndTombstoneMaterial  \
+  -only-testing:RekonPursuitTests/PortableArchiveTests/testRetainedDataPurgeRejectsWrongKeyBeforeWritingJobOrLease  \
+  -only-testing:RekonPursuitTests/PortableArchiveTests/testVerifiedArchiveRestoresIntoANewInactiveWorkspaceWithoutChangingSource  \
+  -only-testing:RekonPursuitTests/ProtectedExportTests/testReviewBindsDestinationParentIdentity  \
+  -only-testing:RekonPursuitTests/ProtectedExportTests/testSourceRevisionChangeRejectsReviewedExportWithoutCreatingAFile  \
+  -only-testing:RekonPursuitTests/ProtectedExportTests/testExistingTargetIsRejectedWithoutOverwritingIt  \
   -derivedDataPath /private/tmp/rekon-vd207x-task-1-red-dd  \
   -resultBundlePath /private/tmp/rekon-vd207x-task-1-red.xcresult
 ~~~
@@ -277,13 +277,13 @@ xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -configurat
   -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testRelaunchPrefersSelectedSeparateWorkspaceAndRetainsOpportunity  \
   -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testReturnToPreservedRecoveryClosesSeparateStoreAndChangesOnlySelector  \
   -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testVD207SettingsRootModalBindingsDismissWithoutChangingActiveWorkspace  \
-  -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testExpiryAtBoundaryRemovesOnlyVerifiedMatchingRegularArchive  \
-  -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testRetainedDataPurgeRemovesDeletedOpportunityReconciliationAndTombstoneMaterial  \
-  -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testRetainedDataPurgeRejectsWrongKeyBeforeWritingJobOrLease  \
-  -only-testing:RekonPursuitCoreTests/PortableArchiveTests/testVerifiedArchiveRestoresIntoANewInactiveWorkspaceWithoutChangingSource  \
-  -only-testing:RekonPursuitCoreTests/ProtectedExportTests/testReviewBindsDestinationParentIdentity  \
-  -only-testing:RekonPursuitCoreTests/ProtectedExportTests/testSourceRevisionChangeRejectsReviewedExportWithoutCreatingAFile  \
-  -only-testing:RekonPursuitCoreTests/ProtectedExportTests/testExistingTargetIsRejectedWithoutOverwritingIt  \
+  -only-testing:RekonPursuitTests/PortableArchiveTests/testExpiryAtBoundaryRemovesOnlyVerifiedMatchingRegularArchive  \
+  -only-testing:RekonPursuitTests/PortableArchiveTests/testRetainedDataPurgeRemovesDeletedOpportunityReconciliationAndTombstoneMaterial  \
+  -only-testing:RekonPursuitTests/PortableArchiveTests/testRetainedDataPurgeRejectsWrongKeyBeforeWritingJobOrLease  \
+  -only-testing:RekonPursuitTests/PortableArchiveTests/testVerifiedArchiveRestoresIntoANewInactiveWorkspaceWithoutChangingSource  \
+  -only-testing:RekonPursuitTests/ProtectedExportTests/testReviewBindsDestinationParentIdentity  \
+  -only-testing:RekonPursuitTests/ProtectedExportTests/testSourceRevisionChangeRejectsReviewedExportWithoutCreatingAFile  \
+  -only-testing:RekonPursuitTests/ProtectedExportTests/testExistingTargetIsRejectedWithoutOverwritingIt  \
   -derivedDataPath /private/tmp/rekon-vd207x-task-2-green-dd  \
   -resultBundlePath /private/tmp/rekon-vd207x-task-2-green.xcresult
 ~~~
