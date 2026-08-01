@@ -515,6 +515,38 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.protectedExportErrorMessage, "That filename already exists. Choose a new filename; Rekon Pursuit will not replace a file.")
     }
 
+    func testCancellingReviewedProtectedExportClearsReviewWithoutWritingOrChangingActiveWorkspace() async throws {
+        let store = try makeStore()
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+        let activeOpportunity = try store.create(CreateOpportunity(title: "Protected export cancellation", company: "Rekon Labs"))
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cancel-reviewed-export-\(UUID().uuidString).rekonexport")
+        defer { try? FileManager.default.removeItem(at: destination) }
+        let model = WorkspaceViewModel(
+            openWorkspace: { .ready(store) },
+            createWorkspace: { store },
+            protectedExportDestination: { destination },
+            separateLocalWorkspace: .disabledForTesting
+        )
+        model.start()
+        let activeIDsBeforeCancellation = model.opportunities.map(\.id)
+
+        model.reviewProtectedExport(reentry: recoveryKey.displayValue)
+        while model.isCreatingProtectedExport { await Task.yield() }
+        XCTAssertNotNil(model.protectedExportReview)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+
+        model.cancelProtectedExport()
+
+        XCTAssertNil(model.protectedExportReview)
+        XCTAssertNil(model.protectedExportErrorMessage)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+        XCTAssertTrue(model.workspaceReady)
+        XCTAssertEqual(model.opportunities.map(\.id), activeIDsBeforeCancellation)
+        XCTAssertEqual(model.opportunities.first?.id, activeOpportunity.id)
+    }
+
     func testExternalFolderLeaseIsRetainedForTheOpenedStoreThenReleasedOnClose() throws {
         let store = try makeStore()
         let bookmarkFixture = ViewModelBookmarkFixture()

@@ -2229,4 +2229,174 @@ final class RekonPursuitUITests: XCTestCase {
             "Recovery fixtures must expose an explicit marker that normal workspace routes cannot become active."
         )
     }
+
+    @MainActor
+    func testVD207SettingsSecondaryNavigationDefaultsToRecoveryAndKeepsGlobalRail() {
+        let app = launchApp(fixture: "populated")
+        let rail = app.descendants(matching: .any)["sidebar-settings"]
+        XCTAssertTrue(rail.waitForExistence(timeout: 5))
+        rail.tap()
+        XCTAssertTrue(rail.isSelected)
+        XCTAssertTrue(app.descendants(matching: .any)["settings-secondary-navigation"].waitForExistence(timeout: 2))
+
+        let recovery = app.buttons["settings-section-recovery-archives"]
+        XCTAssertTrue(recovery.waitForExistence(timeout: 2))
+        XCTAssertTrue((recovery.value as? String ?? "").hasPrefix("Selected"))
+        XCTAssertTrue(app.descendants(matching: .any)["settings-section-recovery-archives-panel"].exists)
+        XCTAssertTrue(app.buttons["set-up-recovery-key"].exists)
+
+        for (control, panel) in [
+            ("settings-section-workspace", "settings-section-workspace-panel"),
+            ("settings-section-document-references", "settings-section-document-references-panel"),
+            ("settings-section-ai-connections", "settings-section-ai-connections-panel")
+        ] {
+            app.buttons[control].tap()
+            XCTAssertTrue(app.descendants(matching: .any)[panel].waitForExistence(timeout: 2))
+            XCTAssertTrue((app.buttons[control].value as? String ?? "").hasPrefix("Selected"))
+            XCTAssertTrue(rail.isSelected)
+        }
+    }
+
+    @MainActor
+    func testVD207SettingsSecondaryNavigationIsKeyboardOperableAtCompactWidth() {
+        let app = launchApp(fixture: "populated", windowSize: "compact")
+        app.descendants(matching: .any)["sidebar-settings"].tap()
+
+        let document = app.buttons["settings-section-document-references"]
+        XCTAssertTrue(document.waitForExistence(timeout: 2))
+        XCTAssertTrue(document.isHittable)
+        XCTAssertTrue(
+            tabToKeyboardFocus(document, in: app, maximumTabPresses: 20),
+            "The compact Settings selector must expose semantic keyboard focus."
+        )
+        XCTAssertEqual(document.value as? String, "Not selected; Keyboard focus")
+        app.typeKey(.space, modifierFlags: [])
+        XCTAssertTrue(app.descendants(matching: .any)["settings-section-document-references-panel"].waitForExistence(timeout: 2))
+        XCTAssertEqual(document.value as? String, "Selected; Keyboard focus")
+        XCTAssertTrue(app.descendants(matching: .any)["sidebar-settings"].isSelected)
+    }
+
+    @MainActor
+    func testVD207SettingsRecoveryRetainsArchiveTruthAndRootOwnedCancellation() {
+        let app = launchApp(fixture: "archive")
+        app.descendants(matching: .any)["sidebar-settings"].tap()
+
+        XCTAssertTrue(app.descendants(matching: .any)["settings-section-recovery-archives-panel"].waitForExistence(timeout: 2))
+        for identifier in ["create-portable-archive", "create-protected-export", "purge-retained-archive-data", "restore-portable-archive"] {
+            XCTAssertTrue(app.buttons[identifier].exists, "Missing retained recovery action \(identifier).")
+        }
+        let summary = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "settings-archive-summary-"))
+            .firstMatch
+        XCTAssertTrue(summary.waitForExistence(timeout: 2))
+        XCTAssertTrue(summary.label.contains("Fixture Archive.rekonarchive"))
+        XCTAssertTrue(summary.label.contains("Verified"))
+        XCTAssertEqual(
+            summary.value as? String,
+            "created=2025-05-06T12:00:00Z;expires=2025-06-05T12:00:00Z;lifecycle=Verified"
+        )
+        XCTAssertTrue(app.buttons["create-portable-archive"].isEnabled)
+        XCTAssertTrue(app.buttons["create-protected-export"].isEnabled)
+        XCTAssertTrue(app.buttons["purge-retained-archive-data"].isEnabled)
+        XCTAssertTrue(app.buttons["restore-portable-archive"].isEnabled)
+
+        app.buttons["create-portable-archive"].tap()
+        XCTAssertTrue(app.staticTexts["Create portable recovery archive"].waitForExistence(timeout: 2))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(summary.waitForExistence(timeout: 2))
+        XCTAssertEqual(summary.value as? String, "created=2025-05-06T12:00:00Z;expires=2025-06-05T12:00:00Z;lifecycle=Verified")
+
+        app.buttons["create-protected-export"].tap()
+        XCTAssertTrue(app.staticTexts["Export protected copy"].waitForExistence(timeout: 2))
+        app.buttons["Choose destination and review"].tap()
+        let protectedExportError = app.staticTexts["protected-export-error"]
+        XCTAssertTrue(protectedExportError.waitForExistence(timeout: 2))
+        XCTAssertEqual(
+            protectedExportError.label,
+            "Enter the complete recovery key, including its checksum."
+        )
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(summary.waitForExistence(timeout: 2))
+        XCTAssertEqual(summary.value as? String, "created=2025-05-06T12:00:00Z;expires=2025-06-05T12:00:00Z;lifecycle=Verified")
+
+        app.buttons["purge-retained-archive-data"].tap()
+        XCTAssertTrue(app.staticTexts["Purge deleted data from retained archives"].waitForExistence(timeout: 2))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(summary.waitForExistence(timeout: 2))
+        XCTAssertEqual(summary.value as? String, "created=2025-05-06T12:00:00Z;expires=2025-06-05T12:00:00Z;lifecycle=Verified")
+    }
+
+    @MainActor
+    func testVD207SettingsDocumentAndAISectionsStayAggregateAndUnavailable() {
+        let app = launchApp(fixture: "document-relink")
+        app.descendants(matching: .any)["sidebar-settings"].tap()
+        app.buttons["settings-section-document-references"].tap()
+
+        let summary = app.descendants(matching: .any)["settings-document-reference-summary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 2))
+        XCTAssertEqual(summary.value as? String, "0 available · 1 require relinking")
+        let documentPanel = app.descendants(matching: .any)["settings-section-document-references-panel"]
+        for metadataSentinel in ["fixture-resume.pdf", "fixture-document-hash", "application/pdf"] {
+            let matchingDescendant = documentPanel.descendants(matching: .any).matching(
+                NSPredicate(
+                    format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@",
+                    metadataSentinel,
+                    metadataSentinel
+                )
+            ).firstMatch
+            XCTAssertFalse(matchingDescendant.exists, "Document panel disclosed \(metadataSentinel).")
+        }
+        XCTAssertEqual(documentPanel.descendants(matching: .button).count, 0)
+        XCTAssertEqual(documentPanel.descendants(matching: .menuButton).count, 0)
+        XCTAssertEqual(documentPanel.descendants(matching: .link).count, 0)
+        XCTAssertEqual(documentPanel.descendants(matching: .checkBox).count, 0)
+        XCTAssertEqual(documentPanel.descendants(matching: .switch).count, 0)
+        XCTAssertEqual(documentPanel.descendants(matching: .textField).count, 0)
+
+        app.buttons["settings-section-ai-connections"].tap()
+        let aiPanel = app.descendants(matching: .any)["settings-section-ai-connections-panel"]
+        XCTAssertTrue(aiPanel.waitForExistence(timeout: 2))
+        let unavailable = app.descendants(matching: .any)["settings-ai-connections-unavailable"]
+        XCTAssertTrue(unavailable.waitForExistence(timeout: 2))
+        XCTAssertTrue(unavailable.label.contains("No AI requests"))
+        XCTAssertTrue(unavailable.label.contains("Gmail"))
+        XCTAssertTrue(unavailable.label.contains("Calendar"))
+        XCTAssertEqual(aiPanel.descendants(matching: .button).count, 0)
+        XCTAssertEqual(aiPanel.descendants(matching: .menuButton).count, 0)
+        XCTAssertEqual(aiPanel.descendants(matching: .link).count, 0)
+        XCTAssertEqual(aiPanel.descendants(matching: .checkBox).count, 0)
+        XCTAssertEqual(aiPanel.descendants(matching: .switch).count, 0)
+        XCTAssertEqual(aiPanel.descendants(matching: .textField).count, 0)
+    }
+
+    @MainActor
+    func testVD207SettingsRelaunchKeepsFixtureTruthAndResetsLocalSelection() {
+        let session = "ui-shell-\(UUID().uuidString)"
+        var app = launchApp(fixture: "document-relink", session: session)
+        defer {
+            if app.state != .notRunning {
+                app.terminate()
+            }
+            Self.removeFixtureSessionFromTestProcess(session)
+        }
+
+        app.descendants(matching: .any)["sidebar-settings"].tap()
+        app.buttons["settings-section-document-references"].tap()
+        let documentSummary = app.descendants(matching: .any)["settings-document-reference-summary"]
+        XCTAssertTrue(documentSummary.waitForExistence(timeout: 2))
+        let preRelaunchSummary = documentSummary.value as? String
+        XCTAssertEqual(preRelaunchSummary, "0 available · 1 require relinking")
+
+        app.terminate()
+        app = launchApp(fixture: "document-relink", session: session)
+        app.descendants(matching: .any)["sidebar-settings"].tap()
+        let recovery = app.buttons["settings-section-recovery-archives"]
+        XCTAssertTrue(recovery.waitForExistence(timeout: 2))
+        XCTAssertTrue((recovery.value as? String ?? "").hasPrefix("Selected"))
+        XCTAssertTrue(app.descendants(matching: .any)["settings-section-recovery-archives-panel"].exists)
+
+        app.buttons["settings-section-document-references"].tap()
+        XCTAssertTrue(documentSummary.waitForExistence(timeout: 2))
+        XCTAssertEqual(documentSummary.value as? String, preRelaunchSummary)
+    }
 }
