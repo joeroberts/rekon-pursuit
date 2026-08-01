@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "activePhaseId": "post_mvp_refinement",
-  "activeTaskId": "VD2-02",
+  "activeTaskId": "VD2-06",
   "nextEligibleTaskId": null,
   "phases": [
     {
@@ -441,12 +441,12 @@
       "phaseId": "post_mvp_refinement",
       "title": "App shell and navigation",
       "workType": "App shell",
-      "status": "in_progress",
-      "releaseCondition": "Fresh implementation is limited to the approved app-shell/navigation brief and must begin with observed red UI regression evidence.",
-      "latestTransition": "Released to a fresh implementer after independent Planning, Architecture, TPM, QA, and Delivery Manager gates approved the red-first test contract.",
+      "status": "accepted",
+      "releaseCondition": "Accepted after independent Architecture, code-review, QA, and security/privacy verification plus product-owner hands-on navigation verification.",
+      "latestTransition": "Product owner accepted the corrected full-row navigation interaction after hands-on verification.",
       "evidence": {
-        "label": "Visual Design v2 plan",
-        "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
+        "label": "VD2-02 task brief",
+        "href": "../task-briefs/VD2-02-app-shell-and-navigation.md"
       },
       "dependsOnTaskIds": [
         "VD2-01"
@@ -458,9 +458,9 @@
       "phaseId": "post_mvp_refinement",
       "title": "Home redesign",
       "workType": "Home UX",
-      "status": "backlog",
-      "releaseCondition": "Requires VD2-02 accepted.",
-      "latestTransition": "Dependency-ordered Visual Design v2 work recorded; not released.",
+      "status": "accepted",
+      "releaseCondition": "Requires VD2-02 accepted; released next in the serial Visual Design v2 sequence.",
+      "latestTransition": "Accepted after explicit product-owner acceptance, independent code/architecture/security gates, 6 focused model tests, 21 fixture-host tests, and 12 Home UI tests passed.",
       "evidence": {
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
@@ -475,15 +475,16 @@
       "phaseId": "post_mvp_refinement",
       "title": "Pipeline table and inspector",
       "workType": "Pipeline UX",
-      "status": "backlog",
-      "releaseCondition": "Requires VD2-02 accepted.",
-      "latestTransition": "Dependency-ordered Visual Design v2 work recorded; not released.",
+      "status": "accepted",
+      "releaseCondition": "Accepted after fresh independent Table/Board, architecture, TPM, and security/privacy gates plus explicit product-owner visual/workflow acceptance of the signed Debug product.",
+      "latestTransition": "Product owner explicitly accepted the completed fidelity-rebuild Pipeline surface as good enough for now; later visual refinements require a separately released correction rather than reopening this accepted card.",
       "evidence": {
-        "label": "Visual Design v2 plan",
-        "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
+        "label": "VD2-04 final fidelity owner handoff",
+        "href": "../evidence/visual-design-v2/VD2-04-owner-handoff-2026-07-30.md"
       },
       "dependsOnTaskIds": [
-        "VD2-02"
+    "VD2-02",
+    "VD2-03"
       ],
       "needsUserAction": false
     },
@@ -492,12 +493,12 @@
       "phaseId": "post_mvp_refinement",
       "title": "Pipeline board and persisted stage movement",
       "workType": "Pipeline workflow",
-      "status": "backlog",
-      "releaseCondition": "Requires VD2-04 accepted.",
-      "latestTransition": "Dependency-ordered Visual Design v2 work recorded; not released.",
+      "status": "accepted",
+      "releaseCondition": "Accepted with documented, non-blocking macOS XCTest submenu-oracle debt; no successor is released.",
+      "latestTransition": "Product owner accepted the signed VD2-05 Board preview on 2026-07-31 after final independent gates accepted. GitHub issue #1 remains open approved test debt; no production defect is known.",
       "evidence": {
-        "label": "Visual Design v2 plan",
-        "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
+        "label": "VD2-05 owner acceptance and closeout",
+        "href": "../evidence/visual-design-v2/VD2-05-owner-handoff-2026-07-31.md"
       },
       "dependsOnTaskIds": [
         "VD2-04"
@@ -509,12 +510,12 @@
       "phaseId": "post_mvp_refinement",
       "title": "Contacts master/detail redesign",
       "workType": "Contacts UX",
-      "status": "backlog",
-      "releaseCondition": "Requires VD2-02 accepted.",
-      "latestTransition": "Dependency-ordered Visual Design v2 work recorded; not released.",
+      "status": "in_progress",
+      "releaseCondition": "Task 1 test foundation only is released after recorded Architecture ACCEPT, QA ACCEPT for Task 1 only, TPM plan-readiness ACCEPT, and Delivery approval. Task 2 remains blocked pending fresh independent QA review of Task 1 source and evidence, then Architecture, TPM, and Delivery continuation approvals.",
+      "latestTransition": "Delivery released only VD2-06 Task 1: signed contacts fixture/test foundation and Contacts-reaching presentation RED evidence. No production Contacts presentation or successor work is released.",
       "evidence": {
-        "label": "Visual Design v2 plan",
-        "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
+        "label": "VD2-06 Task 1 delivery gate",
+        "href": "../../../.superpowers/sdd/2026-07-31-vd206-contacts-master-detail/preimplementation-delivery-gate.md"
       },
       "dependsOnTaskIds": [
         "VD2-02"
@@ -527,8 +528,8 @@
       "title": "Settings information architecture",
       "workType": "Settings UX",
       "status": "backlog",
-      "releaseCondition": "Requires VD2-02 accepted.",
-      "latestTransition": "Dependency-ordered Visual Design v2 work recorded; not released.",
+      "releaseCondition": "Requires VD2-02 accepted and explicit product-owner acceptance of a normally signed Debug VD2-06 build; VD2-06 is at Task 1 only.",
+      "latestTransition": "Backlog and blocked from release while VD2-06 Task 1 test-foundation evidence and the later owner-acceptance gate remain incomplete.",
       "evidence": {
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
@@ -544,8 +545,8 @@
       "title": "Visual QA and accessibility acceptance",
       "workType": "Acceptance",
       "status": "backlog",
-      "releaseCondition": "Requires VD2-03 through VD2-07 accepted.",
-      "latestTransition": "Dependency-ordered Visual Design v2 work recorded; not released.",
+      "releaseCondition": "Requires VD2-03 through VD2-07 accepted; VD2-06 is at Task 1 only and VD2-07 remains Backlog.",
+      "latestTransition": "Backlog and blocked from release pending accepted VD2-06 and VD2-07; broad visual/accessibility acceptance is out of the Task 1 scope.",
       "evidence": {
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
