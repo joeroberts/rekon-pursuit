@@ -29,12 +29,13 @@
 - Modify: `RekonPursuit/ContentView.swift:31-40,159,843-1169`
   - Moves the existing Settings sheet/alert state and the exact existing sheet/alert bodies from the former private `SettingsView` to `ContentView` without changing their wording or model calls.
   - Builds `SettingsRecoveryPresentation` from currently published model facts and passes named closures to `SettingsView`.
+  - Defines the presentation-only `SettingsRootModalPresentation` and `SettingsRootModalBindings` used by the retained root-owned restore sheet, restore-failure alert, and protected-export error surface. They only map existing state or invoke the existing clear/cancel/dismiss closures.
 - Modify: `RekonPursuit.xcodeproj/project.pbxproj`
   - Adds one file reference and exactly one sources membership per app target.
 - Modify: `RekonPursuitUITests/RekonPursuitUITests.swift`
   - Adds five focused `testVD207...` functions and no fixture/data transport mechanism.
 - Modify: `RekonPursuitTests/WorkspaceViewModelTests.swift`
-  - Adds only `testCancellingReviewedProtectedExportClearsReviewWithoutWritingOrChangingActiveWorkspace`; it creates a recovery key in local test memory but records no key value, fixture data, log, attachment, or screenshot.
+  - Adds `testCancellingReviewedProtectedExportClearsReviewWithoutWritingOrChangingActiveWorkspace` in Task 1 and `testVD207SettingsRootModalBindingsDismissWithoutChangingActiveWorkspace` in Task 2. The first creates a recovery key only in local test memory; the second uses only an empty invalid entry and never creates, records, logs, attaches, screenshots, or types a recovery-key value.
 - Modify: `RekonPursuitUITestHostTests/RekonPursuitUITestHostTests.swift`
   - Adds only `testVD207SettingsRecoveryPresentationPreservesBusyDisabledAndInactiveCandidateContracts`; it constructs display-safe presentation values and cannot alter fixture creation, launch parsing, test-host routing, or product behavior.
 
@@ -117,6 +118,58 @@ cancelRetainedDataPurge: { model.cancelRetainedDataPurge() }
 choosePortableArchiveForRestore: { model.choosePortableArchiveForRestore() }
 ```
 
+`ContentView` owns this additional presentation-only root seam. It must be
+defined in `ContentView.swift`, and its two action helpers must be used by the
+existing restore sheet's `Binding` setter and Cancel controls and by the
+restore-failure alert's `Binding` setter. It does not retain a model, a key, a
+fixture value, or any persistence state.
+
+```swift
+struct SettingsRootModalPresentation: Equatable {
+    let isPortableArchiveRestoreSheetPresented: Bool
+    let portableArchiveRestoreFailureMessage: String?
+    let protectedExportErrorMessage: String?
+
+    init(
+        portableArchiveRestoreState: PortableArchiveRestoreState,
+        protectedExportErrorMessage: String?
+    ) {
+        switch portableArchiveRestoreState {
+        case .awaitingRecoveryKey, .verifying, .awaitingConfirmation, .restoring:
+            isPortableArchiveRestoreSheetPresented = true
+        case .idle, .ready, .failed:
+            isPortableArchiveRestoreSheetPresented = false
+        }
+        if case let .failed(failure) = portableArchiveRestoreState {
+            portableArchiveRestoreFailureMessage = failure.message
+        } else {
+            portableArchiveRestoreFailureMessage = nil
+        }
+        self.protectedExportErrorMessage = protectedExportErrorMessage
+    }
+
+    var isPortableArchiveRestoreFailureAlertPresented: Bool {
+        portableArchiveRestoreFailureMessage != nil
+    }
+}
+
+enum SettingsRootModalBindings {
+    static func dismissPortableArchiveRestore(
+        clearRestoreEntry: () -> Void,
+        cancelPortableArchiveRestore: () -> Void
+    ) {
+        clearRestoreEntry()
+        cancelPortableArchiveRestore()
+    }
+
+    static func dismissPortableArchiveRestoreFailure(
+        dismissPortableArchiveRestoreFailure: () -> Void
+    ) {
+        dismissPortableArchiveRestoreFailure()
+    }
+}
+```
+
 ---
 
 ### Task 1: Establish the focused Settings RED and baseline safety evidence
@@ -147,7 +200,7 @@ func testVD207SettingsSecondaryNavigationDefaultsToRecoveryAndKeepsGlobalRail() 
 
     let recovery = app.buttons["settings-section-recovery-archives"]
     XCTAssertTrue(recovery.waitForExistence(timeout: 2))
-    XCTAssertEqual(recovery.value as? String, "Selected")
+    XCTAssertTrue((recovery.value as? String ?? "").hasPrefix("Selected"))
     XCTAssertTrue(app.descendants(matching: .any)["settings-section-recovery-archives-panel"].exists)
     XCTAssertTrue(app.buttons["set-up-recovery-key"].exists)
 
@@ -158,7 +211,7 @@ func testVD207SettingsSecondaryNavigationDefaultsToRecoveryAndKeepsGlobalRail() 
     ] {
         app.buttons[control].tap()
         XCTAssertTrue(app.descendants(matching: .any)[panel].waitForExistence(timeout: 2))
-        XCTAssertEqual(app.buttons[control].value as? String, "Selected")
+        XCTAssertTrue((app.buttons[control].value as? String ?? "").hasPrefix("Selected"))
         XCTAssertTrue(rail.isSelected)
     }
 }
@@ -181,16 +234,17 @@ func testVD207SettingsSecondaryNavigationIsKeyboardOperableAtCompactWidth() {
         tabToKeyboardFocus(document, in: app, maximumTabPresses: 20),
         "The compact Settings selector must expose semantic keyboard focus."
     )
+    XCTAssertEqual(document.value as? String, "Not selected; Keyboard focus")
     app.typeKey(.space, modifierFlags: [])
     XCTAssertTrue(app.descendants(matching: .any)["settings-section-document-references-panel"].waitForExistence(timeout: 2))
-    XCTAssertEqual(document.value as? String, "Selected")
+    XCTAssertEqual(document.value as? String, "Selected; Keyboard focus")
     XCTAssertTrue(app.descendants(matching: .any)["sidebar-settings"].isSelected)
 }
 ```
 
 - [ ] **Step 3: Add the enrolled archive, root-modal cancellation, and privacy RED tests**
 
-Append these two complete methods. They never type into a recovery-key field and attach no screenshot or text attachment, so no recovery-key value enters the test artifact. The archive test proves only the root-owned entry/cancel path: it does not attempt an archive create, protected-export review, purge, or restore operation.
+Append these two complete methods. They never type into a recovery-key field and attach no screenshot or text attachment, so no recovery-key value enters the test artifact. The archive test proves the root-owned archive/export/purge entry and cancellation paths. Its protected-export error check uses the empty initial field only: it does not select a destination, create a review, write an export, or invoke a restore operation.
 
 ```swift
 @MainActor
@@ -225,6 +279,13 @@ func testVD207SettingsRecoveryRetainsArchiveTruthAndRootOwnedCancellation() {
 
     app.buttons["create-protected-export"].tap()
     XCTAssertTrue(app.staticTexts["Export protected copy"].waitForExistence(timeout: 2))
+    app.buttons["Choose destination and review"].tap()
+    let protectedExportError = app.staticTexts["protected-export-error"]
+    XCTAssertTrue(protectedExportError.waitForExistence(timeout: 2))
+    XCTAssertEqual(
+        protectedExportError.label,
+        "Enter the complete recovery key, including its checksum."
+    )
     app.buttons["Cancel"].tap()
     XCTAssertTrue(summary.waitForExistence(timeout: 2))
     XCTAssertEqual(summary.value as? String, "created=2025-05-06T12:00:00Z;expires=2025-06-05T12:00:00Z;lifecycle=Verified")
@@ -308,7 +369,7 @@ func testVD207SettingsRelaunchKeepsFixtureTruthAndResetsLocalSelection() {
     app.descendants(matching: .any)["sidebar-settings"].tap()
     let recovery = app.buttons["settings-section-recovery-archives"]
     XCTAssertTrue(recovery.waitForExistence(timeout: 2))
-    XCTAssertEqual(recovery.value as? String, "Selected")
+    XCTAssertTrue((recovery.value as? String ?? "").hasPrefix("Selected"))
     XCTAssertTrue(app.descendants(matching: .any)["settings-section-recovery-archives-panel"].exists)
 
     app.buttons["settings-section-document-references"].tap()
@@ -432,11 +493,12 @@ git commit -m "test: define VD2-07 Settings presentation contracts"
 - Modify: `RekonPursuit/ContentView.swift`
 - Modify: `RekonPursuit.xcodeproj/project.pbxproj`
 - Test: `RekonPursuitUITests/RekonPursuitUITests.swift`
+- Test: `RekonPursuitTests/WorkspaceViewModelTests.swift`
 - Test: `RekonPursuitUITestHostTests/RekonPursuitUITestHostTests.swift`
 
 **Consumes:** Task 1 accepted RED, the `SettingsRecoveryPresentation` interface above, existing `ContentView` Settings state/sheets at lines 843-1126, and the unchanged `WorkspaceViewModel` action API.
 
-**Produces:** A presentation-only Settings view with four local sections; ContentView-owned recovery/export/purge/restore dialogs; and a single new source file compiled by both app targets.
+**Produces:** A presentation-only Settings view with four local sections; ContentView-owned recovery/export/purge/restore dialogs and root modal bindings; and a single new source file compiled by both app targets.
 
 - [ ] **Step 1: Preserve the project-file baseline before source registration**
 
@@ -446,7 +508,7 @@ git hash-object RekonPursuit.xcodeproj/project.pbxproj
 git diff -- RekonPursuit.xcodeproj/project.pbxproj
 ```
 
-Expected: record the dirty-worktree baseline without staging or normalizing unrelated project entries. Task 2 is blocked if the implementer cannot isolate the six additions in Step 4 from unrelated project changes.
+Expected: record the dirty-worktree baseline without staging or normalizing unrelated project entries. Task 2 is blocked if the implementer cannot isolate the six additions in Step 5 from unrelated project changes.
 
 - [ ] **Step 2: Create `SettingsView.swift` with display-safe state and local selection only**
 
@@ -461,6 +523,24 @@ private enum SettingsSection: CaseIterable, Hashable {
     case recoveryArchives
     case documentReferences
     case aiConnections
+
+    var title: String {
+        switch self {
+        case .workspace: return "Workspace"
+        case .recoveryArchives: return "Recovery & archives"
+        case .documentReferences: return "Document references"
+        case .aiConnections: return "AI & connections"
+        }
+    }
+
+    var accessibilityIdentifier: String {
+        switch self {
+        case .workspace: return "settings-section-workspace"
+        case .recoveryArchives: return "settings-section-recovery-archives"
+        case .documentReferences: return "settings-section-document-references"
+        case .aiConnections: return "settings-section-ai-connections"
+        }
+    }
 }
 
 struct SettingsArchiveSummary: Identifiable, Equatable {
@@ -544,10 +624,37 @@ struct SettingsView: View {
     let cancelRetainedDataPurge: () -> Void
     let choosePortableArchiveForRestore: () -> Void
     @State private var selectedSection: SettingsSection = .recoveryArchives
+    @FocusState private var focusedSection: SettingsSection?
+
+    private func selectorAccessibilityValue(for section: SettingsSection) -> String {
+        let selection = selectedSection == section ? "Selected" : "Not selected"
+        return focusedSection == section ? "\(selection); Keyboard focus" : selection
+    }
 }
 ```
 
-Implement the selector with four `Button` controls, not a global `NavigationSplitView` or `TabView`. Each button must set `selectedSection`, use its exact `settings-section-*` identifier, and set `accessibilityValue(selectedSection == section ? "Selected" : "Not selected")`. Wrap it in `settings-secondary-navigation`. Switch only the local section content:
+Implement the selector with four `Button` controls, not a global `NavigationSplitView` or `TabView`. Each button must set `selectedSection`, use its exact `settings-section-*` identifier, and emit the value produced by `selectorAccessibilityValue(for:)`. The first token remains the non-color selection fact (`Selected` or `Not selected`); the exact `; Keyboard focus` suffix appears only while the semantic SwiftUI focus is on that button. Wrap the controls in `settings-secondary-navigation` and use this exact modifier sequence for every section:
+
+```swift
+Button(section.title) {
+    selectedSection = section
+}
+.focusable()
+.focused($focusedSection, equals: section)
+.onKeyPress(.space) {
+    selectedSection = section
+    return .handled
+}
+.accessibilityValue(selectorAccessibilityValue(for: section))
+.accessibilityIdentifier(section.accessibilityIdentifier)
+.accessibilityAddTraits(selectedSection == section ? .isSelected : [])
+```
+
+`SettingsSection.title` and `SettingsSection.accessibilityIdentifier` are fixed
+switches over the four existing cases; their exact identifiers are
+`settings-section-workspace`, `settings-section-recovery-archives`,
+`settings-section-document-references`, and `settings-section-ai-connections`.
+Switch only the local section content:
 
 ```swift
 switch selectedSection {
@@ -661,9 +768,90 @@ case .settings:
 
 Define `settingsRecoveryPresentation` in `ContentView` from its existing published model facts. Map the catalogue through `SettingsArchiveSummary(archive:)`; map the current `RetainedDataPurgeStatus` with the exact existing five-case text; derive `restoreReady` only with `if case .ready = model.portableArchiveRestoreState`; and map restore progress to `"Verifying portable archive…"` only for `.verifying`, `"Restore in progress…"` only for `.restoring`, or `nil` for every other state. Do not pass `PortableArchiveCatalogueRow` itself, a document, a recovery key, a store, `PortableArchiveRestoreState`, or the model to a focused section.
 
-Move the exact existing recovery-key, archive-creation, protected-export, retained-purge, portable-restore sheets and the portable-restore failure alert from the old private Settings view to the modifier chain on `ContentView`. Preserve their existing `Binding` setters, `model.enrollRecoveryKey`, `model.createPortableArchive`, `model.reviewProtectedExport`, `model.confirmProtectedExport`, `model.cancelProtectedExport`, `model.purgeRetainedArchiveData`, `model.choosePortableArchiveForRestore`, `model.verifyPortableArchiveForRestore`, `model.confirmPortableArchiveRestore`, `model.cancelPortableArchiveRestore`, and `model.dismissPortableArchiveRestoreFailure` calls verbatim. Delete the entire private `SettingsView` declaration from `ContentView` only after those modifiers compile there.
+Also add this computed root presentation in `ContentView`; it is the sole
+conversion from the root model's restore/error facts to the three retained
+modal display decisions:
 
-- [ ] **Step 4: Add the pure recovery-presentation busy/disabled/ready contract**
+```swift
+private var settingsRootModalPresentation: SettingsRootModalPresentation {
+    SettingsRootModalPresentation(
+        portableArchiveRestoreState: model.portableArchiveRestoreState,
+        protectedExportErrorMessage: model.protectedExportErrorMessage
+    )
+}
+```
+
+Move the exact existing recovery-key, archive-creation, protected-export, retained-purge, portable-restore sheets and the portable-restore failure alert from the old private Settings view to the modifier chain on `ContentView`. Preserve their wording and existing `model.enrollRecoveryKey`, `model.createPortableArchive`, `model.reviewProtectedExport`, `model.confirmProtectedExport`, `model.cancelProtectedExport`, `model.purgeRetainedArchiveData`, `model.choosePortableArchiveForRestore`, `model.verifyPortableArchiveForRestore`, `model.confirmPortableArchiveRestore`, `model.cancelPortableArchiveRestore`, and `model.dismissPortableArchiveRestoreFailure` calls. The protected-export error must use `if let message = settingsRootModalPresentation.protectedExportErrorMessage` with the existing `protected-export-error` identifier. Add these exact root bindings:
+
+```swift
+private var portableArchiveRestoreSheetBinding: Binding<Bool> {
+    Binding(
+        get: { settingsRootModalPresentation.isPortableArchiveRestoreSheetPresented },
+        set: { isPresented in
+            if !isPresented {
+                SettingsRootModalBindings.dismissPortableArchiveRestore(
+                    clearRestoreEntry: { portableArchiveRestoreKey = "" },
+                    cancelPortableArchiveRestore: { model.cancelPortableArchiveRestore() }
+                )
+            }
+        }
+    )
+}
+
+private var portableArchiveRestoreFailureAlertBinding: Binding<Bool> {
+    Binding(
+        get: { settingsRootModalPresentation.isPortableArchiveRestoreFailureAlertPresented },
+        set: { isPresented in
+            if !isPresented {
+                SettingsRootModalBindings.dismissPortableArchiveRestoreFailure(
+                    dismissPortableArchiveRestoreFailure: { model.dismissPortableArchiveRestoreFailure() }
+                )
+            }
+        }
+    )
+}
+```
+
+Pass `portableArchiveRestoreSheetBinding` to the retained portable-restore
+`.sheet`; move the exact state-switch body from the current `ContentView.swift`
+without changing a label, field, button, or model call. Every retained restore
+Cancel button, including the verifying and confirmation branches, must use this
+exact action:
+
+```swift
+SettingsRootModalBindings.dismissPortableArchiveRestore(
+    clearRestoreEntry: { portableArchiveRestoreKey = "" },
+    cancelPortableArchiveRestore: { model.cancelPortableArchiveRestore() }
+)
+```
+
+Pass `portableArchiveRestoreFailureAlertBinding` to this exact retained alert:
+
+```swift
+.alert("Portable archive restore", isPresented: portableArchiveRestoreFailureAlertBinding) {
+    Button("Choose another archive") {
+        model.dismissPortableArchiveRestoreFailure()
+        model.choosePortableArchiveForRestore()
+    }
+    Button("Dismiss", role: .cancel) {
+        SettingsRootModalBindings.dismissPortableArchiveRestoreFailure(
+            dismissPortableArchiveRestoreFailure: { model.dismissPortableArchiveRestoreFailure() }
+        )
+    }
+} message: {
+    if let message = settingsRootModalPresentation.portableArchiveRestoreFailureMessage {
+        Text(message)
+    }
+}
+```
+
+Use the same `SettingsRootModalBindings.dismissPortableArchiveRestore` call in
+each retained restore Cancel control. Do not add a test route, fixture switch,
+launch argument, recovery-key value, or model behavior. Delete the entire
+private `SettingsView` declaration from `ContentView` only after those
+modifiers compile there.
+
+- [ ] **Step 4: Add recovery-presentation and root-modal binding contracts**
 
 After `SettingsView.swift` compiles in `RekonPursuitUITestHost`, append this
 test to `RekonPursuitUITestHostTests`. This is a presentation seam, not a
@@ -756,6 +944,96 @@ func testVD207SettingsRecoveryPresentationPreservesBusyDisabledAndInactiveCandid
 }
 ```
 
+Append this second Task-2-only regression to `WorkspaceViewModelTests`. It
+uses an isolated test store and an empty invalid entry only; it never generates,
+types, records, logs, attaches, screenshots, or otherwise handles a
+recovery-key value. The presentation assertions prove the same root bindings
+that `ContentView` invokes, and the repeated active-workspace assertion proves
+those binding callbacks neither open nor replace the current workspace.
+
+```swift
+func testVD207SettingsRootModalBindingsDismissWithoutChangingActiveWorkspace() throws {
+    let store = try makeStore()
+    let activeOpportunity = try store.create(
+        CreateOpportunity(title: "Root modal safety", company: "Rekon Labs")
+    )
+    let archiveURL = URL(fileURLWithPath: "/private/tmp/vd207-root-modal.rekonarchive")
+    let restoreDependencies = PortableArchiveRestoreDependencies(
+        chooseArchive: { archiveURL },
+        beginAccess: { _ in true },
+        endAccess: { _ in },
+        verify: { _, _ in throw PortableArchiveRestoreError.restoreFailed },
+        restore: { _ in throw PortableArchiveRestoreError.restoreFailed }
+    )
+    let model = WorkspaceViewModel(
+        openWorkspace: { .ready(store) },
+        createWorkspace: { store },
+        portableArchiveRestore: restoreDependencies,
+        separateLocalWorkspace: .disabledForTesting
+    )
+    model.start()
+    let activeOpportunityIDs = model.opportunities.map(\.id)
+
+    model.choosePortableArchiveForRestore()
+    let awaiting = SettingsRootModalPresentation(
+        portableArchiveRestoreState: model.portableArchiveRestoreState,
+        protectedExportErrorMessage: model.protectedExportErrorMessage
+    )
+    XCTAssertTrue(awaiting.isPortableArchiveRestoreSheetPresented)
+    XCTAssertFalse(awaiting.isPortableArchiveRestoreFailureAlertPresented)
+    var clearedRestoreEntryCount = 0
+    SettingsRootModalBindings.dismissPortableArchiveRestore(
+        clearRestoreEntry: { clearedRestoreEntryCount += 1 },
+        cancelPortableArchiveRestore: { model.cancelPortableArchiveRestore() }
+    )
+    XCTAssertEqual(clearedRestoreEntryCount, 1)
+    XCTAssertEqual(model.portableArchiveRestoreState, .idle)
+    XCTAssertEqual(model.opportunities.map(\.id), activeOpportunityIDs)
+    XCTAssertEqual(model.opportunities.first?.id, activeOpportunity.id)
+
+    model.choosePortableArchiveForRestore()
+    model.verifyPortableArchiveForRestore("")
+    let failed = SettingsRootModalPresentation(
+        portableArchiveRestoreState: model.portableArchiveRestoreState,
+        protectedExportErrorMessage: model.protectedExportErrorMessage
+    )
+    XCTAssertFalse(failed.isPortableArchiveRestoreSheetPresented)
+    XCTAssertTrue(failed.isPortableArchiveRestoreFailureAlertPresented)
+    XCTAssertEqual(
+        failed.portableArchiveRestoreFailureMessage,
+        "Enter the complete recovery key, including its checksum."
+    )
+    var dismissedRestoreFailureCount = 0
+    SettingsRootModalBindings.dismissPortableArchiveRestoreFailure(
+        dismissPortableArchiveRestoreFailure: {
+            dismissedRestoreFailureCount += 1
+            model.dismissPortableArchiveRestoreFailure()
+        }
+    )
+    XCTAssertEqual(dismissedRestoreFailureCount, 1)
+    XCTAssertEqual(model.portableArchiveRestoreState, .idle)
+    XCTAssertEqual(model.opportunities.map(\.id), activeOpportunityIDs)
+
+    model.reviewProtectedExport(reentry: "")
+    let protectedExportError = SettingsRootModalPresentation(
+        portableArchiveRestoreState: model.portableArchiveRestoreState,
+        protectedExportErrorMessage: model.protectedExportErrorMessage
+    )
+    XCTAssertEqual(
+        protectedExportError.protectedExportErrorMessage,
+        "Enter the complete recovery key, including its checksum."
+    )
+    model.cancelProtectedExport()
+    XCTAssertNil(
+        SettingsRootModalPresentation(
+            portableArchiveRestoreState: model.portableArchiveRestoreState,
+            protectedExportErrorMessage: model.protectedExportErrorMessage
+        ).protectedExportErrorMessage
+    )
+    XCTAssertEqual(model.opportunities.map(\.id), activeOpportunityIDs)
+}
+```
+
 - [ ] **Step 5: Register only the new source file in both existing app targets**
 
 Use these currently unused PBX identifiers and make only these six structural additions:
@@ -798,6 +1076,7 @@ xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -configurat
   -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testPortableArchiveControlsStayDisabledThroughoutAwaitedVerificationAndRestore \
   -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testProtectedExportReviewFailureRemainsVisibleForCorrection \
   -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testCancellingReviewedProtectedExportClearsReviewWithoutWritingOrChangingActiveWorkspace \
+  -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testVD207SettingsRootModalBindingsDismissWithoutChangingActiveWorkspace \
   -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testRelaunchPrefersSelectedSeparateWorkspaceAndRetainsOpportunity \
   -only-testing:RekonPursuitTests/WorkspaceViewModelTests/testReturnToPreservedRecoveryClosesSeparateStoreAndChangesOnlySelector \
   -only-testing:RekonPursuitTests/PortableArchiveTests/testExpiryAtBoundaryRemovesOnlyVerifiedMatchingRegularArchive \
@@ -812,22 +1091,22 @@ xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -configurat
 
 plutil -lint RekonPursuit.xcodeproj/project.pbxproj
 xcodebuild -list -project RekonPursuit.xcodeproj
-git diff -- RekonPursuit/ContentView.swift RekonPursuit/SettingsView.swift RekonPursuit.xcodeproj/project.pbxproj RekonPursuitUITests/RekonPursuitUITests.swift RekonPursuitUITestHostTests/RekonPursuitUITestHostTests.swift
+git diff -- RekonPursuit/ContentView.swift RekonPursuit/SettingsView.swift RekonPursuit.xcodeproj/project.pbxproj RekonPursuitUITests/RekonPursuitUITests.swift RekonPursuitTests/WorkspaceViewModelTests.swift RekonPursuitUITestHostTests/RekonPursuitUITestHostTests.swift
 git diff --check
 ```
 
-Expected: every requested selector executes once as passed with no skip. Settings presents all sections but makes no direct write, sheet, route, or recovery-key leak; every root-owned sheet/alert binding retains its existing cancellation reset; `plutil` succeeds; the project lists both app targets; and the diff is confined to the five named source/test paths.
+Expected: every requested selector executes once as passed with no skip. Settings presents all sections but makes no direct write, sheet, route, or recovery-key leak; the root restore sheet and failure-alert bindings clear/cancel/dismiss only through their existing model calls; the protected-export error remains present and cancelable; `plutil` succeeds; the project lists both app targets; and the diff is confined to the six named source/test paths.
 
 - [ ] **Step 7: Commit the bounded extraction from an isolated checkpoint**
 
 ```bash
-git add RekonPursuit/ContentView.swift RekonPursuit/SettingsView.swift RekonPursuit.xcodeproj/project.pbxproj RekonPursuitUITestHostTests/RekonPursuitUITestHostTests.swift
+git add RekonPursuit/ContentView.swift RekonPursuit/SettingsView.swift RekonPursuit.xcodeproj/project.pbxproj RekonPursuitTests/WorkspaceViewModelTests.swift RekonPursuitUITestHostTests/RekonPursuitUITestHostTests.swift
 git diff --cached --check
 git diff --cached --stat
 git commit -m "feat: reorganize Settings information architecture"
 ```
 
-Expected: the Delivery-issued isolated checkpoint stages exactly one new Swift file, the narrow ContentView ownership move, two target registrations, and the Task 2-only presentation-state unit test; the Task 1 tests are already committed in the prior checkpoint. It must not stage the shared worktree wholesale. A fresh Code Reviewer and QA verifier must review this commit; the implementer does not review or verify its own work.
+Expected: the Delivery-issued isolated checkpoint stages exactly one new Swift file, the narrow ContentView ownership move, two target registrations, the Task-2-only display-state unit test, and the Task-2-only root-modal binding regression; the Task 1 tests are already committed in the prior checkpoint. It must not stage the shared worktree wholesale. A fresh Code Reviewer and QA verifier must review this commit; the implementer does not review or verify its own work.
 
 ---
 
@@ -878,7 +1157,7 @@ Expected: strict signature verification succeeds for all three products. Review 
 Obtain and record separate decisions with the concrete evidence above:
 
 1. Code Reviewer verifies specification compliance, `ContentView` flow ownership, target registration, no unapproved source scope, and no direct model/store/secret ownership in Settings sections.
-2. QA verifier reruns the Task 2 test command, checks fixture isolation, fixed-clock archive summary, compact keyboard focus, disabled/busy lower-layer coverage, cancellation/no-write proof, inactive restore, separate-workspace return, relaunch truth, and no sensitive UI artifact.
+2. QA verifier reruns the Task 2 test command, checks fixture isolation, fixed-clock archive summary, compact keyboard-focus token before/after Space, retained protected-export error surface, root restore-sheet cancellation and failure-alert dismissal bindings, disabled/busy lower-layer coverage, inactive restore, separate-workspace return, relaunch truth, and no sensitive UI artifact.
 3. Architect verifies the local-selector/no-global-route contract and requires a new ADR before any ownership deviation.
 4. Security/privacy verifier performs the mandated deep review of the Settings/recovery/export/document/AI surfaces, no-secret evidence, no document metadata, no network/configuration implication, and no signing/entitlement change.
 5. TPM and Delivery independently confirm dependencies, reviews, evidence, open risks, and whether only the next dependency-safe action is releasable.
