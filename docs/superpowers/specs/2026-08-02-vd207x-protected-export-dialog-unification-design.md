@@ -2,9 +2,9 @@
 
 ## Status
 
-Approved visual direction pending review of this written specification. This
-document authorizes no production edit until the independent delivery gates for
-the resulting implementation plan release a fresh implementer.
+Owner-reviewed and approved on 2026-08-02. This document authorizes no
+production edit until the independent delivery gates for the resulting
+implementation plan release a fresh implementer.
 
 ## Problem and evidence
 
