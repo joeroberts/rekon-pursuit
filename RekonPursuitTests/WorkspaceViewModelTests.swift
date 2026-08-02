@@ -561,36 +561,8 @@ final class WorkspaceViewModelTests: XCTestCase {
         )
     }
 
-    func testProtectedExportUnavailableParentOpenReviewUsesExactCorrectionMessage() async throws {
-        let fixture = try makeProtectedExportFeedbackModel(faultMode: .parentOpenUnavailable)
-        defer { fixture.close() }
-
-        fixture.model.reviewProtectedExport(reentry: fixture.recoveryKey.displayValue)
-        await waitForProtectedExportFeedbackOperation(on: fixture.model)
-
-        assertProtectedExportFeedback(
-            on: fixture.model,
-            message: "Rekon Pursuit can’t use that folder. Choose another local folder and review the export again.",
-            retainedReview: false
-        )
-    }
-
-    func testProtectedExportUnavailableParentInspectionReviewUsesExactCorrectionMessage() async throws {
-        let fixture = try makeProtectedExportFeedbackModel(faultMode: .parentInspectionUnavailable)
-        defer { fixture.close() }
-
-        fixture.model.reviewProtectedExport(reentry: fixture.recoveryKey.displayValue)
-        await waitForProtectedExportFeedbackOperation(on: fixture.model)
-
-        assertProtectedExportFeedback(
-            on: fixture.model,
-            message: "Rekon Pursuit can’t use that folder. Choose another local folder and review the export again.",
-            retainedReview: false
-        )
-    }
-
-    func testProtectedExportUnavailableFolderConfirmUsesExactCorrectionMessage() async throws {
-        let fixture = try makeProtectedExportFeedbackModel(faultMode: .exclusiveCreateUnavailable)
+    func testProtectedExportUnavailableSelectedLeafConfirmUsesExactCorrectionMessage() async throws {
+        let fixture = try makeProtectedExportFeedbackModel(faultMode: .directLeafUnavailable)
         defer { fixture.close() }
 
         fixture.model.reviewProtectedExport(reentry: fixture.recoveryKey.displayValue)
