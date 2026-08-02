@@ -47,6 +47,12 @@ nonisolated enum ProtectedExportWorkerFaultMode: Sendable {
 }
 
 actor ProtectedExportWorker {
+    private enum DestinationLeafProbe {
+        case exists
+        case absent
+        case unavailable
+    }
+
     private let configuration: PortableArchiveDatabaseConfiguration
     private let faultMode: ProtectedExportWorkerFaultMode
 
@@ -60,7 +66,11 @@ actor ProtectedExportWorker {
         let accessed = destinationURL.startAccessingSecurityScopedResource()
         defer { if accessed { destinationURL.stopAccessingSecurityScopedResource() } }
         try Self.validateSelectedLeaf(destinationURL)
-        guard !Self.destinationExists(at: destinationURL) else { throw ProtectedExportWorkerError.destinationExists }
+        switch Self.probeDestinationLeaf(at: destinationURL) {
+        case .exists: throw ProtectedExportWorkerError.destinationExists
+        case .unavailable: throw ProtectedExportWorkerError.destinationUnavailable
+        case .absent: break
+        }
         let database = try EncryptedDatabase.open(url: configuration.url, key: configuration.key, createIfMissing: false)
         defer { try? database.close() }
         let revision = try database.deferredReadTransaction {
@@ -92,7 +102,11 @@ actor ProtectedExportWorker {
               ) else {
             throw ProtectedExportWorkerError.destinationChanged
         }
-        guard !Self.destinationExists(at: request.review.destinationURL) else { throw ProtectedExportWorkerError.destinationExists }
+        switch Self.probeDestinationLeaf(at: request.review.destinationURL) {
+        case .exists: throw ProtectedExportWorkerError.destinationExists
+        case .unavailable: throw ProtectedExportWorkerError.destinationUnavailable
+        case .absent: break
+        }
         let database = try EncryptedDatabase.open(url: configuration.url, key: configuration.key, createIfMissing: false)
         defer { try? database.close() }
         let snapshot = try database.deferredReadTransaction { () throws -> Data in
@@ -157,10 +171,11 @@ actor ProtectedExportWorker {
         guard destination.pathExtension.lowercased() == "rekonexport", !filename.isEmpty, filename != ".", filename != "..", !filename.contains("/") else { throw ProtectedExportWorkerError.invalidDestinationName }
     }
 
-    private static func destinationExists(at destination: URL) -> Bool {
+    private static func probeDestinationLeaf(at destination: URL) -> DestinationLeafProbe {
         var metadata = stat()
         let result = lstat(destination.path, &metadata)
-        return result == 0 || errno != ENOENT
+        guard result != 0 else { return .exists }
+        return errno == ENOENT ? .absent : .unavailable
     }
 
     private static func destinationIdentityDigest(for destination: URL) -> Data {

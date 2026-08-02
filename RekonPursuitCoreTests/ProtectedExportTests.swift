@@ -164,6 +164,26 @@ final class ProtectedExportTests: XCTestCase {
         try assertNoVerifiedProtectedExportEvidence(in: fixture)
     }
 
+    func testLeafProbeENOTDIRBeforeOutputUsesDestinationUnavailableWithoutEvidence() async throws {
+        let fixture = try makeProtectedExportFeedbackFixture(
+            faultMode: .none,
+            destinationName: "blocked-parent/export.rekonexport"
+        )
+        defer { fixture.close() }
+        let review = try await fixture.store.reviewProtectedExport(recoveryKey: fixture.recoveryKey, at: fixture.destination)
+        let blockedParent = fixture.destination.deletingLastPathComponent()
+        try Data("regular file prevents leaf lookup".utf8).write(to: blockedParent)
+
+        do {
+            _ = try await fixture.store.createProtectedExport(review: review, recoveryKey: fixture.recoveryKey)
+            XCTFail("Expected exact leaf probe ENOTDIR to reject the unavailable destination.")
+        } catch {
+            XCTAssertEqual(error as? ProtectedExportWorkerError, .destinationUnavailable)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.destination.path))
+        try assertNoVerifiedProtectedExportEvidence(in: fixture)
+    }
+
     func testChangedLeafLocatorIsRejectedBeforeOutputOrEvidence() async throws {
         let fixture = try makeProtectedExportFeedbackFixture(faultMode: .none)
         defer { fixture.close() }
