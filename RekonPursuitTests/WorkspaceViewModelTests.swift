@@ -547,6 +547,179 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.opportunities.first?.id, activeOpportunity.id)
     }
 
+    func testProtectedExportInvalidFilenameUsesExactCorrectionMessage() async throws {
+        let fixture = try makeProtectedExportFeedbackModel(faultMode: .none, destinationName: "invalid-name.txt")
+        defer { fixture.close() }
+
+        fixture.model.reviewProtectedExport(reentry: fixture.recoveryKey.displayValue)
+        await waitForProtectedExportFeedbackOperation(on: fixture.model)
+
+        assertProtectedExportFeedback(
+            on: fixture.model,
+            message: "Choose a new file name ending in .rekonexport.",
+            retainedReview: false
+        )
+    }
+
+    func testProtectedExportUnavailableParentOpenReviewUsesExactCorrectionMessage() async throws {
+        let fixture = try makeProtectedExportFeedbackModel(faultMode: .parentOpenUnavailable)
+        defer { fixture.close() }
+
+        fixture.model.reviewProtectedExport(reentry: fixture.recoveryKey.displayValue)
+        await waitForProtectedExportFeedbackOperation(on: fixture.model)
+
+        assertProtectedExportFeedback(
+            on: fixture.model,
+            message: "Rekon Pursuit can’t use that folder. Choose another local folder and review the export again.",
+            retainedReview: false
+        )
+    }
+
+    func testProtectedExportUnavailableParentInspectionReviewUsesExactCorrectionMessage() async throws {
+        let fixture = try makeProtectedExportFeedbackModel(faultMode: .parentInspectionUnavailable)
+        defer { fixture.close() }
+
+        fixture.model.reviewProtectedExport(reentry: fixture.recoveryKey.displayValue)
+        await waitForProtectedExportFeedbackOperation(on: fixture.model)
+
+        assertProtectedExportFeedback(
+            on: fixture.model,
+            message: "Rekon Pursuit can’t use that folder. Choose another local folder and review the export again.",
+            retainedReview: false
+        )
+    }
+
+    func testProtectedExportUnavailableFolderConfirmUsesExactCorrectionMessage() async throws {
+        let fixture = try makeProtectedExportFeedbackModel(faultMode: .exclusiveCreateUnavailable)
+        defer { fixture.close() }
+
+        fixture.model.reviewProtectedExport(reentry: fixture.recoveryKey.displayValue)
+        await waitForProtectedExportFeedbackOperation(on: fixture.model)
+        XCTAssertNotNil(fixture.model.protectedExportReview)
+
+        fixture.model.confirmProtectedExport(reentry: fixture.recoveryKey.displayValue)
+        await waitForProtectedExportFeedbackOperation(on: fixture.model)
+
+        assertProtectedExportFeedback(
+            on: fixture.model,
+            message: "Rekon Pursuit can’t use that folder. Choose another local folder and review the export again.",
+            retainedReview: true
+        )
+    }
+
+    func testProtectedExportPostCreateFailureRetainsMayRemainFeedback() async throws {
+        let fixture = try makeProtectedExportFeedbackModel(faultMode: .afterOutputCreation)
+        defer { fixture.close() }
+
+        fixture.model.reviewProtectedExport(reentry: fixture.recoveryKey.displayValue)
+        await waitForProtectedExportFeedbackOperation(on: fixture.model)
+        XCTAssertNotNil(fixture.model.protectedExportReview)
+
+        fixture.model.confirmProtectedExport(reentry: fixture.recoveryKey.displayValue)
+        await waitForProtectedExportFeedbackOperation(on: fixture.model)
+
+        assertProtectedExportFeedback(
+            on: fixture.model,
+            message: "Final export writing or verification failed. The selected file may remain; treat it as unusable and remove it yourself.",
+            retainedReview: true
+        )
+    }
+
+    private func makeProtectedExportFeedbackStore(
+        faultMode: ProtectedExportWorkerFaultMode
+    ) throws -> ProtectedExportFeedbackModelStore {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("protected-export-feedback-model-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let database = try EncryptedDatabase.open(
+            url: root.appendingPathComponent("workspace.sqlite"),
+            key: Data(repeating: 22, count: 32),
+            createIfMissing: true
+        )
+        let worker = ProtectedExportWorker(
+            configuration: database.portableArchiveConnectionConfiguration(),
+            faultMode: faultMode
+        )
+        let store = try WorkspaceStore(
+            database: database,
+            actorID: "protected-export-feedback-model",
+            correlationID: "protected-export-feedback-model",
+            protectedExportWorker: worker
+        )
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+        _ = try store.create(CreateOpportunity(title: "Protected export feedback", company: "Rekon Labs"))
+        return .init(root: root, store: store, recoveryKey: recoveryKey)
+    }
+
+    private func makeProtectedExportFeedbackModel(
+        faultMode: ProtectedExportWorkerFaultMode,
+        destinationName: String = "feedback.rekonexport"
+    ) throws -> ProtectedExportFeedbackModelFixture {
+        let storeFixture = try makeProtectedExportFeedbackStore(faultMode: faultMode)
+        let destination = storeFixture.root.appendingPathComponent(destinationName)
+        let model = WorkspaceViewModel(
+            openWorkspace: { .ready(storeFixture.store) },
+            createWorkspace: { storeFixture.store },
+            protectedExportDestination: { destination },
+            separateLocalWorkspace: .disabledForTesting
+        )
+        model.start()
+        return .init(storeFixture: storeFixture, model: model, destination: destination)
+    }
+
+    private func waitForProtectedExportFeedbackOperation(on model: WorkspaceViewModel) async {
+        while model.isCreatingProtectedExport { await Task.yield() }
+    }
+
+    private func assertProtectedExportFeedback(
+        on model: WorkspaceViewModel,
+        message: String,
+        retainedReview: Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(model.protectedExportErrorMessage, message, file: file, line: line)
+        XCTAssertEqual(model.statusMessage, message, file: file, line: line)
+        XCTAssertNil(model.protectedExportSuccess, file: file, line: line)
+        let presentation = SettingsRootModalPresentation(
+            portableArchiveRestoreState: model.portableArchiveRestoreState,
+            protectedExportErrorMessage: model.protectedExportErrorMessage,
+            protectedExportSuccess: model.protectedExportSuccess
+        )
+        XCTAssertFalse(presentation.isProtectedExportSuccessPresented, file: file, line: line)
+        XCTAssertEqual(presentation.protectedExportErrorMessage, message, file: file, line: line)
+        if retainedReview {
+            XCTAssertNotNil(model.protectedExportReview, file: file, line: line)
+        } else {
+            XCTAssertNil(model.protectedExportReview, file: file, line: line)
+        }
+    }
+
+    @MainActor
+    private struct ProtectedExportFeedbackModelStore {
+        let root: URL
+        let store: WorkspaceStore
+        let recoveryKey: RecoveryKey
+
+        func close() {
+            try? store.close()
+            try? FileManager.default.removeItem(at: root)
+        }
+    }
+
+    @MainActor
+    private struct ProtectedExportFeedbackModelFixture {
+        let storeFixture: ProtectedExportFeedbackModelStore
+        let model: WorkspaceViewModel
+        let destination: URL
+        var recoveryKey: RecoveryKey { storeFixture.recoveryKey }
+
+        func close() {
+            storeFixture.close()
+        }
+    }
+
     func testExternalFolderLeaseIsRetainedForTheOpenedStoreThenReleasedOnClose() throws {
         let store = try makeStore()
         let bookmarkFixture = ViewModelBookmarkFixture()

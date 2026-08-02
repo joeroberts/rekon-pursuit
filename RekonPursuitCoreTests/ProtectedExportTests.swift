@@ -105,4 +105,140 @@ final class ProtectedExportTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: destination), original)
         try store.close()
     }
+
+    func testInvalidDestinationNameUsesDedicatedControlledError() async throws {
+        let fixture = try makeProtectedExportFeedbackFixture(faultMode: .none, destinationName: "invalid-name.txt")
+        defer { fixture.close() }
+
+        do {
+            _ = try await fixture.store.reviewProtectedExport(recoveryKey: fixture.recoveryKey, at: fixture.destination)
+            XCTFail("Expected invalid final filename to be rejected.")
+        } catch {
+            XCTAssertEqual((error as? LocalizedError)?.errorDescription,
+                           "Choose a new file name ending in .rekonexport.")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.destination.path))
+        try assertNoVerifiedProtectedExportEvidence(in: fixture)
+    }
+
+    func testParentOpenUnavailableWithValidSuffixUsesDestinationUnavailableWithoutReview() async throws {
+        let fixture = try makeProtectedExportFeedbackFixture(faultMode: .parentOpenUnavailable)
+        defer { fixture.close() }
+
+        do {
+            _ = try await fixture.store.reviewProtectedExport(recoveryKey: fixture.recoveryKey, at: fixture.destination)
+            XCTFail("Expected parent open failure to prevent review.")
+        } catch {
+            XCTAssertEqual((error as? LocalizedError)?.errorDescription,
+                           "Rekon Pursuit can’t use that folder. Choose another local folder and review the export again.")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.destination.path))
+        try assertNoVerifiedProtectedExportEvidence(in: fixture)
+    }
+
+    func testParentInspectionUnavailableWithValidSuffixUsesDestinationUnavailableWithoutReview() async throws {
+        let fixture = try makeProtectedExportFeedbackFixture(faultMode: .parentInspectionUnavailable)
+        defer { fixture.close() }
+
+        do {
+            _ = try await fixture.store.reviewProtectedExport(recoveryKey: fixture.recoveryKey, at: fixture.destination)
+            XCTFail("Expected parent inspection failure to prevent review.")
+        } catch {
+            XCTAssertEqual((error as? LocalizedError)?.errorDescription,
+                           "Rekon Pursuit can’t use that folder. Choose another local folder and review the export again.")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.destination.path))
+        try assertNoVerifiedProtectedExportEvidence(in: fixture)
+    }
+
+    func testExclusiveCreateFailureBeforeOutputUsesDestinationUnavailableWithoutActivity() async throws {
+        let fixture = try makeProtectedExportFeedbackFixture(faultMode: .exclusiveCreateUnavailable)
+        defer { fixture.close() }
+        let review = try await fixture.store.reviewProtectedExport(recoveryKey: fixture.recoveryKey, at: fixture.destination)
+
+        do {
+            _ = try await fixture.store.createProtectedExport(review: review, recoveryKey: fixture.recoveryKey)
+            XCTFail("Expected exclusive creation failure before output creation.")
+        } catch {
+            XCTAssertEqual((error as? LocalizedError)?.errorDescription,
+                           "Rekon Pursuit can’t use that folder. Choose another local folder and review the export again.")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.destination.path))
+        try assertNoVerifiedProtectedExportEvidence(in: fixture)
+    }
+
+    func testPostCreateFailureRemainsOutputMayRemainAfterFailure() async throws {
+        let fixture = try makeProtectedExportFeedbackFixture(faultMode: .afterOutputCreation)
+        defer { fixture.close() }
+        let review = try await fixture.store.reviewProtectedExport(recoveryKey: fixture.recoveryKey, at: fixture.destination)
+
+        do {
+            _ = try await fixture.store.createProtectedExport(review: review, recoveryKey: fixture.recoveryKey)
+            XCTFail("Expected post-create failure to retain conservative output warning.")
+        } catch {
+            XCTAssertEqual((error as? LocalizedError)?.errorDescription,
+                           "Final export writing or verification failed. The selected file may remain; treat it as unusable and remove it yourself.")
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.destination.path))
+        try assertNoVerifiedProtectedExportEvidence(in: fixture)
+    }
+
+    func testVerifiedProtectedExportCreatesExactlyOneVerifiedEventAndActivity() async throws {
+        let fixture = try makeProtectedExportFeedbackFixture(faultMode: .none)
+        defer { fixture.close() }
+        let review = try await fixture.store.reviewProtectedExport(recoveryKey: fixture.recoveryKey, at: fixture.destination)
+        let receipt = try await fixture.store.createProtectedExport(review: review, recoveryKey: fixture.recoveryKey)
+
+        XCTAssertEqual(try ProtectedExportService.verify(data: Data(contentsOf: fixture.destination), recoveryKey: fixture.recoveryKey), receipt)
+        XCTAssertEqual(try fixture.database.rows("SELECT id FROM protected_export_events WHERE outcome = 'verified'").count, 1)
+        XCTAssertEqual(try fixture.store.activityEvents().filter { $0.kind == "protected_export_verified" }.count, 1)
+    }
+
+    private func makeProtectedExportFeedbackFixture(
+        faultMode: ProtectedExportWorkerFaultMode,
+        destinationName: String = "feedback.rekonexport"
+    ) throws -> ProtectedExportFeedbackFixture {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("protected-export-feedback-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let database = try EncryptedDatabase.open(
+            url: root.appendingPathComponent("workspace.sqlite"),
+            key: Data(repeating: 21, count: 32),
+            createIfMissing: true
+        )
+        let worker = ProtectedExportWorker(
+            configuration: database.portableArchiveConnectionConfiguration(),
+            faultMode: faultMode
+        )
+        let store = try WorkspaceStore(
+            database: database,
+            actorID: "protected-export-feedback",
+            correlationID: "protected-export-feedback",
+            protectedExportWorker: worker
+        )
+        let recoveryKey = try RecoveryKey.generate()
+        try store.enroll(recoveryKey: recoveryKey)
+        _ = try store.create(.init(title: "Protected export feedback", company: "Rekon Labs"))
+        return .init(root: root, database: database, store: store, recoveryKey: recoveryKey,
+                     destination: root.appendingPathComponent(destinationName))
+    }
+
+    private func assertNoVerifiedProtectedExportEvidence(in fixture: ProtectedExportFeedbackFixture) throws {
+        XCTAssertEqual(try fixture.database.rows("SELECT id FROM protected_export_events").count, 0)
+        XCTAssertEqual(try fixture.store.activityEvents().filter { $0.kind == "protected_export_verified" }.count, 0)
+    }
+
+    @MainActor
+    private struct ProtectedExportFeedbackFixture {
+        let root: URL
+        let database: EncryptedDatabase
+        let store: WorkspaceStore
+        let recoveryKey: RecoveryKey
+        let destination: URL
+
+        func close() {
+            try? store.close()
+            try? FileManager.default.removeItem(at: root)
+        }
+    }
 }
