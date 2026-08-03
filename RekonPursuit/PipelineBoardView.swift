@@ -613,6 +613,11 @@ private struct PipelineOpportunityMoveCard: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("pipeline-opportunity-\(opportunity.id)")
             .accessibilityLabel(opportunity.title)
+            // The card body is the native AXButton that owns the direct detail
+            // route. Project the existing anchorID-derived state here rather
+            // than onto the containing AXGroup, whose custom value is not
+            // reliably surfaced by macOS accessibility.
+            .accessibilityValue(isAnchored ? "Anchored" : "")
 
             PipelineCardActionsMenuControl(
                 opportunity: opportunity,
@@ -630,7 +635,6 @@ private struct PipelineOpportunityMoveCard: View {
         )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("pipeline-stage-move-card-\(opportunity.id)")
-        .accessibilityValue(isAnchored ? "Anchored" : "")
     }
 }
 

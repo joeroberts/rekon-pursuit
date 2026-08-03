@@ -67,8 +67,11 @@ struct ContactsView: View {
 
     private enum KeyboardFocusControl: Hashable {
         case row(String)
+        case detailBack
         case relatedDisclosure
         case manageRelated
+        case editorCancel
+        case editorSave
     }
 
     private enum EditorNote: Hashable {
@@ -295,8 +298,11 @@ struct ContactsView: View {
                         showsCompactDetail = false
                         focusSelectedRow()
                     }
+                    .focusable()
+                    .focused($focusedKeyboardControl, equals: .detailBack)
                     .accessibilityIdentifier("contact-detail-back")
                     .accessibilityLabel("Back to Contacts")
+                    .accessibilityValue(keyboardAccessibilityValue("", for: .detailBack))
                     .keyboardShortcut(.cancelAction)
                 }
 
@@ -592,12 +598,18 @@ struct ContactsView: View {
 
             HStack {
                 Button("Cancel") { cancelEditing(isCompact: isCompact) }
+                    .focusable()
+                    .focused($focusedKeyboardControl, equals: .editorCancel)
+                    .accessibilityValue(keyboardAccessibilityValue("", for: .editorCancel))
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button("Save") { saveContact(isCompact: isCompact) }
+                    .focusable()
+                    .focused($focusedKeyboardControl, equals: .editorSave)
                     .keyboardShortcut(.defaultAction)
                     .disabled(model.contactName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityIdentifier("save-contact")
+                    .accessibilityValue(keyboardAccessibilityValue("", for: .editorSave))
             }
             if let error = model.contactSaveError {
                 VStack(alignment: .leading) {
@@ -608,6 +620,7 @@ struct ContactsView: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("contact-operation-error")
                 .accessibilityLabel(error)
+                .accessibilityValue(error)
             }
         }
     }

@@ -215,6 +215,9 @@ struct SettingsView: View {
             .padding(RekonTheme.Spacing.screen)
             .frame(maxWidth: 1_280, alignment: .leading)
         }
+        .onAppear {
+            focusedSection = selectedSection
+        }
     }
 
     private var settingsNavigation: some View {
@@ -250,17 +253,12 @@ struct SettingsView: View {
             symbol: section.symbol,
             isSelected: selectedSection == section,
             isCompact: isCompact,
-            referenceAccessibilityIdentifier: section == .recoveryArchives ? section.referenceAccessibilityIdentifier : nil
+            referenceAccessibilityIdentifier: section == .recoveryArchives ? section.referenceAccessibilityIdentifier : nil,
+            focusedSection: $focusedSection,
+            focusTarget: section
         ) {
             selectedSection = section
         }
-        .focusable()
-        .focused($focusedSection, equals: section)
-        .onKeyPress(.space) {
-            selectedSection = section
-            return .handled
-        }
-        .focusEffectDisabled(true)
         .accessibilityLabel(section.title)
         .accessibilityValue(selectorAccessibilityValue(for: section))
         .accessibilityIdentifier(section.accessibilityIdentifier)
@@ -324,6 +322,8 @@ private struct SettingsReferenceTab: View {
     let isSelected: Bool
     let isCompact: Bool
     let referenceAccessibilityIdentifier: String?
+    @FocusState.Binding var focusedSection: SettingsSection?
+    let focusTarget: SettingsSection
     let select: () -> Void
 
     var body: some View {
@@ -364,6 +364,13 @@ private struct SettingsReferenceTab: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .focusable()
+        .focused($focusedSection, equals: focusTarget)
+        .onKeyPress(.space) {
+            select()
+            return .handled
+        }
+        .focusEffectDisabled(true)
     }
 }
 
@@ -841,6 +848,8 @@ private struct DocumentReferencesSettingsSection: View {
 }
 
 private struct AIConnectionsSettingsSection: View {
+    private let unavailableMessage = "The local Activity & AI ledger is read-only and empty in this MVP. No AI requests, costs, model runtime, cloud connection, Gmail, or Calendar integration is configured."
+
     var body: some View {
         VStack(alignment: .leading, spacing: RekonTheme.Spacing.section) {
             SettingsHeroCard(
@@ -875,9 +884,11 @@ private struct AIConnectionsSettingsSection: View {
                 accessibilityLabel: "This workspace remains local and private"
             )
 
-            Text("The local Activity & AI ledger is read-only and empty in this MVP. No AI requests, costs, model runtime, cloud connection, Gmail, or Calendar integration is configured.")
+            Text(unavailableMessage)
                 .font(.footnote)
                 .foregroundStyle(RekonTheme.secondaryText)
+                .accessibilityLabel(unavailableMessage)
+                .accessibilityValue(unavailableMessage)
                 .accessibilityIdentifier("settings-ai-connections-unavailable")
         }
     }
