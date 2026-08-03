@@ -3247,7 +3247,7 @@ final class RekonPursuitUITests: XCTestCase {
         index: Int,
         key: String,
         in app: XCUIApplication
-    ) {
+    ) -> XCUIElement {
         let pickerLabel = app.staticTexts
             .matching(NSPredicate(format: "value == %@", label))
             .firstMatch
@@ -3259,6 +3259,7 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertEqual(picker.elementType, .popUpButton, "VD2-07b baseline [\(key)]: SwiftUI picker must retain its native popup role.")
         XCTAssertTrue(picker.isEnabled, "VD2-07b baseline [\(key)]: expected current enabled state.")
         XCTAssertFalse((picker.value as? String ?? "").isEmpty, "VD2-07b baseline [\(key)]: picker must retain selected-value disclosure.")
+        return picker
     }
 
     /// SwiftUI Form text fields without an explicit accessibility identifier
@@ -3271,7 +3272,7 @@ final class RekonPursuitUITests: XCTestCase {
         index: Int,
         key: String,
         in app: XCUIApplication
-    ) {
+    ) -> XCUIElement {
         let fieldLabel = app.staticTexts
             .matching(NSPredicate(format: "value == %@", label))
             .firstMatch
@@ -3283,6 +3284,200 @@ final class RekonPursuitUITests: XCTestCase {
             .element(boundBy: index)
         assertReadyTextControl(field, key: key)
         XCTAssertEqual(field.elementType, .textField, "VD2-07b baseline [\(key)]: field must retain its native text role.")
+        return field
+    }
+
+    /// SwiftUI Form DatePickers expose their source label as a StaticText
+    /// sibling, while the date control itself has no label. Source order is
+    /// deterministic after the conditional path is enabled.
+    @MainActor
+    private func assertReadyFormDatePicker(
+        _ label: String,
+        index: Int,
+        key: String,
+        in app: XCUIApplication
+    ) -> XCUIElement {
+        let pickerLabel = app.staticTexts
+            .matching(NSPredicate(format: "value == %@", label))
+            .firstMatch
+        assertReadyTextControl(pickerLabel, key: "\(key).label")
+        XCTAssertEqual(pickerLabel.value as? String, label, "VD2-07b preservation-only [\(key)]: date label must remain truthful.")
+
+        let picker = app.datePickers.element(boundBy: index)
+        XCTAssertTrue(picker.waitForExistence(timeout: 5), "VD2-07b preservation-only [\(key)]: conditional date control missing.")
+        XCTAssertEqual(picker.elementType, .datePicker, "VD2-07b preservation-only [\(key)]: DatePicker must retain its native role.")
+        XCTAssertTrue(picker.isEnabled, "VD2-07b preservation-only [\(key)]: conditional date control unexpectedly disabled.")
+        XCTAssertNotNil(picker.value, "VD2-07b preservation-only [\(key)]: selected date value must remain disclosed.")
+        return picker
+    }
+
+    /// Reads a projection while sensitive or metadata-bearing UI is rendered,
+    /// then lets the caller dismiss that UI before XCTest records a failure.
+    @MainActor
+    private func sharedControlSurfaceSnapshot(
+        _ key: String,
+        in app: XCUIApplication
+    ) -> (exists: Bool, value: String?) {
+        let projection = app.descendants(matching: .any)["shared-control-surface-\(key)"]
+        guard projection.exists else {
+            return (false, nil)
+        }
+        return (true, projection.value as? String)
+    }
+
+    private func assertSharedControlSurfaceSnapshot(
+        _ snapshot: (exists: Bool, value: String?),
+        key: String,
+        kind: String,
+        state: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(
+            snapshot.exists,
+            "VD2-07b RED [\(key)]: expected additive shared-control-surface-\(key) projection.",
+            file: file,
+            line: line
+        )
+        if snapshot.exists {
+            XCTAssertEqual(
+                snapshot.value,
+                "kind=\(kind);state=\(state)",
+                "VD2-07b RED [\(key)]: expected content-free kind/state projection.",
+                file: file,
+                line: line
+            )
+        }
+    }
+
+    @MainActor
+    private func reveal(
+        _ element: XCUIElement,
+        in scrollView: XCUIElement,
+        key: String,
+        swipes: Int = 6
+    ) {
+        XCTAssertTrue(scrollView.waitForExistence(timeout: 5), "VD2-07b baseline [\(key)]: expected source-owned scroll container.")
+        for _ in 0 ..< swipes where !element.exists || !element.isHittable {
+            scrollView.swipeUp()
+        }
+        XCTAssertTrue(element.waitForExistence(timeout: 2), "VD2-07b baseline [\(key)]: expected control after bounded source-owned scrolling.")
+    }
+
+    private func assertStaticOnlySourceToSelectorCoverage() {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        func checkedInSource(_ relativePath: String) -> String {
+            let sourceURL = repositoryRoot.appendingPathComponent(relativePath)
+            do {
+                return try String(contentsOf: sourceURL, encoding: .utf8)
+            } catch {
+                XCTFail("VD2-07b static-only: unable to read checked-in \(relativePath): \(error)")
+                return ""
+            }
+        }
+
+        let importerSource = checkedInSource("RekonPursuitCore/Import/CSVOpportunityImporter.swift")
+        let contentSource = checkedInSource("RekonPursuit/ContentView.swift")
+        let themeSource = checkedInSource("RekonPursuit/RekonVisualTheme.swift")
+        let fixtureHostSource = checkedInSource("RekonPursuitUITestHost/BootstrapApp.swift")
+        let modelSource = checkedInSource("RekonPursuit/WorkspaceViewModel.swift")
+        let csvRows: [(caseName: String, key: String, sourceLabel: String, required: Bool)] = [
+            ("title", "import.mapping.title", "Job title", true),
+            ("company", "import.mapping.company", "Company", true),
+            ("jobURL", "import.mapping.jobURL", "Job URL", false),
+            ("jobDescription", "import.mapping.jobDescription", "Job description", false),
+            ("notes", "import.mapping.notes", "Notes", false),
+            ("compensation", "import.mapping.compensation", "Compensation", false),
+            ("location", "import.mapping.location", "Location", false),
+            ("workArrangement", "import.mapping.workArrangement", "Work arrangement", false),
+            ("stage", "import.mapping.stage", "Pipeline stage", false),
+            ("nextAction", "import.mapping.nextAction", "Next action", false),
+            ("dueDate", "import.mapping.dueDate", "Due date", false),
+            ("applicationDate", "import.mapping.applicationDate", "Applied date", false),
+            ("responseState", "import.mapping.responseState", "Response state", false),
+            ("responseDate", "import.mapping.responseDate", "Response status date", false),
+            ("stageDate", "import.mapping.stageDate", "Stage changed date", false)
+        ]
+        guard let enumStart = importerSource.range(of: "enum CSVImportField: String, CaseIterable, Identifiable"),
+              let enumEnd = importerSource[enumStart.lowerBound...].range(of: "    var id: String") else {
+            return XCTFail("VD2-07b static-only [import.mapping]: CSVImportField declaration is unavailable for exhaustive inventory review.")
+        }
+        let enumDeclaration = String(importerSource[enumStart.lowerBound..<enumEnd.lowerBound])
+        let declaredCases = Set(
+            enumDeclaration
+                .split(separator: "\n")
+                .first(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("case ") })?
+                .trimmingCharacters(in: .whitespaces)
+                .dropFirst("case ".count)
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                ?? []
+        )
+        XCTAssertEqual(declaredCases, Set(csvRows.map(\.caseName)), "VD2-07b static-only [import.mapping]: inventory must cover every CSVImportField case exactly once.")
+        XCTAssertTrue(contentSource.contains("ForEach(CSVImportField.allCases)"))
+        XCTAssertTrue(contentSource.contains("Picker(field.label + (field.required ? \" *\" : \"\")"))
+        XCTAssertTrue(contentSource.contains("get: { preview.mapping[field] }"), "VD2-07b static-only [import.mapping]: mapping picker must retain its current selected Int? binding.")
+        XCTAssertTrue(contentSource.contains("set: { model.setCSVMapping(field, to: $0) }"), "VD2-07b static-only [import.mapping]: mapping picker must retain the existing setter callback.")
+        XCTAssertTrue(contentSource.contains("Text(\"Not mapped\").tag(Int?.none)"), "VD2-07b static-only [import.mapping]: unmapped picker option/type changed.")
+        XCTAssertTrue(contentSource.contains("Text(header).tag(Int?.some(index))"), "VD2-07b static-only [import.mapping]: source-column picker Int? tag changed.")
+        XCTAssertTrue(contentSource.contains("ForEach(Array(preview.headers.enumerated()), id: \\.offset)"), "VD2-07b static-only [import.mapping]: dynamic source-column option enumeration changed.")
+        for row in csvRows {
+            XCTAssertTrue(importerSource.contains("case .\(row.caseName): \"\(row.sourceLabel)\""), "VD2-07b static-only [\(row.key)]: CSVImportField.allCases source label changed or is omitted.")
+            XCTAssertTrue(contentSource.contains("field.label + (field.required ? \" *\" : \"\")"), "VD2-07b static-only [\(row.key)]: mapping picker must derive its required marker from the enum contract.")
+        }
+        let typedPickers: [(label: String, binding: String, type: String)] = [
+            ("Pay period", "$model.compensationPayPeriod", "CompensationPayPeriod"),
+            ("Work arrangement", "$model.workArrangement", "WorkArrangement"),
+            ("Current response", "$model.responseState", "ResponseState"),
+            ("Stage", "$model.stage", "PipelineStage"),
+            ("Next action", "$model.actionType", "OpportunityActionType"),
+            ("Pay period", "$model.selectedCompensationPayPeriod", "CompensationPayPeriod"),
+            ("Work arrangement", "$model.selectedWorkArrangement", "WorkArrangement"),
+            ("Stage", "$model.selectedStage", "PipelineStage"),
+            ("Next action", "$model.selectedActionType", "OpportunityActionType"),
+            ("Local outcome", "$model.reconciliationOutcome", "ReconciliationOutcome"),
+            ("Classification", "$model.reconciliationClassification", "ReconciliationClassification"),
+            ("Reason", "$model.reconciliationReason", "ReconciliationReason"),
+            ("Confidence", "$model.reconciliationConfidence", "ReconciliationConfidence"),
+            ("Reference type", "$model.documentReferenceKind", "DocumentReferenceKind")
+        ]
+        for picker in typedPickers {
+            XCTAssertTrue(contentSource.contains("Picker(\"\(picker.label)\", selection: \(picker.binding)) { ForEach(\(picker.type).allCases, id: \\.self) { Text($0.rawValue).tag($0) } }"), "VD2-07b static-only [\(picker.label)]: option enum, selected binding, and typed tag must remain coupled.")
+        }
+        XCTAssertTrue(contentSource.contains("if row.isDuplicate"), "VD2-07b static-only [import.duplicateDecision]: conditional duplicate branch missing.")
+        XCTAssertTrue(contentSource.contains("Picker(\"Duplicate decision\""), "VD2-07b static-only [import.duplicateDecision]: source picker label changed.")
+        for tag in ["CSVDuplicateDecision?.none", "CSVDuplicateDecision?.some(.updateSelectedFields)", "CSVDuplicateDecision?.some(.keepSeparate)", "CSVDuplicateDecision?.some(.skip)"] {
+            XCTAssertTrue(contentSource.contains(tag), "VD2-07b static-only [import.duplicateDecision]: optional picker tag \(tag) changed or is omitted.")
+        }
+        XCTAssertTrue(contentSource.contains("case .awaitingRecoveryKey:"), "VD2-07b static-only [recovery.restoreReentry]: conditional root recovery sheet branch missing.")
+        XCTAssertTrue(contentSource.contains("TextField(\"Recovery key\", text: $portableArchiveRestoreKey)"), "VD2-07b static-only [recovery.restoreReentry]: root-owned recovery field changed.")
+        XCTAssertTrue(contentSource.contains("Button(\"Verify archive\")"), "VD2-07b static-only [recovery.restoreReentry]: verification callback action changed.")
+        for (method, callback) in [
+            ("func enrollRecoveryKey(reentry:", "statusMessage = \"Enter the complete recovery key, including its checksum.\""),
+            ("func createPortableArchive(reentry:", "guard let key = RecoveryKey.parse(reentry) else"),
+            ("func purgeRetainedArchiveData(reentry:", "guard let key = RecoveryKey.parse(reentry) else")
+        ] {
+            XCTAssertTrue(modelSource.contains(method), "VD2-07b static-only [recovery]: root-owned \(method) callback changed.")
+            XCTAssertTrue(modelSource.contains(callback), "VD2-07b static-only [recovery]: empty re-entry error contract changed.")
+        }
+        XCTAssertTrue(themeSource.contains("func reconControlSurface(isKeyboardFocused: Bool)"), "VD2-07b static-only: RekonVisualTheme must retain the shared visual-style invocation seam.")
+        XCTAssertFalse(themeSource.contains("shared-control-surface-"), "VD2-07b static-only: Task 1 must remain RED until Task 2 adds the content-free projection at the theme seam.")
+        XCTAssertTrue(fixtureHostSource.contains("case compact") && fixtureHostSource.contains("case wide"), "VD2-07b static-only: checked-in fixture host must state its supported layout settings.")
+        XCTAssertFalse(fixtureHostSource.contains("accessibility-text"), "VD2-07b static-only: the fixture host exposes no supported larger accessibility-text launch setting; wide and compact coverage remains the supported Task 1 evidence.")
+    }
+
+    private func assertVD208DebtHandoffRemainsExplicit() {
+        let debtTests = Set([
+            "testVD207ReferenceTabsKeepKeyboardSelectionAtCompactWidth",
+            "testVD207SettingsSecondaryNavigationIsKeyboardOperableAtCompactWidth",
+            "testVD207SettingsDocumentAndAISectionsStayAggregateAndUnavailable",
+            "testVD206ContactsErrorAccessibilityContract",
+            "testVD202RecoveryFixtureExposesAnExplicitRecoveryOnlySafetyMarker",
+            "testVD205BoardNativeDragSavedToScreeningPersistsAndRelaunches"
+        ])
+        XCTAssertEqual(debtTests.count, 6, "VD2-08 debt evidence: Settings compact focus, AI semantic text, Contacts accessibility/recovery automation, and Board card-anchor semantics remain explicitly deferred.")
     }
 
     @MainActor
@@ -3307,25 +3502,50 @@ final class RekonPursuitUITests: XCTestCase {
         let pipelineRows = pipelineApp.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-"))
         XCTAssertTrue(pipelineRows.firstMatch.waitForExistence(timeout: 5), "VD2-07b baseline [pipeline]: populated route must be ready.")
-        let pipelineControls: [(String, XCUIElement, String, String)] = [
-            ("pipeline.search", pipelineApp.textFields["opportunity-search"], "search", "idle"),
-            ("pipeline.stage", pipelineApp.popUpButtons["pipeline-stage-filter"], "picker", "idle"),
-            ("pipeline.includeClosed", pipelineApp.checkBoxes["pipeline-include-closed"], "checkbox", "unchecked"),
-            ("pipeline.viewMode", pipelineApp.descendants(matching: .any)["pipeline-view-mode"], "radioGroup", "selected")
-        ]
-        for (key, element, kind, state) in pipelineControls {
-            assertReadyTextControl(element, key: key)
+        let search = pipelineApp.textFields["opportunity-search"]
+        let stage = pipelineApp.popUpButtons["pipeline-stage-filter"]
+        let includeClosed = pipelineApp.checkBoxes["pipeline-include-closed"]
+        let viewMode = pipelineApp.descendants(matching: .any)["pipeline-view-mode"]
+        let assertPipelineControls: (String) -> Void = { rendering in
+            XCTAssertEqual(search.elementType, .textField, "VD2-07b baseline [pipeline.search \(rendering)]: native role changed.")
+            self.assertReadyTextControl(search, key: "pipeline.search \(rendering)", label: "Search opportunities")
+            self.assertSharedControlSurface("pipeline.search", kind: "search", state: "idle", in: pipelineApp)
+            XCTAssertEqual(stage.elementType, .popUpButton, "VD2-07b baseline [pipeline.stage \(rendering)]: native role changed.")
+            self.assertReadyTextControl(stage, key: "pipeline.stage \(rendering)", label: "Stage")
+            XCTAssertFalse((stage.value as? String ?? "").isEmpty, "VD2-07b baseline [pipeline.stage \(rendering)]: selected value must remain disclosed.")
+            self.assertSharedControlSurface("pipeline.stage", kind: "picker", state: "idle", in: pipelineApp)
+            XCTAssertEqual(includeClosed.elementType, .checkBox, "VD2-07b baseline [pipeline.includeClosed \(rendering)]: native role changed.")
+            self.assertReadyTextControl(includeClosed, key: "pipeline.includeClosed \(rendering)", label: "Include closed")
+            XCTAssertEqual(String(describing: includeClosed.value ?? ""), "0", "VD2-07b baseline [pipeline.includeClosed \(rendering)]: default must remain unchecked.")
+            self.assertSharedControlSurface("pipeline.includeClosed", kind: "checkbox", state: "unchecked", in: pipelineApp)
+            XCTAssertEqual(viewMode.elementType, .radioGroup, "VD2-07b baseline [pipeline.viewMode \(rendering)]: native role changed.")
+            XCTAssertTrue(viewMode.waitForExistence(timeout: 5), "VD2-07b baseline [pipeline.viewMode \(rendering)]: View control missing.")
+            XCTAssertTrue(viewMode.label.contains("View"), "VD2-07b baseline [pipeline.viewMode \(rendering)]: View label changed.")
+            self.assertSharedControlSurface("pipeline.viewMode", kind: "radioGroup", state: "selected", in: pipelineApp)
         }
-        pipelineApp.descendants(matching: .any)["pipeline-view-mode"].radioButtons["Board"].click()
-        XCTAssertTrue(pipelineApp.descendants(matching: .any)["pipeline-board-region"].waitForExistence(timeout: 5))
-        for (key, _, kind, state) in pipelineControls {
-            assertSharedControlSurface(key, kind: kind, state: state, in: pipelineApp)
-        }
+        assertPipelineControls("Table")
+        search.click()
+        search.typeText("no matching opportunity")
+        XCTAssertTrue(pipelineApp.staticTexts["No opportunities match"].waitForExistence(timeout: 5), "VD2-07b baseline [pipeline.search]: binding/no-results truth changed.")
+        pipelineApp.buttons["pipeline-clear-filters"].click()
+        stage.click()
+        XCTAssertTrue(pipelineApp.menuItems["All stages"].waitForExistence(timeout: 5), "VD2-07b baseline [pipeline.stage]: popup options must remain keyboard discoverable.")
+        pipelineApp.typeKey(.escape, modifierFlags: [])
+        includeClosed.click()
+        XCTAssertEqual(String(describing: includeClosed.value ?? ""), "1", "VD2-07b baseline [pipeline.includeClosed]: checkbox binding changed.")
+        includeClosed.click()
+        viewMode.radioButtons["Board"].click()
+        XCTAssertTrue(pipelineApp.descendants(matching: .any)["pipeline-board-region"].waitForExistence(timeout: 5), "VD2-07b baseline [pipeline.viewMode Board]: Board route missing.")
+        assertPipelineControls("Board")
+        viewMode.radioButtons["Table"].click()
+        XCTAssertTrue(pipelineApp.descendants(matching: .any)["pipeline-table-region"].waitForExistence(timeout: 5), "VD2-07b baseline [pipeline.viewMode Table restore]: Table route missing.")
         pipelineApp.terminate()
 
-        let contactsApp = openContactsFixture(fixture: "contacts")
+        let contactsSession = "vd207b-contacts-\(UUID().uuidString)"
+        var contactsApp = openContactsFixture(fixture: "contacts", session: contactsSession)
         let contactSearch = contactsApp.textFields["contact-search"]
         assertReadyTextControl(contactSearch, key: "contacts.search", label: "Search contacts")
+        assertSharedControlSurface("contacts.search", kind: "search", state: "idle", in: contactsApp)
         contactSearch.click()
         contactSearch.typeText("no matching contact")
         XCTAssertTrue(contactsApp.descendants(matching: .any)["contact-no-results-state"].waitForExistence(timeout: 5))
@@ -3333,6 +3553,9 @@ final class RekonPursuitUITests: XCTestCase {
         contactSearch.typeKey(.delete, modifierFlags: [])
         let employerFilter = contactsApp.popUpButtons["Filter contacts by employer"]
         assertReadyTextControl(employerFilter, key: "contacts.employerFilter")
+        XCTAssertEqual(employerFilter.elementType, .popUpButton, "VD2-07b baseline [contacts.employerFilter]: picker role changed.")
+        XCTAssertEqual(employerFilter.value as? String, "All employers", "VD2-07b baseline [contacts.employerFilter]: selected value changed.")
+        assertSharedControlSurface("contacts.employerFilter", kind: "picker", state: "idle", in: contactsApp)
 
         contactsApp.buttons["contact-new"].click()
         let contactKeys: [(String, XCUIElement, String)] = [
@@ -3348,98 +3571,265 @@ final class RekonPursuitUITests: XCTestCase {
         ]
         for (key, element, kind) in contactKeys {
             assertReadyTextControl(element, key: key)
-        }
-        assertReadyFormTextField("Title (optional)", index: 0, key: "contacts.title", in: contactsApp)
-        replaceText(in: contactsApp.textFields["contact-employer-search"], with: "VD2-07b temporary employer")
-        contactsApp.buttons["Add VD2-07b temporary employer as new employer"].click()
-        assertReadyFormTextField("New employer (optional)", index: 1, key: "contacts.newEmployer", in: contactsApp)
-        XCTAssertEqual(contactsApp.textViews.count, 2, "VD2-07b baseline [contacts multiline]: both editors must remain rendered.")
-        for editorTitle in ["Relationship context (optional)", "Notes (optional)"] {
-            let expansionControl = contactsApp.buttons[editorTitle]
-            assertReadyTextControl(expansionControl, key: "contacts.\(editorTitle).expansion", label: editorTitle)
-            XCTAssertEqual(
-                expansionControl.value as? String,
-                "Collapsed",
-                "VD2-07b baseline [contacts \(editorTitle)]: multiline editor must retain its collapsed disclosure state."
-            )
-        }
-        for (key, _, kind) in contactKeys {
+            XCTAssertEqual(element.elementType, .textField, "VD2-07b baseline [\(key)]: native text role changed.")
             assertSharedControlSurface(key, kind: kind, state: "idle", in: contactsApp)
         }
+        _ = assertReadyFormTextField("Title (optional)", index: 0, key: "contacts.title", in: contactsApp)
         assertSharedControlSurface("contacts.title", kind: "text", state: "idle", in: contactsApp)
-        assertSharedControlSurface("contacts.search", kind: "search", state: "idle", in: contactsApp)
-        assertSharedControlSurface("contacts.employerFilter", kind: "picker", state: "idle", in: contactsApp)
+        XCTAssertEqual(contactsApp.textViews.count, 2, "VD2-07b baseline [contacts multiline]: both editors must remain rendered.")
+        for (index, editor) in [(0, "relationshipContext"), (1, "notes")] {
+            let control = contactsApp.textViews.element(boundBy: index)
+            XCTAssertTrue(control.exists, "VD2-07b baseline [contacts.\(editor)]: TextEditor role/binding missing.")
+            assertSharedControlSurface("contacts.\(editor)", kind: "multiline", state: "idle", in: contactsApp)
+        }
+        for (title, key) in [("Relationship context (optional)", "contacts.relationshipContext"), ("Notes (optional)", "contacts.notes")] {
+            let expansionControl = contactsApp.buttons[title]
+            assertReadyTextControl(expansionControl, key: "\(key).expansion", label: title)
+            XCTAssertEqual(expansionControl.value as? String, "Collapsed", "VD2-07b baseline [\(key)]: collapsed state changed.")
+            expansionControl.click()
+            XCTAssertEqual(expansionControl.value as? String, "Expanded", "VD2-07b baseline [\(key)]: expanded-height branch changed.")
+        }
+        replaceText(in: contactsApp.textFields["contact-employer-search"], with: "Fixture North")
+        XCTAssertTrue(contactsApp.buttons["Fixture North"].waitForExistence(timeout: 5), "VD2-07b baseline [contacts.employerSearch]: tracked suggestion branch missing.")
+        contactsApp.buttons["Fixture North"].click()
+        XCTAssertTrue(contactsApp.staticTexts["Employer: Fixture North"].waitForExistence(timeout: 5), "VD2-07b baseline [contacts.employerSearch]: selected employer binding missing.")
+        replaceText(in: contactsApp.textFields["contact-employer-search"], with: "VD2-07b temporary employer")
+        contactsApp.buttons["Add VD2-07b temporary employer as new employer"].click()
+        _ = assertReadyFormTextField("New employer (optional)", index: 1, key: "contacts.newEmployer", in: contactsApp)
         assertSharedControlSurface("contacts.newEmployer", kind: "text", state: "idle", in: contactsApp)
-        assertSharedControlSurface("contacts.relationshipContext", kind: "multiline", state: "idle", in: contactsApp)
-        assertSharedControlSurface("contacts.notes", kind: "multiline", state: "idle", in: contactsApp)
+        let baselineContactRows = contactsApp.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "contact-row-" )).count
+        replaceText(in: contactsApp.textFields["contact-name"], with: "VD2-07b cancelled contact")
+        contactsApp.buttons["Cancel"].click()
+        XCTAssertEqual(contactsApp.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "contact-row-" )).count, baselineContactRows, "VD2-07b baseline [contacts Cancel]: Cancel must write no row.")
+
+        contactsApp.buttons["contact-edit"].click()
+        XCTAssertTrue(contactsApp.textFields["contact-name"].waitForExistence(timeout: 5), "VD2-07b baseline [contacts edit]: current edit route missing.")
+        for (key, element, kind) in contactKeys {
+            assertReadyTextControl(element, key: "\(key).edit")
+            assertSharedControlSurface(key, kind: kind, state: "idle", in: contactsApp)
+        }
+        _ = assertReadyFormTextField("Title (optional)", index: 0, key: "contacts.title.edit", in: contactsApp)
+        assertSharedControlSurface("contacts.title", kind: "text", state: "idle", in: contactsApp)
+        XCTAssertEqual(contactsApp.textViews.count, 2, "VD2-07b baseline [contacts edit multiline]: both editors must remain rendered.")
+        for (index, key, title) in [(0, "contacts.relationshipContext", "Relationship context (optional)"), (1, "contacts.notes", "Notes (optional)")] {
+            let expansionControl = contactsApp.buttons[title]
+            assertReadyTextControl(expansionControl, key: "\(key).edit.expansion", label: title)
+            let initialExpansionState = expansionControl.value as? String
+            XCTAssertTrue(["Collapsed", "Expanded"].contains(initialExpansionState), "VD2-07b baseline [\(key).edit]: disclosure state changed.")
+            if initialExpansionState == "Collapsed" { expansionControl.click() }
+            XCTAssertEqual(expansionControl.value as? String, "Expanded", "VD2-07b baseline [\(key).edit]: expanded-height branch changed.")
+            let editor = contactsApp.textViews.element(boundBy: index)
+            editor.click()
+            editor.typeText("edit \(index)")
+            XCTAssertTrue((editor.value as? String ?? "").contains("edit \(index)"), "VD2-07b baseline [\(key).edit]: text editor caret/binding changed.")
+            assertSharedControlSurface(key, kind: "multiline", state: "focused", in: contactsApp)
+        }
+        replaceText(in: contactsApp.textFields["contact-employer-search"], with: "VD2-07b edit employer")
+        let addNewEmployer = contactsApp.buttons["Add VD2-07b edit employer as new employer"]
+        XCTAssertTrue(addNewEmployer.waitForExistence(timeout: 5), "VD2-07b baseline [contacts.newEmployer.edit]: new-employer branch missing.")
+        addNewEmployer.click()
+        _ = assertReadyFormTextField("New employer (optional)", index: 1, key: "contacts.newEmployer.edit", in: contactsApp)
+        assertSharedControlSurface("contacts.newEmployer", kind: "text", state: "idle", in: contactsApp)
+        contactsApp.buttons["Cancel"].click()
+
+        contactsApp.buttons["contact-new"].click()
+        replaceText(in: contactsApp.textFields["contact-name"], with: "VD2-07b invalid draft")
+        replaceText(in: contactsApp.textFields["contact-work-email"], with: "invalid@")
+        contactsApp.buttons["save-contact"].click()
+        XCTAssertTrue(contactsApp.descendants(matching: .any)["contact-operation-error"].waitForExistence(timeout: 5), "VD2-07b baseline [contacts invalid]: validation text missing.")
+        XCTAssertEqual(contactsApp.textFields["contact-name"].value as? String, "VD2-07b invalid draft", "VD2-07b baseline [contacts invalid]: draft must remain bound.")
+        contactsApp.buttons["Cancel"].click()
+        XCTAssertFalse(contactsApp.descendants(matching: .any)["contact-row-vd2-07b-invalid-draft"].exists, "VD2-07b baseline [contacts invalid Cancel]: invalid draft must not persist.")
+
+        contactsApp.buttons["contact-new"].click()
+        replaceText(in: contactsApp.textFields["contact-name"], with: "VD2-07b Saved Contact")
+        contactsApp.buttons["save-contact"].click()
+        XCTAssertTrue(contactsApp.descendants(matching: .any)["contact-row-vd2-07b-saved-contact"].waitForExistence(timeout: 5), "VD2-07b baseline [contacts save]: valid save must create the row.")
+        contactsApp.terminate()
+        contactsApp = openContactsFixture(fixture: "contacts", session: contactsSession)
+        XCTAssertTrue(contactsApp.descendants(matching: .any)["contact-row-vd2-07b-saved-contact"].waitForExistence(timeout: 5), "VD2-07b baseline [contacts relaunch]: valid save must persist.")
+        XCTAssertTrue(activityEvidence(named: "Contact Created", in: contactsApp).waitForExistence(timeout: 5), "VD2-07b baseline [contacts activity]: save must retain local activity evidence.")
         contactsApp.terminate()
 
-        let activityApp = launchApp(fixture: "populated")
+        let activitySession = "vd207b-activity-\(UUID().uuidString)"
+        var activityApp = launchApp(fixture: "populated", session: activitySession)
         activityApp.descendants(matching: .any)["sidebar-activity-and-ai"].tap()
-        let activityKeys: [(String, XCUIElement, String)] = [
-            ("activity.search", activityApp.textFields["activity-search"], "search"),
-            ("ai.time", activityApp.popUpButtons["ai-ledger-time-filter"], "picker"),
-            ("ai.feature", activityApp.textFields["ai-ledger-feature-filter"], "text"),
-            ("ai.opportunity", activityApp.popUpButtons["ai-ledger-opportunity-filter"], "picker"),
-            ("ai.route", activityApp.popUpButtons["ai-ledger-route-filter"], "picker"),
-            ("ai.model", activityApp.textFields["ai-ledger-model-filter"], "text"),
-            ("ai.completion", activityApp.popUpButtons["ai-ledger-completion-filter"], "picker"),
-            ("ai.minimumCost", activityApp.textFields["ai-ledger-min-cost-filter"], "numeric"),
-            ("ai.maximumCost", activityApp.textFields["ai-ledger-max-cost-filter"], "numeric")
+        let activityKeys: [(String, String, XCUIElement, String, XCUIElement.ElementType, String)] = [
+            ("activity.search", "activity-search", activityApp.textFields["activity-search"], "search", .textField, ""),
+            ("ai.time", "ai-ledger-time-filter", activityApp.popUpButtons["ai-ledger-time-filter"], "picker", .popUpButton, "All time"),
+            ("ai.feature", "ai-ledger-feature-filter", activityApp.textFields["ai-ledger-feature-filter"], "text", .textField, ""),
+            ("ai.opportunity", "ai-ledger-opportunity-filter", activityApp.popUpButtons["ai-ledger-opportunity-filter"], "picker", .popUpButton, "All opportunities"),
+            ("ai.route", "ai-ledger-route-filter", activityApp.popUpButtons["ai-ledger-route-filter"], "picker", .popUpButton, "Any route"),
+            ("ai.model", "ai-ledger-model-filter", activityApp.textFields["ai-ledger-model-filter"], "text", .textField, ""),
+            ("ai.completion", "ai-ledger-completion-filter", activityApp.popUpButtons["ai-ledger-completion-filter"], "picker", .popUpButton, "Any completion"),
+            ("ai.minimumCost", "ai-ledger-min-cost-filter", activityApp.textFields["ai-ledger-min-cost-filter"], "numeric", .textField, ""),
+            ("ai.maximumCost", "ai-ledger-max-cost-filter", activityApp.textFields["ai-ledger-max-cost-filter"], "numeric", .textField, "")
         ]
-        for (key, element, kind) in activityKeys {
+        for (key, identifier, element, kind, role, selectedValue) in activityKeys {
             assertReadyTextControl(element, key: key)
-        }
-        for (key, _, kind) in activityKeys {
+            XCTAssertEqual(element.identifier, identifier, "VD2-07b baseline [\(key)]: stable selector changed.")
+            XCTAssertEqual(element.elementType, role, "VD2-07b baseline [\(key)]: native role changed.")
+            XCTAssertEqual(element.label, "", "VD2-07b baseline [\(key)]: existing empty AX label is an explicit VD2-08 semantic-text debt and must not be silently changed by this styling task.")
+            XCTAssertEqual(element.value as? String ?? "", selectedValue, "VD2-07b baseline [\(key)]: existing selected/default value changed.")
             assertSharedControlSurface(key, kind: kind, state: "idle", in: activityApp)
         }
+        replaceText(in: activityApp.textFields["activity-search"], with: "no matching activity")
+        XCTAssertTrue(activityApp.staticTexts["No activity matches that search."].waitForExistence(timeout: 5), "VD2-07b baseline [activity.search]: local no-results truth changed.")
+        replaceText(in: activityApp.textFields["activity-search"], with: "")
+        replaceText(in: activityApp.textFields["ai-ledger-min-cost-filter"], with: "10")
+        replaceText(in: activityApp.textFields["ai-ledger-max-cost-filter"], with: "1")
+        XCTAssertTrue(activityApp.staticTexts["Minimum cost cannot exceed maximum cost."].waitForExistence(timeout: 5), "VD2-07b baseline [ai cost range]: validation truth changed.")
+        XCTAssertTrue(activityApp.descendants(matching: .any)["ai-ledger-empty-state"].exists, "VD2-07b baseline [ai local-only]: filters must not invent an AI request or ledger entry.")
+        XCTAssertTrue(activityApp.buttons["ai-ledger-clear-filters"].isEnabled, "VD2-07b baseline [ai clear]: local reset must remain available.")
+        activityApp.buttons["ai-ledger-clear-filters"].click()
+        XCTAssertEqual(activityApp.textFields["ai-ledger-min-cost-filter"].value as? String, "", "VD2-07b baseline [ai clear]: minimum must reset locally.")
+        activityApp.terminate()
+        activityApp = launchApp(fixture: "populated", session: activitySession)
+        activityApp.descendants(matching: .any)["sidebar-activity-and-ai"].tap()
+        XCTAssertEqual(activityApp.textFields["activity-search"].value as? String, "", "VD2-07b baseline [activity relaunch]: search must not persist.")
+        XCTAssertEqual(activityApp.textFields["ai-ledger-min-cost-filter"].value as? String, "", "VD2-07b baseline [ai relaunch]: local filters must not persist.")
+        XCTAssertTrue(activityApp.descendants(matching: .any)["ai-ledger-empty-state"].exists, "VD2-07b baseline [ai relaunch]: no request/provider/network action may be fabricated.")
     }
 
     @MainActor
     func testVD207bOpportunityEditorsRetainBindingsValidationAndNoSaveBack() {
         let session = "vd207b-opportunity-\(UUID().uuidString)"
         var app = launchApp(fixture: "populated", session: session)
+        app.descendants(matching: .any)["sidebar-activity-and-ai"].tap()
+        let createdEvidence = app.staticTexts.matching(NSPredicate(format: "value BEGINSWITH %@", "Opportunity Created"))
+        let updatedEvidence = app.staticTexts.matching(NSPredicate(format: "value BEGINSWITH %@", "Opportunity Updated"))
+        let originalCreatedActivityCount = createdEvidence.count
+        let originalUpdatedActivityCount = updatedEvidence.count
         app.descendants(matching: .any)["sidebar-pipeline"].tap()
         let rows = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-"))
         XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 5))
         let originalRowCount = rows.count
 
         app.buttons["pipeline-add-opportunity"].click()
-        let addControls: [(String, XCUIElement, String)] = [
-            ("add.title", app.textFields["opportunity-title"], "text"),
-            ("add.company", app.textFields["opportunity-company"], "text")
-        ]
-        for (key, element, _) in addControls { assertReadyTextControl(element, key: key) }
-        XCTAssertGreaterThanOrEqual(app.textFields.count, 2, "VD2-07b baseline [add]: text bindings must remain available.")
-        XCTAssertGreaterThanOrEqual(app.textViews.count, 2, "VD2-07b baseline [add multiline]: description and notes must remain available.")
-        for (index, label) in ["Pay period", "Work arrangement", "Current response", "Stage", "Next action"].enumerated() {
-            assertReadyPicker(label, index: index, key: "add.\(label)", in: app)
+        let addTitle = app.textFields["opportunity-title"]
+        let addCompany = app.textFields["opportunity-company"]
+        for (key, control) in [("add.title", addTitle), ("add.company", addCompany)] {
+            assertReadyTextControl(control, key: key)
+            XCTAssertEqual(control.elementType, .textField, "VD2-07b baseline [\(key)]: text role changed.")
+            assertSharedControlSurface(key, kind: "text", state: "idle", in: app)
         }
-        XCTAssertTrue(app.checkBoxes["Add applied date"].isEnabled)
-        XCTAssertTrue(app.checkBoxes["Add a due date"].isEnabled)
+        for (index, row) in [
+            (0, "add.url", "Job URL (optional)", "text"),
+            (1, "add.minimum", "Minimum (USD)", "numeric"),
+            (2, "add.maximum", "Maximum (USD)", "numeric"),
+            (3, "add.location", "Location (optional)", "text")
+        ].enumerated() {
+            let (_, key, label, kind) = row
+            _ = assertReadyFormTextField(label, index: index, key: key, in: app)
+            assertSharedControlSurface(key, kind: kind, state: "idle", in: app)
+        }
+        XCTAssertEqual(app.textViews.count, 2, "VD2-07b baseline [add multiline]: description and notes must remain available.")
+        for (index, key, label) in [(0, "add.description", "Job description"), (1, "add.notes", "Notes")] {
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "value == %@", label)).firstMatch.exists, "VD2-07b baseline [\(key)]: multiline label changed.")
+            XCTAssertTrue(app.textViews.element(boundBy: index).exists, "VD2-07b baseline [\(key)]: TextEditor binding missing.")
+            assertSharedControlSurface(key, kind: "multiline", state: "idle", in: app)
+        }
+        let addPickerRows = [
+            ("add.payPeriod", "Pay period"),
+            ("add.workArrangement", "Work arrangement"),
+            ("add.response", "Current response"),
+            ("add.stage", "Stage"),
+            ("add.nextAction", "Next action")
+        ]
+        var addPickers: [XCUIElement] = []
+        for (index, row) in addPickerRows.enumerated() {
+            addPickers.append(assertReadyPicker(row.1, index: index, key: row.0, in: app))
+            assertSharedControlSurface(row.0, kind: "picker", state: "idle", in: app)
+        }
+        addPickers[4].click()
+        XCTAssertTrue(app.menuItems["Other"].waitForExistence(timeout: 5), "VD2-07b baseline [add.otherAction]: Other picker tag missing.")
+        app.menuItems["Other"].click()
+        assertReadyTextControl(app.textFields["opportunity-next-action"], key: "add.otherAction")
+        assertSharedControlSurface("add.otherAction", kind: "text", state: "idle", in: app)
+        let appliedToggle = app.checkBoxes["Add applied date"]
+        let dueToggle = app.checkBoxes["Add a due date"]
+        for (index, row) in [("add.appliedDate", appliedToggle, "Applied date"), ("add.dueDate", dueToggle, "Due")].enumerated() {
+            let (key, toggle, dateLabel) = row
+            XCTAssertTrue(toggle.waitForExistence(timeout: 5), "VD2-07b preservation-only [\(key)]: toggle missing.")
+            XCTAssertEqual(toggle.elementType, .checkBox, "VD2-07b preservation-only [\(key)]: toggle must retain its native checkbox role.")
+            XCTAssertTrue(toggle.isEnabled, "VD2-07b preservation-only [\(key)]: toggle unexpectedly disabled.")
+            XCTAssertEqual(String(describing: toggle.value ?? ""), "0", "VD2-07b preservation-only [\(key)]: fresh Add path must start disabled.")
+            toggle.click()
+            XCTAssertEqual(String(describing: toggle.value ?? ""), "1", "VD2-07b preservation-only [\(key)]: toggle must enable its conditional date path.")
+            _ = assertReadyFormDatePicker(dateLabel, index: index, key: key, in: app)
+        }
         replaceText(in: app.textFields["opportunity-title"], with: "VD2-07b cancelled draft")
         app.buttons["cancel-add-opportunity"].click()
         XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 5))
         XCTAssertEqual(rows.count, originalRowCount, "VD2-07b baseline [add]: Cancel must not write a row.")
 
-        let originalRow = rows.firstMatch
+        app.terminate()
+        app = launchApp(fixture: "populated", session: session)
+        app.descendants(matching: .any)["sidebar-pipeline"].tap()
+        XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-")).count, originalRowCount, "VD2-07b baseline [add relaunch]: Cancel must remain no-write after relaunch.")
+
+        let relaunchedRows = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-"))
+        let originalRow = relaunchedRows.firstMatch
         let originalLabel = originalRow.label
         let opportunityID = String(originalRow.identifier.dropFirst("pipeline-table-row-".count))
         originalRow.click()
         app.buttons["pipeline-open-details-\(opportunityID)"].click()
-        let overviewControls: [(String, XCUIElement, String)] = [
-            ("overview.title", app.textFields["selected-opportunity-title"], "text")
+        let overviewTitle = app.textFields["selected-opportunity-title"]
+        assertReadyTextControl(overviewTitle, key: "overview.title")
+        assertSharedControlSurface("overview.title", kind: "text", state: "idle", in: app)
+        let overviewFields = [
+            ("overview.company", "Company", "text"),
+            ("overview.url", "Job URL (optional)", "text"),
+            ("overview.minimum", "Minimum (USD)", "numeric"),
+            ("overview.maximum", "Maximum (USD)", "numeric"),
+            ("overview.location", "Location (optional)", "text")
         ]
-        for (key, element, _) in overviewControls { assertReadyTextControl(element, key: key) }
-        XCTAssertGreaterThanOrEqual(app.textFields.count, 1, "VD2-07b baseline [overview]: text bindings must remain available.")
-        XCTAssertGreaterThanOrEqual(app.textViews.count, 2, "VD2-07b baseline [overview multiline]: description and notes must remain editable.")
-        for (index, label) in ["Pay period", "Work arrangement", "Stage", "Next action"].enumerated() {
-            assertReadyPicker(label, index: index, key: "overview.\(label)", in: app)
+        var overviewTextFields: [XCUIElement] = []
+        for (index, row) in overviewFields.enumerated() {
+            overviewTextFields.append(assertReadyFormTextField(row.1, index: index, key: row.0, in: app))
+            assertSharedControlSurface(row.0, kind: row.2, state: "idle", in: app)
         }
+        XCTAssertEqual(app.textViews.count, 2, "VD2-07b baseline [overview multiline]: description and notes must remain editable.")
+        for (index, key, label) in [(0, "overview.description", "Job description"), (1, "overview.notes", "Notes")] {
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "value == %@", label)).firstMatch.exists, "VD2-07b baseline [\(key)]: multiline label changed.")
+            XCTAssertTrue(app.textViews.element(boundBy: index).exists, "VD2-07b baseline [\(key)]: TextEditor binding missing.")
+            assertSharedControlSurface(key, kind: "multiline", state: "idle", in: app)
+        }
+        let overviewPickerRows = [
+            ("overview.payPeriod", "Pay period"),
+            ("overview.workArrangement", "Work arrangement"),
+            ("overview.stage", "Stage"),
+            ("overview.nextAction", "Next action")
+        ]
+        var overviewPickers: [XCUIElement] = []
+        for (index, row) in overviewPickerRows.enumerated() {
+            overviewPickers.append(assertReadyPicker(row.1, index: index, key: row.0, in: app))
+            assertSharedControlSurface(row.0, kind: "picker", state: "idle", in: app)
+        }
+        overviewPickers[3].click()
+        XCTAssertTrue(app.menuItems["Other"].waitForExistence(timeout: 5), "VD2-07b baseline [overview.otherAction]: Other picker tag missing.")
+        app.menuItems["Other"].click()
+        _ = assertReadyFormTextField("Other action", index: 5, key: "overview.otherAction", in: app)
+        assertSharedControlSurface("overview.otherAction", kind: "text", state: "idle", in: app)
+        let overviewDueToggle = app.checkBoxes["Add a due date"]
+        XCTAssertTrue(overviewDueToggle.waitForExistence(timeout: 5), "VD2-07b preservation-only [overview.dueDate]: toggle missing.")
+        XCTAssertEqual(overviewDueToggle.elementType, .checkBox, "VD2-07b preservation-only [overview.dueDate]: toggle must retain its native checkbox role.")
+        XCTAssertTrue(overviewDueToggle.isEnabled, "VD2-07b preservation-only [overview.dueDate]: toggle unexpectedly disabled.")
+        XCTAssertEqual(String(describing: overviewDueToggle.value ?? ""), "1", "VD2-07b preservation-only [overview.dueDate]: populated fixture must retain its enabled Due path.")
+        _ = assertReadyFormDatePicker("Due", index: 0, key: "overview.dueDate", in: app)
         replaceText(in: app.textFields["selected-opportunity-title"], with: "VD2-07b unsaved overview")
+        replaceText(in: overviewTextFields[0], with: "VD2-07b unsaved company")
+        replaceText(in: overviewTextFields[2], with: "123")
+        replaceText(in: overviewTextFields[3], with: "456")
+        replaceText(in: app.textViews.element(boundBy: 0), with: "VD2-07b unsaved description")
+        replaceText(in: app.textViews.element(boundBy: 1), with: "VD2-07b unsaved notes")
         app.buttons["Back to Pipeline"].click()
         XCTAssertTrue(app.descendants(matching: .any)["pipeline-table-row-\(opportunityID)"].waitForExistence(timeout: 5))
-        XCTAssertEqual(rows.count, originalRowCount, "VD2-07b baseline [overview]: Back must not fabricate a row.")
+        XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-")).count, originalRowCount, "VD2-07b baseline [overview]: Back must not fabricate a row.")
+
+        app.descendants(matching: .any)["sidebar-activity-and-ai"].tap()
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "value BEGINSWITH %@", "Opportunity Created")).count, originalCreatedActivityCount, "VD2-07b baseline [add Cancel]: no activity event may be fabricated.")
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "value BEGINSWITH %@", "Opportunity Updated")).count, originalUpdatedActivityCount, "VD2-07b baseline [overview Back]: no activity event may be fabricated.")
 
         app.terminate()
         app = launchApp(fixture: "populated", session: session)
@@ -3449,35 +3839,76 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertEqual(persistedRow.label, originalLabel, "VD2-07b baseline [overview]: relaunch must discard Back-only edits.")
         app.buttons["pipeline-import-csv"].click()
         XCTAssertTrue(app.buttons["choose-csv-file"].waitForExistence(timeout: 5), "VD2-07b static-only [CSV]: existing app-side trigger must remain available.")
+        assertStaticOnlySourceToSelectorCoverage()
         app.descendants(matching: .any)["sidebar-pipeline"].tap()
-
-        for (key, _, kind) in addControls + overviewControls {
-            assertSharedControlSurface(key, kind: kind, state: "idle", in: app)
-        }
-        for key in ["add.url", "add.minimum", "add.maximum", "add.location", "overview.company", "overview.url", "overview.minimum", "overview.maximum", "overview.location"] {
-            assertSharedControlSurface(key, kind: "text", state: "idle", in: app)
-        }
-        for key in ["add.description", "add.notes", "overview.description", "overview.notes"] {
-            assertSharedControlSurface(key, kind: "multiline", state: "idle", in: app)
-        }
-        for key in ["add.payPeriod", "add.workArrangement", "add.response", "add.stage", "add.nextAction", "overview.payPeriod", "overview.workArrangement", "overview.stage", "overview.nextAction"] {
-            assertSharedControlSurface(key, kind: "picker", state: "idle", in: app)
-        }
 
         let reconciliationApp = launchApp(fixture: "reconciliation")
         reconciliationApp.buttons["Open Review reconciliation evidence"].click()
-        for (index, label) in ["Local outcome", "Classification", "Reason", "Confidence"].enumerated() {
-            assertReadyPicker(label, index: index, key: "reconcile.\(label)", in: reconciliationApp)
+        for (index, row) in [("reconcile.outcome", "Local outcome"), ("reconcile.classification", "Classification"), ("reconcile.reason", "Reason"), ("reconcile.confidence", "Confidence")].enumerated() {
+            _ = assertReadyPicker(row.1, index: index, key: row.0, in: reconciliationApp)
+            assertSharedControlSurface(row.0, kind: "picker", state: "idle", in: reconciliationApp)
         }
-        assertReadyFormTextField("Evidence or error reviewed", index: 0, key: "reconcile.evidence", in: reconciliationApp)
-        for key in ["reconcile.outcome", "reconcile.classification", "reconcile.reason", "reconcile.confidence"] {
-            assertSharedControlSurface(key, kind: "picker", state: "idle", in: reconciliationApp)
-        }
+        _ = assertReadyFormTextField("Evidence or error reviewed", index: 0, key: "reconcile.evidence", in: reconciliationApp)
         assertSharedControlSurface("reconcile.evidence", kind: "multiline", state: "idle", in: reconciliationApp)
+        XCTAssertTrue(reconciliationApp.buttons["Record offline — check not run"].isEnabled, "VD2-07b baseline [reconcile.evidence]: offline/no-network path changed.")
+
+        let documentApp = launchApp(fixture: "document-relink")
+        documentApp.descendants(matching: .any)["sidebar-pipeline"].tap()
+        let documentRow = documentApp.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-")).firstMatch
+        XCTAssertTrue(documentRow.waitForExistence(timeout: 5), "VD2-07b baseline [overview.documentReferenceType]: canonical opportunity missing.")
+        let documentID = String(documentRow.identifier.dropFirst("pipeline-table-row-".count))
+        documentRow.click()
+        documentApp.buttons["pipeline-open-details-\(documentID)"].click()
+        let manageMenu = documentApp.menuButtons["Manage"]
+        XCTAssertTrue(manageMenu.waitForExistence(timeout: 5), "VD2-07b baseline [overview.documentReferenceType]: Manage menu missing.")
+        manageMenu.click()
+        XCTAssertTrue(documentApp.menuItems["Reference type"].waitForExistence(timeout: 5), "VD2-07b baseline [overview.documentReferenceType]: picker label/type menu missing.")
+        XCTAssertTrue(documentApp.descendants(matching: .any)["choose-document-reference"].exists, "VD2-07b baseline [overview.documentReferenceType]: app-side chooser trigger missing.")
+        let documentProjection = sharedControlSurfaceSnapshot("overview.documentReferenceType", in: documentApp)
+        documentApp.typeKey(.escape, modifierFlags: [])
+        documentApp.buttons["Back to Pipeline"].click()
+        assertSharedControlSurfaceSnapshot(documentProjection, key: "overview.documentReferenceType", kind: "picker", state: "idle")
+
+        let rescheduleApp = launchApp(fixture: "populated")
+        let due = rescheduleApp.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "home-due-")).firstMatch
+        XCTAssertTrue(due.waitForExistence(timeout: 5), "VD2-07b preservation-only [reschedule.dueDate]: deterministic task missing.")
+        let originalDue = due.label
+        homeActionMenu(in: rescheduleApp).click()
+        rescheduleApp.menuItems["Reschedule…"].click()
+        let reschedulePicker = rescheduleApp.datePickers["home-reschedule-due-date"]
+        XCTAssertTrue(reschedulePicker.waitForExistence(timeout: 5), "VD2-07b preservation-only [reschedule.dueDate]: New due date picker missing.")
+        XCTAssertEqual(reschedulePicker.label, "New due date", "VD2-07b preservation-only [reschedule.dueDate]: label changed.")
+        XCTAssertTrue(rescheduleApp.buttons["Cancel"].isEnabled, "VD2-07b preservation-only [reschedule.dueDate]: Cancel missing.")
+        rescheduleApp.buttons["Cancel"].click()
+        XCTAssertEqual(due.label, originalDue, "VD2-07b preservation-only [reschedule.dueDate]: Cancel changed the due date.")
+        homeActionMenu(in: rescheduleApp).click()
+        rescheduleApp.menuItems["Reschedule…"].click()
+        reschedulePicker.click()
+        reschedulePicker.typeKey(.upArrow, modifierFlags: [])
+        rescheduleApp.buttons["Save locally"].click()
+        XCTAssertNotEqual(due.label, originalDue, "VD2-07b preservation-only [reschedule.dueDate]: Save locally binding changed.")
     }
 
     @MainActor
     func testVD207bSettingsRecoveryFieldsRetainRootOwnershipAndFilePanelsRemainNative() {
+        let setupApp = launchApp(fixture: "populated")
+        setupApp.descendants(matching: .any)["sidebar-settings"].tap()
+        XCTAssertTrue(setupApp.buttons["set-up-recovery-key"].waitForExistence(timeout: 5), "VD2-07b baseline [recovery.setupReentry]: setup trigger missing.")
+        setupApp.buttons["set-up-recovery-key"].click()
+        let setupReentry = setupApp.textFields["Re-enter the complete recovery key"]
+        assertReadyTextControl(setupReentry, key: "recovery.setupReentry")
+        XCTAssertEqual(setupReentry.elementType, .textField, "VD2-07b baseline [recovery.setupReentry]: root field role changed.")
+        XCTAssertTrue(setupApp.buttons["Confirm setup"].isEnabled, "VD2-07b baseline [recovery.setupReentry]: root confirmation callback missing.")
+        let setupProjection = sharedControlSurfaceSnapshot("recovery.setupReentry", in: setupApp)
+        // Do not type, inspect, or attach recovery material. Empty confirmation
+        // must keep the root sheet open and leave enrollment uncommitted.
+        setupApp.buttons["Confirm setup"].click()
+        XCTAssertTrue(setupReentry.waitForExistence(timeout: 5), "VD2-07b baseline [recovery.setupReentry]: empty confirmation must retain the re-entry sheet.")
+        XCTAssertEqual(setupReentry.value as? String, "", "VD2-07b baseline [recovery.setupReentry]: empty confirmation must not fabricate entry text.")
+        setupApp.buttons["Cancel"].click()
+        XCTAssertTrue(setupApp.buttons["set-up-recovery-key"].waitForExistence(timeout: 5), "VD2-07b baseline [recovery.setupReentry]: Cancel must return to Settings without enrollment.")
+        assertSharedControlSurfaceSnapshot(setupProjection, key: "recovery.setupReentry", kind: "text", state: "idle")
+
         let archiveApp = launchApp(fixture: "archive")
         archiveApp.descendants(matching: .any)["sidebar-settings"].tap()
         let summary = archiveApp.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "settings-archive-summary-")).firstMatch
@@ -3487,12 +3918,22 @@ final class RekonPursuitUITests: XCTestCase {
         archiveApp.buttons["create-portable-archive"].click()
         let archiveReentry = archiveApp.textFields["Re-enter the complete recovery key"]
         assertReadyTextControl(archiveReentry, key: "recovery.archiveReentry")
+        let archiveConfirmation = archiveApp.sheets.firstMatch.buttons["Create recovery archive"]
+        XCTAssertTrue(archiveConfirmation.isEnabled, "VD2-07b baseline [recovery.archiveReentry]: root confirmation callback missing.")
+        assertSharedControlSurface("recovery.archiveReentry", kind: "text", state: "idle", in: archiveApp)
         archiveApp.buttons["Cancel"].click()
         XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        archiveApp.buttons["create-portable-archive"].click()
+        XCTAssertTrue(archiveApp.sheets.firstMatch.buttons["Create recovery archive"].waitForExistence(timeout: 5))
+        archiveApp.sheets.firstMatch.buttons["Create recovery archive"].click()
+        XCTAssertFalse(archiveApp.sheets.firstMatch.exists, "VD2-07b baseline [recovery.archiveReentry]: empty confirmation must dismiss the transient sheet.")
+        XCTAssertTrue(summary.waitForExistence(timeout: 5), "VD2-07b baseline [recovery.archiveReentry]: empty confirmation must retain archive truth.")
+        XCTAssertFalse(archiveApp.descendants(matching: .any)["portable-archive-progress"].exists, "VD2-07b baseline [recovery.archiveReentry]: empty confirmation must not begin archive work.")
 
         archiveApp.buttons["create-protected-export"].click()
         let protectedReentry = archiveApp.textFields["Recovery key"]
         assertReadyTextControl(protectedReentry, key: "settings.protectedExportReentry")
+        assertSharedControlSurface("settings.protectedExportReentry", kind: "text", state: "idle", in: archiveApp)
         archiveApp.buttons["Choose destination and review"].click()
         XCTAssertTrue(archiveApp.staticTexts["protected-export-error"].waitForExistence(timeout: 5), "VD2-07b baseline [protected export]: empty-key error must remain truthful.")
         XCTAssertFalse(archiveApp.descendants(matching: .any)["settings-protected-export-success-dialog"].exists)
@@ -3500,11 +3941,16 @@ final class RekonPursuitUITests: XCTestCase {
 
         archiveApp.buttons["purge-retained-archive-data"].click()
         assertReadyTextControl(archiveApp.textFields["Recovery key"], key: "recovery.retainedPurgeReentry")
-        archiveApp.buttons["Cancel"].click()
-        XCTAssertTrue(archiveApp.buttons["restore-portable-archive"].isEnabled, "VD2-07b static-only [recovery.restoreReentry]: only the app-side trigger is observable without entering the excluded boundary.")
-        assertSharedControlSurface("recovery.archiveReentry", kind: "text", state: "idle", in: archiveApp)
+        XCTAssertTrue(archiveApp.buttons["Purge retained archive data"].isEnabled, "VD2-07b baseline [recovery.retainedPurgeReentry]: root confirmation callback missing.")
         assertSharedControlSurface("recovery.retainedPurgeReentry", kind: "text", state: "idle", in: archiveApp)
-        assertSharedControlSurface("settings.protectedExportReentry", kind: "text", state: "idle", in: archiveApp)
+        archiveApp.buttons["Cancel"].click()
+        archiveApp.buttons["purge-retained-archive-data"].click()
+        XCTAssertTrue(archiveApp.sheets.firstMatch.buttons["Purge retained archive data"].waitForExistence(timeout: 5))
+        archiveApp.sheets.firstMatch.buttons["Purge retained archive data"].click()
+        XCTAssertFalse(archiveApp.sheets.firstMatch.exists, "VD2-07b baseline [recovery.retainedPurgeReentry]: empty confirmation must dismiss the transient sheet.")
+        XCTAssertFalse(archiveApp.descendants(matching: .any)["retained-data-purge-progress"].exists, "VD2-07b baseline [recovery.retainedPurgeReentry]: empty confirmation must not begin destructive work.")
+        XCTAssertTrue(archiveApp.buttons["restore-portable-archive"].isEnabled, "VD2-07b static-only [recovery.restoreReentry]: only the app-side trigger is observable without entering the excluded boundary.")
+        assertStaticOnlySourceToSelectorCoverage()
 
         let documentApp = launchApp(fixture: "document-relink")
         documentApp.descendants(matching: .any)["sidebar-settings"].tap()
@@ -3513,6 +3959,7 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertTrue(documentPanel.waitForExistence(timeout: 5))
         XCTAssertEqual(documentPanel.descendants(matching: .button).count, 0, "VD2-07b baseline [documents]: Settings remains aggregate-only.")
         XCTAssertFalse(documentApp.descendants(matching: .any)["settings-protected-export-success-dialog"].exists)
+        assertVD208DebtHandoffRemainsExplicit()
     }
 
     @MainActor
@@ -3520,47 +3967,112 @@ final class RekonPursuitUITests: XCTestCase {
         for windowSize in ["wide", "compact"] {
             let contactsApp = openContactsFixture(windowSize: windowSize)
             contactsApp.buttons["contact-new"].click()
-            XCTAssertGreaterThanOrEqual(contactsApp.textViews.count, 2, "VD2-07b baseline [\(windowSize) contacts]: both multiline editors must remain scrollable.")
-            if windowSize == "wide" {
-                assertScrollRevealsAction(
-                    contactsApp.buttons["Cancel"],
-                    in: contactsApp.descendants(matching: .any)["contact-detail-scroll"],
-                    key: "wide contacts Cancel"
-                )
-            } else {
-                let compactDetail = contactsApp.descendants(matching: .any)["contact-compact-detail"]
-                XCTAssertTrue(compactDetail.waitForExistence(timeout: 5), "VD2-07b baseline [compact contacts]: expected compact detail content layout.")
-                XCTAssertFalse(compactDetail.frame.isEmpty, "VD2-07b baseline [compact contacts]: compact detail content must remain laid out.")
-                replaceText(in: contactsApp.textFields["contact-name"], with: "VD2-07b compact draft")
-                let compactScroll = contactsApp.scrollViews
-                    .containing(.button, identifier: "save-contact")
-                    .firstMatch
-                assertScrollRevealsAction(
-                    contactsApp.buttons["Cancel"],
-                    in: compactScroll,
-                    key: "compact contacts Cancel"
-                )
-                XCTAssertTrue(contactsApp.buttons["save-contact"].isHittable, "VD2-07b baseline [compact contacts Save]: primary action must remain reachable.")
+            let contactScroll = contactsApp.scrollViews
+                .containing(.button, identifier: "save-contact")
+                .firstMatch
+            XCTAssertTrue(contactScroll.waitForExistence(timeout: 5), "VD2-07b baseline [\(windowSize) contacts]: new-contact editor ScrollView containing Save missing.")
+            for _ in 0 ..< 4 where contactsApp.textViews.count < 2 { contactScroll.swipeUp() }
+            XCTAssertEqual(contactsApp.textViews.count, 2, "VD2-07b baseline [\(windowSize) contacts]: both multiline editors must remain scrollable.")
+            for (index, key, title) in [(0, "contacts.relationshipContext", "Relationship context (optional)"), (1, "contacts.notes", "Notes (optional)")] {
+                let label = contactsApp.buttons[title]
+                XCTAssertTrue(label.waitForExistence(timeout: 5), "VD2-07b baseline [\(windowSize) \(key)]: label/Expand control clipped.")
+                label.click()
+                XCTAssertEqual(label.value as? String, "Expanded", "VD2-07b baseline [\(windowSize) \(key)]: expanded-height state changed.")
+                let editor = contactsApp.textViews.element(boundBy: index)
+                XCTAssertTrue(editor.exists, "VD2-07b baseline [\(windowSize) \(key)]: TextEditor scroll region missing.")
+                editor.click()
+                editor.typeText("layout \(index)")
+                XCTAssertTrue((editor.value as? String ?? "").contains("layout \(index)"), "VD2-07b baseline [\(windowSize) \(key)]: caret/binding input was clipped.")
+                assertSharedControlSurface(key, kind: "multiline", state: "focused", in: contactsApp)
             }
-            assertSharedControlSurface("contacts.relationshipContext", kind: "multiline", state: "idle", in: contactsApp)
-            assertSharedControlSurface("contacts.notes", kind: "multiline", state: "idle", in: contactsApp)
+            replaceText(in: contactsApp.textFields["contact-name"], with: "VD2-07b \(windowSize) invalid")
+            replaceText(in: contactsApp.textFields["contact-work-email"], with: "invalid@")
+            assertScrollRevealsAction(contactsApp.buttons["save-contact"], in: contactScroll, key: "\(windowSize) contacts Save")
+            contactsApp.buttons["save-contact"].click()
+            let contactError = contactsApp.descendants(matching: .any)["contact-operation-error"]
+            reveal(contactError, in: contactScroll, key: "\(windowSize) contacts validation")
+            for _ in 0 ..< 3 where !contactError.isHittable { contactScroll.swipeUp() }
+            XCTAssertTrue(contactError.isHittable, "VD2-07b baseline [\(windowSize) contacts validation]: error text must remain visible or scrollable.")
+            assertScrollRevealsAction(contactsApp.buttons["Cancel"], in: contactScroll, key: "\(windowSize) contacts Cancel")
             contactsApp.terminate()
 
             let app = launchApp(fixture: "populated", windowSize: windowSize)
             app.descendants(matching: .any)["sidebar-pipeline"].tap()
             app.buttons["pipeline-add-opportunity"].click()
-            XCTAssertGreaterThanOrEqual(app.textViews.count, 2, "VD2-07b baseline [\(windowSize) add]: description and notes must remain scrollable.")
-            let addScroll = app.scrollViews
-                .containing(.button, identifier: "cancel-add-opportunity")
-                .firstMatch
+            let addScroll = app.scrollViews.firstMatch
+            XCTAssertTrue(addScroll.waitForExistence(timeout: 5), "VD2-07b baseline [\(windowSize) add]: source AddOpportunityView ScrollView missing.")
+            for _ in 0 ..< 4 where app.textViews.count < 2 { addScroll.swipeUp() }
+            XCTAssertEqual(app.textViews.count, 2, "VD2-07b baseline [\(windowSize) add]: description and notes must remain scrollable.")
+            for (index, key, label) in [(0, "add.description", "Job description"), (1, "add.notes", "Notes")] {
+                XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "value == %@", label)).firstMatch.exists, "VD2-07b baseline [\(windowSize) \(key)]: label clipped.")
+                let editor = app.textViews.element(boundBy: index)
+                editor.click()
+                editor.typeText("layout \(index)")
+                XCTAssertTrue((editor.value as? String ?? "").contains("layout \(index)"), "VD2-07b baseline [\(windowSize) \(key)]: caret/content region clipped.")
+                assertSharedControlSurface(key, kind: "multiline", state: "focused", in: app)
+            }
+            let addURL = assertReadyFormTextField(
+                "Job URL (optional)",
+                index: 0,
+                key: "add.url",
+                in: app
+            )
+            reveal(addURL, in: addScroll, key: "\(windowSize) add validation")
+            replaceText(in: addURL, with: "not a url")
+            XCTAssertTrue(app.staticTexts["add-opportunity-url-warning"].waitForExistence(timeout: 5), "VD2-07b baseline [\(windowSize) add validation]: warning text clipped.")
             assertScrollRevealsAction(
                 app.buttons["cancel-add-opportunity"],
                 in: addScroll,
                 key: "\(windowSize) add Cancel"
             )
-            assertSharedControlSurface("add.description", kind: "multiline", state: "idle", in: app)
-            assertSharedControlSurface("add.notes", kind: "multiline", state: "idle", in: app)
+            XCTAssertTrue(app.buttons["save-opportunity"].exists, "VD2-07b baseline [\(windowSize) add Save]: primary action must remain visible or scrollable.")
             app.terminate()
+
+            let overviewApp = launchApp(fixture: "populated", windowSize: windowSize)
+            overviewApp.descendants(matching: .any)["sidebar-pipeline"].tap()
+            let row = overviewApp.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-")).firstMatch
+            XCTAssertTrue(row.waitForExistence(timeout: 5), "VD2-07b baseline [\(windowSize) overview]: fixture row missing.")
+            let id = String(row.identifier.dropFirst("pipeline-table-row-".count))
+            row.tap()
+            let openDetails = overviewApp.buttons["pipeline-open-details-\(id)"]
+            XCTAssertTrue(openDetails.waitForExistence(timeout: 5), "VD2-07b baseline [\(windowSize) overview]: selected inspector action missing.")
+            openDetails.tap()
+            let backToPipeline = overviewApp.buttons["Back to Pipeline"]
+            XCTAssertTrue(backToPipeline.waitForExistence(timeout: 5), "VD2-07b baseline [\(windowSize) overview]: canonical detail route missing.")
+            let overviewScroll = overviewApp.scrollViews
+                .containing(.button, identifier: "save-opportunity-changes")
+                .firstMatch
+            XCTAssertTrue(overviewScroll.waitForExistence(timeout: 5), "VD2-07b baseline [\(windowSize) overview]: source OpportunityOverviewView ScrollView missing.")
+            for _ in 0 ..< 4 where overviewApp.textViews.count < 2 { overviewScroll.swipeUp() }
+            XCTAssertEqual(overviewApp.textViews.count, 2, "VD2-07b baseline [\(windowSize) overview]: description and notes scroll regions missing.")
+            for (index, key, label) in [(0, "overview.description", "Job description"), (1, "overview.notes", "Notes")] {
+                XCTAssertTrue(overviewApp.staticTexts.matching(NSPredicate(format: "value == %@", label)).firstMatch.exists, "VD2-07b baseline [\(windowSize) \(key)]: label clipped.")
+                let editor = overviewApp.textViews.element(boundBy: index)
+                editor.click()
+                editor.typeText("layout \(index)")
+                XCTAssertTrue((editor.value as? String ?? "").contains("layout \(index)"), "VD2-07b baseline [\(windowSize) \(key)]: caret/content region clipped.")
+                assertSharedControlSurface(key, kind: "multiline", state: "focused", in: overviewApp)
+            }
+            assertScrollRevealsAction(overviewApp.buttons["save-opportunity-changes"], in: overviewScroll, key: "\(windowSize) overview Save")
+            for _ in 0 ..< 6 where !backToPipeline.isHittable { overviewScroll.swipeDown() }
+            XCTAssertTrue(backToPipeline.isHittable, "VD2-07b baseline [\(windowSize) overview Back]: Back must remain reachable without clipping.")
+            overviewApp.terminate()
+
+            let reconciliationApp = launchApp(fixture: "reconciliation", windowSize: windowSize)
+            reconciliationApp.buttons["Open Review reconciliation evidence"].click()
+            let reconciliationScroll = reconciliationApp.scrollViews.firstMatch
+            XCTAssertTrue(reconciliationScroll.waitForExistence(timeout: 5), "VD2-07b baseline [\(windowSize) reconcile.evidence]: source ReconcilePostingView ScrollView missing.")
+            let evidence = reconciliationApp.textFields.matching(NSPredicate(format: "identifier == ''")).firstMatch
+            reveal(evidence, in: reconciliationScroll, key: "\(windowSize) reconcile.evidence")
+            XCTAssertTrue(reconciliationApp.staticTexts.matching(NSPredicate(format: "value == %@", "Evidence or error reviewed")).firstMatch.exists, "VD2-07b baseline [\(windowSize) reconcile.evidence]: label clipped.")
+            evidence.click()
+            evidence.typeText("offline layout evidence")
+            XCTAssertTrue((evidence.value as? String ?? "").contains("offline layout evidence"), "VD2-07b baseline [\(windowSize) reconcile.evidence]: multiline-axis caret/binding clipped.")
+            assertSharedControlSurface("reconcile.evidence", kind: "multiline", state: "focused", in: reconciliationApp)
+            XCTAssertTrue(reconciliationApp.buttons["Record offline — check not run"].isHittable, "VD2-07b baseline [\(windowSize) reconcile.evidence]: offline action must remain reachable.")
+            reconciliationApp.terminate()
         }
+        assertVD208DebtHandoffRemainsExplicit()
     }
+
 }
