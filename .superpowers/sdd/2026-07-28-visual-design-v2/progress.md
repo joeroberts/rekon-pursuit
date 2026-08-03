@@ -365,16 +365,17 @@
 - VD2-07 is eligible but neither released nor started. VD2-08 remains blocked
   pending VD2-03 through VD2-07 acceptance and retains those three debts.
 
-## VD2-07c backlog registration — 2026-08-02
+## VD2-07c backlog correction — 2026-08-02
 
-- The product owner created `VD2-07c` as a separate Backlog task for the
-  Activity ledger viewport and AI assistant subsection. The ledger must keep
-  every underlying activity entry while using a window-resizing independent
-  vertical scroll area and a bounded 50-row rendering window.
-- Full retained activity history remains searchable and scroll-accessible; the
-  row cap neither deletes nor hides older entries from the user. The current
-  AI-usage filter form is replaced by the approved truthful AI-assistant
-  coming-soon/local-private placeholder.
-- `VD2-07c` depends on `VD2-02` and `VD2-07`. It is not released for planning
-  or implementation. `VD2-08` continues to own deferred accessibility work
-  and is not advanced by this registration.
+- The product owner clarified the authoritative `VD2-07c` scope: retain the
+  global Activity & AI sidebar entry; use Settings-style local navigation for
+  Activity ledger (default) and AI assistant; and avoid the generic narrow
+  full-width underline behavior.
+- The Local activity ledger uses a structured icon/label/timestamp row design
+  and an independently scrolling, window-resizing viewport no taller than a
+  50-row equivalent. Every retained entry remains scroll-accessible, and
+  search queries the entire retained ledger.
+- The existing AI filter form is replaced only by the exact approved coming-
+  soon/local-private placeholder. No AI form, configuration, execution,
+  provider, or network behavior is in scope. `VD2-07c` remains Backlog and
+  unreleased; `VD2-08` accessibility ownership is unchanged.

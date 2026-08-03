@@ -1,36 +1,41 @@
-# VD2-07c — Activity ledger viewport and AI assistant subsection
+# VD2-07c — Activity & AI submenu, ledger viewport, and AI placeholder
 
 **Status:** Backlog. This record establishes the product-owner-approved scope only. No implementation, release, or acceptance is represented here.
 
 ## Objective
 
-Recompose the existing Activity & AI destination into two local subsections: a window-resizing Activity ledger and a truthful AI assistant placeholder. The screen must remain a local, private workspace surface.
+Update the existing **Activity & AI** destination to the approved reference: a Settings-style local submenu, a bounded Activity ledger viewport, and a truthful non-functional AI assistant placeholder. The screen remains a local, private workspace surface.
 
 ## In scope
 
-- Add local, non-persisted selection between **Activity ledger** and **AI assistant** while retaining the existing global Activity & AI rail destination.
-- Make **Activity ledger** the default subsection. Keep its search field and make every retained activity event searchable and scroll-accessible.
-- Constrain the ledger to its own vertical scrolling viewport. The viewport must consume the available window height and resize with the window so the outer page does not grow with activity history.
-- Use a bounded rendering window of at most 50 activity rows at a time. This is a presentation/performance boundary only: retained activity entries are never deleted, truncated from storage, or made unavailable. Older entries remain reachable through the ledger scroll/search experience.
-- Replace the current AI-usage filter form with the approved **AI assistant coming soon** placeholder: future-update wording plus the truthful statement that the workspace remains local and private.
+- Retain **Activity & AI** as one main-sidebar destination. Directly below its page title, add horizontal local navigation for **Activity ledger** and **AI assistant**; **Activity ledger** is selected by default.
+- Use the same restrained cyan icon/text treatment and cyan indicator line as Settings for the selected local subsection. At narrow window widths, do not use the old generic full-width underline behavior.
+- On the **Activity ledger** page, keep the heading and one **Local activity ledger** work area.
+- Restyle the Activity search field to match the approved dark application form controls: deep navy fill, thin muted blue-gray border, a small leading search icon, rounded corners, muted placeholder text, and no generic gray fill or oversized bright-blue focus ring.
+- Render activity as structured rows: event-type icon at left, event label in the middle, and timestamp right-aligned.
+- Contain the structured rows in their own vertically scrolling ledger viewport. The viewport resizes with the window but never grows beyond the equivalent height of 50 rows; activity history must not make the outer page unbounded.
+- Keep every retained activity entry. Users can scroll to older entries, and search queries the entire retained ledger rather than a visible or initial subset.
+- On **AI assistant**, replace the existing form with only this non-functional placeholder:
+  - **AI assistant coming soon**
+  - **AI-powered workspace assistance will be available here in a future update.**
+  - **Your workspace remains local and private.**
 
 ## Non-goals and boundaries
 
 - No activity deletion, retention-policy change, store/schema/migration change, or altered activity-event content.
-- No AI execution, model/provider selection, model activity, cost calculation, cloud connection, Gmail/Calendar integration, network request, or new AI ledger data.
-- No new AI configuration form. The existing Activity & AI AI-usage filter grid is replaced only by the approved unavailable placeholder.
-- No global-rail redesign, route persistence, unrelated form styling, or accessibility remediation campaign. Deferred accessibility work remains owned by `VD2-08`.
+- No AI form, buttons, provider settings, execution, model activity, cost calculation, cloud connection, Gmail/Calendar integration, network request, or new AI ledger data.
+- No global-rail redesign, unrelated form styling, or accessibility remediation campaign. Deferred accessibility work remains owned by `VD2-08`.
 
 ## Required implementation boundaries
 
-- The full existing activity history remains the source of truth. Presentation code may window or lazily materialize rows, but it must not discard entries from the model or store.
-- Search operates across the retained ledger, not merely an initial 50-entry subset. Its displayed result window remains bounded while older matching entries stay reachable.
-- The local subsection selection must not become a new global route or persisted preference.
-- Preserve existing event bindings, identifiers where the corresponding Activity ledger control remains, and all current local-only truth boundaries.
+- The full existing activity history remains the source of truth. A bounded, window-resizing viewport must not discard, hide permanently, or otherwise restrict retained entries.
+- Search operates across the retained ledger. Search results follow the same independently scrollable viewport rule, including access to older matching entries.
+- Preserve the existing global Activity & AI route, activity bindings, and local-only truth boundaries.
+- Preserve the Rekon visual language: dark navy/black surfaces, subtle card borders, white/light-blue typography, cyan and violet accents, selected purple sidebar item, and lower-left sidebar line decoration.
 
 ## Acceptance target
 
-At any supported window height, the Activity page frame remains stable while the ledger alone scrolls; expanding activity history does not elongate the page. A user can search or scroll to retained older activity despite the bounded row-rendering window. The AI subsection contains only the approved coming-soon/local-private placeholder and exposes no functional AI configuration or network-capable control.
+The Activity page matches the approved two-subsection reference. Its selected-subsection cue remains restrained and correct at narrow widths. The ledger alone scrolls, its viewport responds to the window without exceeding a 50-row-equivalent height, and all retained history remains accessible by scrolling/searching. The AI assistant subsection contains only the three approved placeholder statements and exposes no AI control or network-capable behavior.
 
 ## Dependencies and release state
 
