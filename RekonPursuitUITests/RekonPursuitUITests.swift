@@ -270,7 +270,7 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertTrue(back.waitForExistence(timeout: 5))
         back.click()
         XCTAssertTrue(app.descendants(matching: .any)["pipeline-board-region"].waitForExistence(timeout: 5))
-        let card = app.groups["pipeline-stage-move-card-\(opportunityID)"]
+        let card = app.buttons["pipeline-opportunity-\(opportunityID)"]
         XCTAssertTrue(card.waitForExistence(timeout: 5))
         XCTAssertEqual(card.value as? String, "Anchored")
         scrollBoardToLane("Offer", in: app)
@@ -986,7 +986,7 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertEqual(String(describing: app.checkBoxes["pipeline-include-closed"].value ?? ""), "1")
         XCTAssertEqual(board.value as? String, "Horizontal lane: Offer")
         XCTAssertEqual(
-            app.groups["pipeline-stage-move-card-\(productDesignerID)"].value as? String,
+            app.buttons["pipeline-opportunity-\(productDesignerID)"].value as? String,
             "Anchored"
         )
         XCTAssertEqual(boardCardCount(in: app, lanes: lanes), baselineBoardCount)
