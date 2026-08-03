@@ -741,10 +741,8 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     var filteredActivityEvents: [ActivityEvent] {
-        let terms = activitySearch
-            .split(whereSeparator: \.isWhitespace)
-            .map(String.init)
-        guard !terms.isEmpty else { return activityEvents }
+        let search = parsedActivitySearch
+        guard !search.terms.isEmpty || !search.exactPhrases.isEmpty else { return activityEvents }
         return activityEvents.filter { event in
             let opportunity = opportunities.first(where: { $0.id == event.opportunityID })
             let searchableText = [
@@ -752,8 +750,44 @@ final class WorkspaceViewModel: ObservableObject {
                 opportunity?.title ?? "",
                 opportunity?.company ?? ""
             ].joined(separator: " ")
-            return terms.allSatisfy(searchableText.localizedCaseInsensitiveContains)
+            return search.terms.allSatisfy(searchableText.localizedCaseInsensitiveContains)
+                && search.exactPhrases.allSatisfy(searchableText.localizedCaseInsensitiveContains)
         }
+    }
+
+    /// Unquoted words retain the ledger's general all-terms search. Quoted
+    /// content is kept as one ordered phrase so people can pinpoint an event
+    /// label without changing the local activity data or its retention.
+    private var parsedActivitySearch: (terms: [String], exactPhrases: [String]) {
+        var terms: [String] = []
+        var exactPhrases: [String] = []
+        var buffer = ""
+        var isQuoted = false
+
+        func appendTerms(from text: String) {
+            terms.append(contentsOf: text.split(whereSeparator: \.isWhitespace).map(String.init))
+        }
+
+        for character in activitySearch {
+            guard character == "\"" else {
+                buffer.append(character)
+                continue
+            }
+
+            if isQuoted {
+                let phrase = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !phrase.isEmpty { exactPhrases.append(phrase) }
+            } else {
+                appendTerms(from: buffer)
+            }
+            buffer = ""
+            isQuoted.toggle()
+        }
+
+        // An unmatched quote remains a normal general-search query instead of
+        // silently hiding records while the person is still typing.
+        appendTerms(from: buffer)
+        return (terms, exactPhrases)
     }
 
     var filteredContacts: [Contact] {
