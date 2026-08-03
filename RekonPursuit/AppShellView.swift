@@ -149,7 +149,7 @@ struct AppShellView<Detail: View>: View {
             detailContent
         }
         .tint(RekonTheme.shellSelectedLeadingAccent)
-        .textFieldStyle(RekonTextFieldStyle())
+        .textFieldStyle(RekonQuietTextFieldStyle())
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button {

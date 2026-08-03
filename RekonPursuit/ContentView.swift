@@ -205,7 +205,7 @@ struct ContentView: View {
                                 .accessibilityIdentifier("recovery-key-copied-confirmation")
                         }
                     }
-                    TextField("Re-enter the complete recovery key", text: $reentry).textFieldStyle(.roundedBorder)
+                    TextField("Re-enter the complete recovery key", text: $reentry).textFieldStyle(RekonQuietTextFieldStyle())
                     HStack {
                         Button("Cancel", role: .cancel) { self.generatedRecoveryKey = nil; reentry = ""; recoveryKeyCopied = false }
                         Spacer()
@@ -220,7 +220,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Create portable recovery archive").font(.title2.bold())
                 Text("Re-enter your recovery key. The archive will be encrypted, verified, and retained in this workspace for its 30-day recovery window.").foregroundStyle(.secondary)
-                TextField("Re-enter the complete recovery key", text: $archiveRecoveryReentry).textFieldStyle(.roundedBorder)
+                TextField("Re-enter the complete recovery key", text: $archiveRecoveryReentry).textFieldStyle(RekonQuietTextFieldStyle())
                 HStack {
                     Button("Cancel", role: .cancel) { isPresentingArchiveCreation = false; archiveRecoveryReentry = "" }
                     Spacer()
@@ -239,7 +239,7 @@ struct ContentView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 TextField("Recovery key", text: $retainedDataPurgeReentry)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(RekonQuietTextFieldStyle())
                 HStack {
                     Button("Cancel", role: .cancel) {
                         retainedDataPurgeReentry = ""
@@ -265,7 +265,7 @@ struct ContentView: View {
                     Text("Enter the recovery key to verify the archive. The key is used only for this restore attempt.")
                         .foregroundStyle(.secondary)
                     TextField("Recovery key", text: $portableArchiveRestoreKey)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(RekonQuietTextFieldStyle())
                     HStack {
                         Button("Cancel", role: .cancel) {
                             SettingsRootModalBindings.dismissPortableArchiveRestore(
