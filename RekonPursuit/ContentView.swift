@@ -337,7 +337,7 @@ struct ContentView: View {
     @ViewBuilder private var dailyDestination: some View {
         Group {
             switch navigation.route {
-            case .home: HomeView(model: model, open: openAttentionTask, addOpportunity: { beginAddOpportunity(origin: .home) }, reschedule: { task in taskToReschedule = task; rescheduledDueAt = task.dueAt ?? .now }, now: homeDashboardNow, calendar: homeDashboardCalendar)
+            case .home: HomeView(model: model, open: openAttentionTask, openUpcoming: openOpportunity, addOpportunity: { beginAddOpportunity(origin: .home) }, reschedule: { task in taskToReschedule = task; rescheduledDueAt = task.dueAt ?? .now }, now: homeDashboardNow, calendar: homeDashboardCalendar)
             case .pipeline:
                 PipelineView(
                     model: model,
