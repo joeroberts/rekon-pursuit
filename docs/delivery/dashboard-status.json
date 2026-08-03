@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "activePhaseId": "post_mvp_refinement",
-  "activeTaskId": null,
+  "activeTaskId": "VD2-09",
   "nextEligibleTaskId": null,
   "phases": [
     {
@@ -605,9 +605,9 @@
       "phaseId": "post_mvp_refinement",
       "title": "Home visual parity",
       "workType": "Visual remediation",
-      "status": "backlog",
+      "status": "in_progress",
       "releaseCondition": "Requires a reference-faithful Home implementation covering heading hierarchy, Needs attention, Pipeline snapshot, Next up, action sizing, and data-driven behavior preservation.",
-      "latestTransition": "GitHub issue #15 recorded on 2026-08-03; no implementation is released.",
+      "latestTransition": "Released to implementation on 2026-08-03 after independent Planning, Architecture, TPM, QA, and Delivery review. Scope is HomeView-only visual parity; live data, callbacks, and persistence remain unchanged.",
       "dependsOnTaskIds": [
         "VD2-03"
       ],
