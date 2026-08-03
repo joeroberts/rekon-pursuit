@@ -247,7 +247,7 @@ actor PortableArchiveExpiryWorker: PortableArchiveExpiryWorking {
         try fileOperations.unlinkTarget(quarantineURL)
         do {
             try database.transaction {
-                guard try claimedRowExists(verified, in: database) else { throw PortableArchiveExpiryError.ioFailure }
+                guard try Self.claimedRowExists(verified, in: database) else { throw PortableArchiveExpiryError.ioFailure }
                 try database.execute(
                     "DELETE FROM portable_archive_catalogue WHERE archive_id = ? AND expiry_token = ? AND expiry_revision = ?",
                     values: [.text(verified.row.archiveID.uuidString), .text(verified.expiryToken), .integer(verified.expiryRevision)]
@@ -331,7 +331,7 @@ actor PortableArchiveExpiryWorker: PortableArchiveExpiryWorking {
 
     private func rememberIdentity(_ identity: PortableArchiveExpiryFileIdentity, for candidate: PortableArchiveExpiryCandidate, in database: EncryptedDatabase) throws -> PortableArchiveExpiryCandidate {
         try database.transaction {
-            guard try claimedRowExists(candidate, in: database) else { throw PortableArchiveExpiryError.ioFailure }
+            guard try Self.claimedRowExists(candidate, in: database) else { throw PortableArchiveExpiryError.ioFailure }
             try database.execute(
                 "UPDATE portable_archive_catalogue SET expiry_expected_device = ?, expiry_expected_inode = ?, expiry_revision = expiry_revision + 1 WHERE archive_id = ? AND expiry_token = ? AND expiry_revision = ?",
                 values: [.integer(Int64(bitPattern: identity.device)), .integer(Int64(bitPattern: identity.inode)), .text(candidate.row.archiveID.uuidString), .text(candidate.expiryToken), .integer(candidate.expiryRevision)]
@@ -343,7 +343,7 @@ actor PortableArchiveExpiryWorker: PortableArchiveExpiryWorking {
 
     private func transition(_ candidate: PortableArchiveExpiryCandidate, state: PortableArchiveLifecycleState, outcome: PortableArchiveExpiryOutcome, in database: EncryptedDatabase) throws -> PortableArchiveExpiryCandidate {
         try database.transaction {
-            guard try claimedRowExists(candidate, in: database) else { throw PortableArchiveExpiryError.ioFailure }
+            guard try Self.claimedRowExists(candidate, in: database) else { throw PortableArchiveExpiryError.ioFailure }
             try database.execute(
                 "UPDATE portable_archive_catalogue SET lifecycle_state = ?, last_expiry_outcome = ?, expiry_revision = expiry_revision + 1 WHERE archive_id = ? AND expiry_token = ? AND expiry_revision = ?",
                 values: [.text(state.rawValue), .text(outcome.rawValue), .text(candidate.row.archiveID.uuidString), .text(candidate.expiryToken), .integer(candidate.expiryRevision)]
@@ -353,7 +353,7 @@ actor PortableArchiveExpiryWorker: PortableArchiveExpiryWorking {
         return updated
     }
 
-    private func claimedRowExists(_ candidate: PortableArchiveExpiryCandidate, in database: EncryptedDatabase) throws -> Bool {
+    private nonisolated static func claimedRowExists(_ candidate: PortableArchiveExpiryCandidate, in database: EncryptedDatabase) throws -> Bool {
         !(try database.rows(
             "SELECT archive_id FROM portable_archive_catalogue WHERE archive_id = ? AND expiry_token = ? AND expiry_revision = ?",
             values: [.text(candidate.row.archiveID.uuidString), .text(candidate.expiryToken), .integer(candidate.expiryRevision)]
