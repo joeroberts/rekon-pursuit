@@ -48,5 +48,5 @@ configured Debug Apple Development signing identity. Result bundle:
 
 ## Commit
 
-The test correction is committed in the repository history; the exact commit
-is reported with this handoff.
+Test correction and report: `4d5317b` (`test: correct VD2-07b compact control
+layout assertion`).
