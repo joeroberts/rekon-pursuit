@@ -1839,23 +1839,23 @@ final class WorkspaceStore {
     }
 
     private func publicURLCheckResultValues(_ result: ReconciliationResult) -> [DatabaseValue] {
-        reconciliationValues(result) + [
-            result.checkOperationID.map(DatabaseValue.text) ?? .null,
-            result.method.map(DatabaseValue.text) ?? .null,
-            result.checkerVersion.map(DatabaseValue.text) ?? .null,
-            result.httpStatus.map { .integer(Int64($0)) } ?? .null,
-            result.mimeType.map(DatabaseValue.text) ?? .null,
-            result.declaredBytes.map { .integer(Int64($0)) } ?? .null,
-            result.receivedBytes.map { .integer(Int64($0)) } ?? .null,
-            result.contentSHA256.map(DatabaseValue.text) ?? .null,
-            result.responseDate.map(DatabaseValue.text) ?? .null,
-            result.lastModified.map(DatabaseValue.text) ?? .null,
-            result.etag.map(DatabaseValue.text) ?? .null,
-            result.retryAfter.map(DatabaseValue.text) ?? .null,
-            result.redirectTargetRedacted.map(DatabaseValue.text) ?? .null,
-            result.evidenceExcerpt.map(DatabaseValue.text) ?? .null,
-            result.redactedErrorCode.map(DatabaseValue.text) ?? .null
-        ]
+        var values = reconciliationValues(result)
+        values.append(result.checkOperationID.map(DatabaseValue.text) ?? .null)
+        values.append(result.method.map(DatabaseValue.text) ?? .null)
+        values.append(result.checkerVersion.map(DatabaseValue.text) ?? .null)
+        values.append(result.httpStatus.map { .integer(Int64($0)) } ?? .null)
+        values.append(result.mimeType.map(DatabaseValue.text) ?? .null)
+        values.append(result.declaredBytes.map { .integer(Int64($0)) } ?? .null)
+        values.append(result.receivedBytes.map { .integer(Int64($0)) } ?? .null)
+        values.append(result.contentSHA256.map(DatabaseValue.text) ?? .null)
+        values.append(result.responseDate.map(DatabaseValue.text) ?? .null)
+        values.append(result.lastModified.map(DatabaseValue.text) ?? .null)
+        values.append(result.etag.map(DatabaseValue.text) ?? .null)
+        values.append(result.retryAfter.map(DatabaseValue.text) ?? .null)
+        values.append(result.redirectTargetRedacted.map(DatabaseValue.text) ?? .null)
+        values.append(result.evidenceExcerpt.map(DatabaseValue.text) ?? .null)
+        values.append(result.redactedErrorCode.map(DatabaseValue.text) ?? .null)
+        return values
     }
 
     private func isValidPublicURLCheckCompletion(_ completion: PublicURLCheckCompletion) -> Bool {
