@@ -13,7 +13,7 @@ The delivery principle is **vertical slices over isolated screens**: each slice 
 | Release area | Current status |
 | --- | --- |
 | Remediation R1 | **Accepted historical evidence** — the remediation ledger records the accepted R1 sequence and evidence; it is not current implementation work. |
-| Post-MVP refinement | **Active delivery queue** — VD2-01 through VD2-06 are accepted. VD2-07 is **In progress** on the approved reference-faithful Settings implementation. VD2-08 remains Backlog and blocked pending VD2-07 acceptance; it owns the specifically recorded Settings accessibility regression closure. |
+| Post-MVP refinement | **Active delivery queue** — VD2-01 through VD2-07 are accepted. VD2-07b, VD2-07c, and VD2-07d are Backlog visual refinements; VD2-08 follows them as the documented accessibility-debt closure and whole-app visual/accessibility acceptance gate. |
 | Phase 2a — privacy and AI foundation | **Not started** — follows accepted Post-MVP refinement; local-model runtime, cloud routing/sanitization/consent, populated AI ledger, budgets, and costs remain Backlog. |
 | Phase 2b — Gmail and Google Calendar | **Not started** — follows accepted Phase 2a. |
 | Phase 2c — documents and research | **Not started** — follows accepted Phase 2b. |
@@ -158,7 +158,7 @@ remediation ledger retain sequencing and evidence authority.
 | ID | Refinement | Intended outcome |
 | --- | --- | --- |
 | `UX-D11` | Split the existing **Activity & AI** destination into **Logs** and **AI ledger** tabs while retaining the same sidebar entry. | Each ledger has its own working area; neither search/filter surface is permanently stacked below the other. No AI execution, network capability, or new ledger data is introduced. |
-| `UX-D12` | Refine local log search beyond token-only matching. | Preserve the current safe multi-word fallback, then add predictable phrase/ordered-term behavior and a clear way to target an exact event label or identifier so queries such as `CSV import row 2 created` do not also return rows 20, 21, and 22. Define ranking, matching, and empty-state behavior before implementation. |
+| `VD2-07d` | Precise local activity search and date filtering. | Follows VD2-07c and precedes VD2-08 so any introduced accessibility findings are closed in the final acceptance pass. It preserves the local retained ledger and general multi-word fallback while adding quoted exact-event phrases, a visible exact-label/identifier filter, and a non-persistent All dates/Today/Last 7 days/Last 30 days/Custom range menu. |
 
 ### Visual Design v2 program
 
@@ -182,17 +182,20 @@ pixel-copy mandate.
 | `VD2-04` | Pipeline table and inspector | **Accepted.** The product owner explicitly accepted the completed fidelity rebuild as good enough for now after fresh signed Table/Board, independent code-review, QA, architecture, TPM, and security/privacy gates. The Board remains presentation-only: four primary lanes, Screening grouped under Applied with its true chip, and a conditional Closed lane. The Table retains five readable desktop columns and the compact in-place right drawer. No drag/drop, persisted stage movement, card relocation, or workflow mutation was released. See the [final fidelity owner handoff](evidence/visual-design-v2/VD2-04-owner-handoff-2026-07-30.md). Later refinement is a new correction, not a reopen of this accepted card. |
 | `VD2-05` | Pipeline board and persisted stage movement | **Accepted with approved, non-blocking macOS XCTest test debt.** The product owner accepted the signed Board preview on 2026-07-31 after final Architecture, QA, Security/Privacy, Code Contract Review, and TPM gates accepted. The manual Board acceptance covered distinct Applied/Screening lanes, the exact actions/submenu, and Cancel/Escape return. [GitHub issue #1](https://github.com/joeroberts/rekon-pursuit/issues/1) remains open for the submenu-oracle evidence limitation; it is not a known production defect and no final UI matrix is represented as passed. No successor is released. See the [owner acceptance record](evidence/visual-design-v2/VD2-05-owner-handoff-2026-07-31.md). |
 | `VD2-06` | Contacts master/detail redesign | **Accepted.** The product owner explicitly accepted the signed Debug handoff on 2026-08-01 (`approved`) after independent Architecture, QA/accessibility, Security/Privacy recheck, Code Review recheck, TPM, and security-delta gates accepted the bounded non-deferred contract. Focused retained evidence is Core 2/2, ViewModel 2/2, signed channel UI 1/1, and security remediation selectors 6/0/0. The three owner-approved VD2-08 accessibility/recovery automation debts remain open. See the [owner acceptance record](evidence/visual-design-v2/VD2-06-owner-handoff-2026-08-01.md) and [TPM readiness record](../../.superpowers/sdd/2026-08-01-vd206-contact-channels/task-4-final-tpm-readiness.md). |
-| `VD2-07` | Settings information architecture | **In progress.** The approved reference-faithful Settings implementation is underway. It must preserve the real protected-export success boundary, May 6 fixture truth, global rail, privacy, and no-control constraints. The recorded Settings keyboard-focus and AI semantic accessibility regressions are assigned to `VD2-08`; they are not represented as closed. See the [V2-07x task brief](task-briefs/VD2-07x-reference-faithful-settings.md). |
-| `VD2-08` | Visual QA and accessibility acceptance | Backlog and blocked from release — requires `VD2-03` through `VD2-07` accepted. It carries the three owner-approved VD2-06 accessibility/recovery automation debts plus the approved VD2-05 [Board card-anchor accessibility-semantic debt](task-briefs/VD2-05-board-anchor-accessibility-deferral-addendum.md); no broad visual/accessibility acceptance is represented as passed or released. |
+| `VD2-07` | Settings information architecture | **Accepted.** VD2-07x delivered the reference-faithful Settings experience, including the real protected-export success boundary, global rail, privacy, and no-control constraints. The recorded Settings keyboard-focus and AI semantic accessibility regressions remain assigned to `VD2-08`. See the [V2-07x task brief](task-briefs/VD2-07x-reference-faithful-settings.md). |
+| `VD2-07b` | Shared app-owned form-control alignment | Backlog — standardize app-owned editable/search controls while excluding native macOS file panels and preserving behavior, bindings, validation, and persistence. |
+| `VD2-07c` | Activity & AI submenu and bounded ledger | Backlog — preserve one sidebar destination; add the approved Activity ledger and local/private AI assistant placeholder work areas. |
+| `VD2-07d` | Precise local activity search and date filtering | Backlog — follows `VD2-07c` and adds the approved local search and date refinements before `VD2-08`. |
+| `VD2-08` | Visual QA and accessibility acceptance | Backlog — follows `VD2-07b`, `VD2-07c`, and `VD2-07d`; it closes documented accessibility debts and runs the whole-app visual/accessibility acceptance pass. |
 
 Every child follows `Backlog → Next up → In progress → independent code
 review / QA / security-privacy verification → product-owner hands-on
 verification → Accepted`. The parent `DESIGN-V2` remains Backlog until all
-eight children, including `VD2-08`, are accepted and the product owner accepts
+all listed children, including `VD2-07b`, `VD2-07c`, `VD2-07d`, and `VD2-08`, are accepted and the product owner accepts
 the final visual and workflow verification. `needsUserAction` is true only for
 an owner-smoke handoff, never for routine tests or documentation.
 
-**Non-scope:** UX-D10, UX-D11, UX-D12, Phase 2a/2b/2c, Phase 3, AI execution,
+**Non-scope:** Phase 2a/2b/2c, Phase 3, AI execution,
 Gmail, Calendar, research, document processing, connected services, browser
 storage, plugins, cloud services, and web implementation remain unreleased.
 
