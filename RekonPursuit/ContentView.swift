@@ -677,7 +677,7 @@ private struct OpportunityOverviewView: View {
                                 overviewEditor("Notes", text: $model.selectedNotes, focus: .notes, minHeight: 90)
                                 overviewSection("Compensation") {
                                     if !model.selectedCompensation.isEmpty { Text("Imported: \(model.selectedCompensation)").font(.caption).foregroundStyle(.secondary) }
-                                    HStack(spacing: RekonTheme.Spacing.standard) {
+                                    ResponsiveFormRow {
                                         overviewTextField("Minimum (USD)", text: $model.selectedCompensationMinimum)
                                         overviewTextField("Maximum (USD)", text: $model.selectedCompensationMaximum)
                                     }
@@ -688,7 +688,7 @@ private struct OpportunityOverviewView: View {
                                 }
                                 overviewSection("Location & logistics") {
                                     overviewTextField("Location (optional)", text: $model.selectedLocation)
-                                    HStack(spacing: RekonTheme.Spacing.standard) {
+                                    ResponsiveFormRow {
                                         overviewPicker("Work arrangement") { Picker("Work arrangement", selection: $model.selectedWorkArrangement) { ForEach(WorkArrangement.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
                                         overviewPicker("Stage") { Picker("Stage", selection: $model.selectedStage) { ForEach(PipelineStage.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
                                         overviewPicker("Next action") { Picker("Next action", selection: $model.selectedActionType) { ForEach(OpportunityActionType.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
@@ -927,6 +927,25 @@ struct FlexibleCenteredContent<Content: View>: View {
     }
 }
 
+private struct ResponsiveFormRow<Content: View>: View {
+    private let content: () -> Content
+
+    init(@ViewBuilder content: @escaping () -> Content) {
+        self.content = content
+    }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: RekonTheme.Spacing.standard) {
+                content()
+            }
+            VStack(alignment: .leading, spacing: RekonTheme.Spacing.standard) {
+                content()
+            }
+        }
+    }
+}
+
 private struct AddOpportunityView: View {
     @ObservedObject var model: WorkspaceViewModel
     let cancel: () -> Void
@@ -949,7 +968,7 @@ private struct AddOpportunityView: View {
                     addEditor("Job description", text: $model.jobDescription, focus: .description, minHeight: 110)
                     addEditor("Notes", text: $model.notes, focus: .notes, minHeight: 90)
                     addSection("Compensation") {
-                        HStack(spacing: RekonTheme.Spacing.standard) {
+                        ResponsiveFormRow {
                             addTextField("Minimum (USD)", text: $model.compensationMinimum)
                             addTextField("Maximum (USD)", text: $model.compensationMaximum)
                         }
@@ -962,7 +981,7 @@ private struct AddOpportunityView: View {
                         if model.hasApplicationDate { DatePicker("Applied date", selection: $model.applicationDate, displayedComponents: .date) }
                         addPicker("Current response") { Picker("Current response", selection: $model.responseState) { ForEach(ResponseState.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
                     }
-                    HStack(spacing: RekonTheme.Spacing.standard) {
+                    ResponsiveFormRow {
                         addPicker("Stage") { Picker("Stage", selection: $model.stage) { ForEach(PipelineStage.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
                         addPicker("Next action") { Picker("Next action", selection: $model.actionType) { ForEach(OpportunityActionType.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
                     }
