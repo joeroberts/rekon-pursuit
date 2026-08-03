@@ -1182,13 +1182,39 @@ private struct CSVImportCompletionView: View {
 private struct GlobalActivityView: View {
     @ObservedObject var model: WorkspaceViewModel
     @State private var selectedSection: Section = .ledger
+    @State private var exactEventFilter = ""
+    @State private var dateFilter: ActivityDateFilter = .all
+    @State private var customRangeStart = Calendar.current.startOfDay(for: .now)
+    @State private var customRangeEnd = Date.now
 
     private enum Section: Hashable {
         case ledger
         case assistant
     }
 
-    private var visibleEvents: [ActivityEvent] { model.filteredActivityEvents }
+    private enum ActivityDateFilter: String, CaseIterable, Identifiable {
+        case all
+        case today
+        case last7Days
+        case last30Days
+        case customRange
+
+        var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .all: "All dates"
+            case .today: "Today"
+            case .last7Days: "Last 7 days"
+            case .last30Days: "Last 30 days"
+            case .customRange: "Custom range"
+            }
+        }
+    }
+
+    private var visibleEvents: [ActivityEvent] {
+        model.filteredActivityEvents.filter(matchesExactEventFilter).filter(matchesDateFilter)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: RekonTheme.Spacing.section) {
@@ -1251,16 +1277,42 @@ private struct GlobalActivityView: View {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(RekonTheme.secondaryText)
                     TextField("Search activity", text: $model.activitySearch)
-                        .textFieldStyle(.plain)
+                        .textFieldStyle(RekonQuietTextFieldStyle())
                         .accessibilityIdentifier("activity-search")
                 }
-                .padding(.horizontal, 12)
-                .frame(height: 52)
-                .background(RekonTheme.backgroundRaised, in: RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
-                .overlay(
-                    RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
-                        .stroke(RekonTheme.border.opacity(0.82), lineWidth: 1)
-                )
+
+                HStack(alignment: .bottom, spacing: 12) {
+                    VStack(alignment: .leading, spacing: RekonTheme.Spacing.micro) {
+                        Text("Exact event label or ID")
+                            .font(.caption)
+                            .foregroundStyle(RekonTheme.secondaryText)
+                        TextField("Exact event label or ID", text: $exactEventFilter)
+                            .textFieldStyle(RekonQuietTextFieldStyle())
+                            .accessibilityIdentifier("activity-exact-event-filter")
+                    }
+
+                    Menu {
+                        Picker("Date", selection: $dateFilter) {
+                            ForEach(ActivityDateFilter.allCases) { filter in
+                                Text(filter.title).tag(filter)
+                            }
+                        }
+                    } label: {
+                        Label(dateFilter.title, systemImage: "calendar")
+                            .frame(minHeight: 34)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .accessibilityIdentifier("activity-date-filter")
+                }
+
+                if dateFilter == .customRange {
+                    HStack(spacing: 12) {
+                        DatePicker("Start", selection: $customRangeStart, displayedComponents: .date)
+                        DatePicker("End", selection: $customRangeEnd, displayedComponents: .date)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(RekonTheme.secondaryText)
+                }
 
                 if visibleEvents.isEmpty {
                     Text(model.activityEvents.isEmpty ? "No local activity yet." : "No activity matches that search.")
@@ -1282,6 +1334,38 @@ private struct GlobalActivityView: View {
             }
         }
         .frame(maxHeight: .infinity)
+    }
+
+    private func matchesExactEventFilter(_ event: ActivityEvent) -> Bool {
+        let query = exactEventFilter.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return true }
+        let displayLabel = event.kind
+            .split(separator: "_")
+            .map { $0.capitalized }
+            .joined(separator: " ")
+        return displayLabel.compare(query, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+            || event.kind.compare(query, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+            || event.id.compare(query, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+    }
+
+    private func matchesDateFilter(_ event: ActivityEvent) -> Bool {
+        let calendar = Calendar.current
+        switch dateFilter {
+        case .all:
+            return true
+        case .today:
+            return calendar.isDateInToday(event.occurredAt)
+        case .last7Days:
+            return event.occurredAt >= calendar.date(byAdding: .day, value: -7, to: Date.now) ?? .distantPast
+        case .last30Days:
+            return event.occurredAt >= calendar.date(byAdding: .day, value: -30, to: Date.now) ?? .distantPast
+        case .customRange:
+            let start = min(customRangeStart, customRangeEnd)
+            let end = max(customRangeStart, customRangeEnd)
+            let inclusiveEnd = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: end)) ?? end
+            return event.occurredAt >= calendar.startOfDay(for: start)
+                && event.occurredAt <= inclusiveEnd
+        }
     }
 
     private var assistantPlaceholder: some View {
