@@ -1,6 +1,6 @@
 # VD2-06 — Contacts Master/Detail Task Brief
 
-**Status:** Plan amended for QA pre-gate remediation; Task 1 may be released only after recorded Architecture, TPM, QA, and Delivery approval. Task 2 and all successor work remain blocked.
+**Status:** Accepted by explicit product-owner decision on 2026-08-01. This brief is closed; the three owner-approved VD2-08 accessibility/recovery automation debts remain open.
 
 ## Controlling Artifacts
 
@@ -20,7 +20,7 @@ Deliver the approved native macOS read-first Contacts master/detail workspace wh
 1. Delivery may release **Task 1** after Architecture, TPM, QA, and Delivery independently approve this amended plan and brief. The fact that the required fixtures do not yet exist is not a release blocker: Task 1 creates them.
 2. Task 1 must capture signed host inventory GREEN, low-layer test evidence, and signed UI RED that opens Contacts and fails only because VD2-06 presentation is absent.
 3. **Task 2 remains blocked** until a fresh independent QA reviewer re-reviews that Task 1 evidence and source, confirms fixture isolation/inventory/relaunch plus focused low-layer no-write/failure/audit proof, and confirms the precise presentation-only RED. Architecture, TPM, and Delivery must then independently approve continuation.
-4. Later tasks require prior focused GREEN evidence and independent review. VD2-07 remains blocked until explicit product-owner acceptance of a normally signed Debug VD2-06 build; VD2-08 broad whole-app acceptance is out of scope.
+4. Later tasks required prior focused GREEN evidence and independent review. VD2-06 is now accepted; VD2-07 is eligible only for a separate TPM dependency-safe release and remains Backlog. VD2-08 broad whole-app acceptance remains out of scope and blocked on VD2-03 through VD2-07 accepted.
 
 ## Bounded Sequence
 
@@ -63,4 +63,7 @@ Never launch an unsigned `CODE_SIGNING_ALLOWED=NO` product.
 
 ## Explicit Stop
 
-No commit, delivery evidence/status/dashboard/roadmap update, VD2-07 implementation, or broad VD2-08 campaign is authorized. After focused GREEN and independent Code Review, QA/accessibility, Architecture, and Security/Privacy approval, Delivery may request the signed owner review. Only explicit owner acceptance closes VD2-06.
+No VD2-07 implementation or broad VD2-08 campaign is authorized by this
+acceptance record. VD2-07 requires its own TPM dependency-safe release; VD2-08
+remains blocked until VD2-03 through VD2-07 are accepted and must retain the
+three owner-approved accessibility/recovery automation debts.

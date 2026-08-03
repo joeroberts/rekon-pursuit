@@ -11,6 +11,7 @@
 ## Global constraints
 
 - The controlling visual authority is docs/superpowers/specs/2026-08-01-vd207-reference-faithful-recovery-screen-design.md.
+- The user-approved scope decision in [VD2-07x VD2-08 accessibility deferral addendum](../../delivery/task-briefs/VD2-07x-vd208-accessibility-deferral-addendum.md) controls over any conflicting Task 1/Task 2 matrix or release language below. It carries the remaining local Settings keyboard-focus handoff and AI label/value accessibility regressions to VD2-08 without relaxing or removing their tests. The approved visual implementation may continue, while the fixed archive-date and protected-export safety contracts remain VD2-07x gates.
 - Preserve the five-destination rail, DailyRoute.settings, root file-panel/sheet/alert ownership, and local non-persisted Settings selection.
 - ProtectedExportSuccess has exactly displayFilename: String. No review, URL, parent identity, key, bookmark, receipt, fingerprint, checksum, archive row, document value, store identity, or operation token may cross into Settings, fixtures, logs, screenshots, attachments, or reports.
 - The fixed destination copy is Selected local folder. Success is absent at launch and after every cancel/failure/stale completion. It is never a fixture state, launch argument, demo control, or product test switch.
@@ -221,7 +222,14 @@ Expected: leave the project file untouched when both memberships already exist.
 
 - [ ] **Step 2: Render tabs and safe display panels**
 
-Render SettingsReferenceTab with folder, externaldrive, doc, and link; cool-gray inactive icon/copy; cyan selected icon/copy/bottom rule; generous target; the existing section identifiers; and a full-width divider. Preserve:
+Render SettingsReferenceTab with folder, externaldrive, doc, and link; cool-gray
+inactive icon/copy; generous target; the existing section identifiers; and a
+full-width divider. At wide width, a selected tab uses cyan icon/text and the
+reference cyan bottom rule. At compact width, render the complete labeled
+vertical stack with **no** selected underline; its selected row instead has a
+restrained cyan-tinted rounded surface plus cyan icon/text. Keep the same
+pointer, selected/non-selected, keyboard, and accessibility semantics in both
+layouts. Preserve:
 
 ~~~
 .focusable()
@@ -233,7 +241,13 @@ Render SettingsReferenceTab with folder, externaldrive, doc, and link; cool-gray
 .accessibilityValue(selectorAccessibilityValue(for: section))
 ~~~
 
-ViewThatFits may replace only the complete labeled tab row with a complete labeled vertical stack. Render Recovery from SettingsArchiveSummary only and retain the existing action closures/disabled/busy/error/cancel predicates. Render Workspace, Document, and AI exactly to the Task-1 green copy/control rules. Use RekonCard, RekonTheme.borderSubtle, RekonTheme.success, RekonTheme.secondaryText, and existing primary style; do not alter theme values.
+ViewThatFits may replace only the complete labeled tab row with a complete
+labeled vertical stack. Render Recovery from SettingsArchiveSummary only and
+retain the existing action closures/disabled/busy/error/cancel predicates.
+Render Workspace, Document, and AI exactly to the Task-1 green copy/control
+rules. Use RekonCard, RekonTheme.borderSubtle, RekonTheme.success,
+RekonTheme.secondaryText, and existing primary style; do not alter theme
+values.
 
 - [ ] **Step 3: Render the root-owned string-only success dialog**
 
@@ -246,7 +260,16 @@ struct SettingsProtectedExportSuccessDialog: View {
 }
 ~~~
 
-Its root identifier is settings-protected-export-success-dialog. It renders checkmark.circle, Protected copy exported, the supplied filename, Selected local folder, the non-secret recovery-key reminder, and a Done button identified settings-protected-export-success-done using RekonPrimaryButtonStyle. It accepts no review, URL, key, bookmark, receipt, fingerprint, archive row, document value, or model.
+Its root identifier is settings-protected-export-success-dialog. Match the
+supplied reference with a centered elevated dark rounded panel over the
+subdued Recovery screen: emerald circular check first, then `Protected copy
+exported`, confirmation copy, and a bordered two-row facts group. The group
+uses `Exported file` / supplied filename and `Saved to` / `Selected local
+folder`, with a quiet row divider. Follow it with the non-secret recovery-key
+reminder and an emerald cue. The sole Done button, identified
+settings-protected-export-success-done, spans the panel width and uses the
+reference blue-to-violet treatment. It accepts no review, URL, key, bookmark,
+receipt, fingerprint, archive row, document value, or model.
 
 At ContentView root, observe non-nil success, then set only isPresentingProtectedExport = false and protectedExportReentry = "" before overlaying the dialog. Do not clear the event at that point. Present only while settingsRootModalPresentation.isProtectedExportSuccessPresented. Existing cancel/error sheets stay root-owned and cannot overlay success. Done calls only SettingsRootModalBindings.dismissProtectedExportSuccess { model.dismissProtectedExportSuccess() }; it does not mutate route, workspace, review, export, or recovery state.
 
@@ -267,11 +290,24 @@ VD2-07x-compact-ai-connections
 
 Never attach a recovery key, raw file panel, absolute path, or document metadata.
 
+Add two focused companion tests without changing the three VD2-08 accessibility-handoff tests:
+
+~~~
+func testVD207ReferenceTabsSelectByPointerAtCompactWidth()
+func testVD207ReferenceAIVisualContentBoundary()
+~~~
+
+The compact `populated` pointer test taps all four `settings-section-*` local selectors (including Recovery) and, after each tap, proves its matching panel, selected local selector state without asserting keyboard focus, and selected `sidebar-settings` rail. It attaches the matching `VD2-07x-compact-*` screenshot after every selection. It does not tab, press Space, or modify either keyboard test.
+
+The wide `document-relink` AI boundary test proves the Document aggregate/no-control/no-metadata boundary, selects AI, proves `settings-ai-overview-card`, `settings-ai-assistant-card`, `settings-ai-email-calendar-card`, `settings-ai-cloud-card`, and `settings-ai-privacy-card` with truthful visible copy, then reasserts AI no-control/no-metadata. It attaches `VD2-07x-wide-ai-connections`. It does not consume, change, or classify the existing `Any` or `StaticText` assertions for `settings-ai-connections-unavailable`; those remain separate VD2-08 evidence.
+
 - [ ] **Step 5: Run the exact signed Task 2 matrix**
 
 Run the Task 1 brief matrix verbatim, changing only result paths to /private/tmp/rekon-vd207x-task-2-green-dd and /private/tmp/rekon-vd207x-task-2-green.xcresult.
 
-Expected: every selector, including all four event tests and all four reference methods, runs exactly once with zero failures, skips, and expected failures.
+Then run the signed focused companion procedure in the Task 2 brief once with /private/tmp/rekon-vd207x-task-2-companion-dd and /private/tmp/rekon-vd207x-task-2-companion.xcresult. The two named companion tests must pass with zero skip and zero expected failure.
+
+For the literal matrix, every non-deferred selector must pass and every named selector must run once with zero skip and zero expected failure. The only carryable failures are the exact existing keyboard focus/Tab/Space and AI role/label/value observations permitted by the VD2-08 addendum; record each as failed executed VD2-08 evidence with its assertion, actual role/label/value, platform, and matching requirement. All other failures block Task 2.
 
 - [ ] **Step 6: Produce and inspect visual evidence**
 
@@ -280,12 +316,33 @@ mkdir -p /private/tmp/rekon-vd207x-visual-evidence
 xcrun xcresulttool get test-results summary --path /private/tmp/rekon-vd207x-task-2-green.xcresult
 xcrun xcresulttool get test-results tests --path /private/tmp/rekon-vd207x-task-2-green.xcresult
 xcrun xcresulttool export attachments --path /private/tmp/rekon-vd207x-task-2-green.xcresult --output-path /private/tmp/rekon-vd207x-visual-evidence/fixture-attachments
+xcrun xcresulttool get test-results summary --path /private/tmp/rekon-vd207x-task-2-companion.xcresult
+xcrun xcresulttool get test-results tests --path /private/tmp/rekon-vd207x-task-2-companion.xcresult
+xcrun xcresulttool export attachments --path /private/tmp/rekon-vd207x-task-2-companion.xcresult --output-path /private/tmp/rekon-vd207x-visual-evidence/companion-attachments
 find /private/tmp/rekon-vd207x-visual-evidence -type f -print
 ~~~
 
-Open the eight named fixture attachments beside the approved reference images. Compare global rail, Settings hierarchy, cyan active icon/text/rule, outlined cards, wide/compact layout, Recovery action row, Workspace disabled return card, aggregate-only Document cards, and AI unavailable treatment. Inspect every image for recovery keys, absolute paths, document names, hashes, bookmarks, checksums, MIME types, and other document metadata; reject any disclosure.
+Open the eight named fixture attachments beside the approved reference images.
+Compare global rail, Settings hierarchy, cyan active icon/text and wide rule,
+the compact cyan rounded selected-row surface with no underline, outlined cards,
+wide/compact layout, Recovery action row, Workspace disabled return card,
+aggregate-only Document cards, and AI unavailable treatment. At minimum inspect
+`VD2-07x-wide-recovery` and a named compact selected-section capture. Every
+capture must be limited to the app window; reject any desktop, Finder, other
+application, file chooser, recovery key, absolute path, document name, hash,
+bookmark, checksum, MIME type, or other document metadata.
 
-For the dialog, build and launch the signed normal Debug app. A tester uses an ordinary enrolled local workspace, their own recovery key, and a newly empty local destination to complete the existing review/confirmation flow. Do not record or screenshot the key, destination chooser, or raw path. With the dialog visible, save exactly /private/tmp/rekon-vd207x-visual-evidence/VD2-07x-real-export-success.png with the macOS screenshot tool, select Done, and verify the active workspace is unchanged. Inspect it beside the reference: it shows only safe filename, Selected local folder, reminder, and Done. Record pass/fail and the outside-repository image path; do not commit the image.
+For the dialog, build and launch the signed normal Debug app. A tester uses an
+ordinary enrolled local workspace, their own recovery key, and a newly empty
+local destination to complete the existing review/confirmation flow. Do not
+record or screenshot the key, destination chooser, or raw path. With the dialog
+visible, save exactly /private/tmp/rekon-vd207x-visual-evidence/VD2-07x-real-export-success.png
+with the macOS screenshot tool, cropped to the app window only; select Done and
+verify the active workspace is unchanged. Inspect it beside the reference: it
+has the centered check → heading → confirmation → two-row safe facts →
+reminder → full-width blue-to-violet Done hierarchy and shows only the safe
+filename and `Selected local folder`. Record pass/fail and the
+outside-repository image path; do not commit the image.
 
 ---
 

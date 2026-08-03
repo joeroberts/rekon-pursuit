@@ -1,6 +1,6 @@
 # VD2-07x — Reference-faithful Settings Task 1 brief
 
-**Status:** Amended after Architecture, QA, and Security/privacy preimplementation NEEDS CHANGE decisions. No implementation is released by this brief. Delivery may release Task 1 only after fresh independent Architecture, QA, Security/privacy, TPM, and Delivery approvals are recorded.
+**Status:** Amended after Architecture, QA, and Security/privacy preimplementation NEEDS CHANGE decisions. The user-approved [VD2-08 accessibility deferral addendum](VD2-07x-vd208-accessibility-deferral-addendum.md) controls over conflicting Task 1/Task 2 matrix and release language: it defers the remaining local Settings keyboard-focus handoff and AI label/value accessibility regressions without deleting, skipping, or weakening their tests. No implementation is released by this brief. Delivery may release Task 1 only after fresh independent Architecture, QA, Security/privacy, TPM, and Delivery approvals are recorded.
 
 ## Controlling artifacts
 
@@ -10,6 +10,7 @@
 - docs/delivery/reviews/VD2-07x-preimplementation-qa-2026-08-01.md
 - docs/delivery/reviews/VD2-07x-preimplementation-security-privacy-2026-08-01.md
 - docs/delivery/task-briefs/VD2-07-settings-information-architecture.md
+- docs/delivery/task-briefs/VD2-07x-vd208-accessibility-deferral-addendum.md
 
 ## Objective, ownership, and scope
 
@@ -288,11 +289,48 @@ xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -configurat
   -resultBundlePath /private/tmp/rekon-vd207x-task-2-green.xcresult
 ~~~
 
-Expected: every named selector runs exactly once with zero failure, zero skip, and zero expected failure.
+Expected: every named selector runs exactly once with zero skip and zero expected failure. Every non-deferred selector passes. The only carryable outcomes are the exact keyboard focus/Tab/Space and AI role/label/value observations classified by the VD2-08 addendum; they must be reported as executed failures with their exact assertion, observed role/label/value, platform evidence, and matching VD2-08 requirement. No missing control, selected rail, panel, layout, visible-copy, privacy, no-control, date, export, or other failure is carryable.
+
+## Signed Task 2 focused companion procedure
+
+The literal matrix above is unchanged and remains required. Run this separate, parseable companion result exactly once after the Task 2 rendering and test additions:
+
+~~~
+xcodebuild test -project RekonPursuit.xcodeproj -scheme RekonPursuit -configuration Debug -destination 'platform=macOS,arch=arm64'  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceTabsSelectByPointerAtCompactWidth  \
+  -only-testing:RekonPursuitUITests/RekonPursuitUITests/testVD207ReferenceAIVisualContentBoundary  \
+  -derivedDataPath /private/tmp/rekon-vd207x-task-2-companion-dd  \
+  -resultBundlePath /private/tmp/rekon-vd207x-task-2-companion.xcresult
+~~~
+
+The companion result must contain each named test once with zero failures, skips, and expected failures. It supplements and never replaces the literal matrix or the unchanged VD2-08 handoff tests.
+
+`testVD207ReferenceTabsSelectByPointerAtCompactWidth` uses the compact `populated` fixture. Starting from the selected `sidebar-settings` rail, it taps each existing local selector — `settings-section-workspace`, `settings-section-recovery-archives`, `settings-section-document-references`, and `settings-section-ai-connections` — including the default Recovery selection. After each tap it proves the corresponding section panel, the tapped selector's selected state (without requiring a keyboard-focus value), and the still-selected global Settings rail. It attaches `VD2-07x-compact-workspace`, `VD2-07x-compact-recovery`, `VD2-07x-compact-document-references`, and `VD2-07x-compact-ai-connections`, respectively, immediately after the matching panel is rendered. It neither tabs nor presses Space, and it does not alter either deferred keyboard test.
+
+`testVD207ReferenceAIVisualContentBoundary` uses the `document-relink` fixture at wide width. It proves the Document aggregate summary (`0 available · 1 require relinking`), its no-control/no-metadata boundary, then selects `settings-section-ai-connections` and proves the AI overview, assistant, email/calendar, cloud, and privacy cards with the approved truthful visible copy. It reasserts the AI no-actionable-control and no-metadata boundary and attaches `VD2-07x-wide-ai-connections` after the AI panel renders. It must not replace, change, or interpret the existing `Any` and `StaticText` assertions for `settings-ai-connections-unavailable`; those remain separate executed VD2-08 role/label/value evidence.
 
 ## Task 2 release and evidence requirements
 
 Task 2 is blocked until Task 1 has a hunk-isolated checkpoint containing only allowed event/root/test hunks, the cached diff has been inspected, git diff --cached --check passes, and independent Architecture/QA/Security/privacy/TPM/Delivery approvals are recorded.
+
+### Owner-approved visual correction
+
+This correction is a Task 2 visual acceptance requirement, not a behavior,
+data-boundary, or VD2-08 scope change. At wide width, the selected local
+Settings tab keeps the reference cyan icon/text and bottom rule. At compact
+width, the vertical local selector must have **no** selected bottom underline:
+the selected complete labeled row instead has a restrained cyan-tinted rounded
+selection surface with cyan icon/text. Pointer, selected/non-selected,
+keyboard, and accessibility semantics are preserved.
+
+The root-owned protected-export success dialog must closely match the supplied
+reference: a centered elevated dark rounded panel, top emerald circular check,
+heading, confirmation copy, a bordered two-row facts group (`Exported file` /
+safe filename and `Saved to` / `Selected local folder`), a non-secret
+recovery-key reminder with an emerald cue, and one full-width blue-to-violet
+`Done` treatment. It receives only the existing safe filename and fixed local
+folder label. It still appears only after a real successful export and Done
+only dismisses the root presentation.
 
 After green Task 2, retain these signed-host XCTest attachments outside the repository:
 
@@ -314,10 +352,26 @@ mkdir -p /private/tmp/rekon-vd207x-visual-evidence
 xcrun xcresulttool get test-results summary --path /private/tmp/rekon-vd207x-task-2-green.xcresult
 xcrun xcresulttool get test-results tests --path /private/tmp/rekon-vd207x-task-2-green.xcresult
 xcrun xcresulttool export attachments --path /private/tmp/rekon-vd207x-task-2-green.xcresult --output-path /private/tmp/rekon-vd207x-visual-evidence/fixture-attachments
+xcrun xcresulttool get test-results summary --path /private/tmp/rekon-vd207x-task-2-companion.xcresult
+xcrun xcresulttool get test-results tests --path /private/tmp/rekon-vd207x-task-2-companion.xcresult
+xcrun xcresulttool export attachments --path /private/tmp/rekon-vd207x-task-2-companion.xcresult --output-path /private/tmp/rekon-vd207x-visual-evidence/companion-attachments
 find /private/tmp/rekon-vd207x-visual-evidence -type f -print
 ~~~
 
-Open each image beside the approved reference, checking rail, cyan selected rule, hierarchy, cards, wide/compact response, disabled/unavailable treatment, and the forbidden-content list. A tester then uses the signed normal Debug app and an ordinary enrolled local workspace to complete a real existing export to an empty local destination. Without recording the key, chooser, or path, capture the visible dialog at exactly /private/tmp/rekon-vd207x-visual-evidence/VD2-07x-real-export-success.png, press Done, and prove active workspace IDs stay unchanged. The dialog image must show only safe filename, Selected local folder, reminder, and Done. It is never committed.
+Open each image beside the approved reference, checking rail, wide cyan
+selected rule, compact rounded cyan selected-row treatment with no underline,
+hierarchy, cards, wide/compact response, disabled/unavailable treatment, and
+the forbidden-content list. The review must include `VD2-07x-wide-recovery`
+and `VD2-07x-compact-recovery` (or another named compact selection capture)
+and contain only the app window—no desktop or other application window. A
+tester then uses the signed normal Debug app and an ordinary enrolled local
+workspace to complete a real existing export to an empty local destination.
+Without recording the key, chooser, or path, capture the visible dialog at
+exactly /private/tmp/rekon-vd207x-visual-evidence/VD2-07x-real-export-success.png,
+crop it to the app window only, press Done, and prove active workspace IDs stay
+unchanged. The dialog image must show the centered check, heading,
+confirmation, two-row safe-facts group, reminder, and full-width Done, using
+only the safe filename and `Selected local folder`. It is never committed.
 
 ## Dirty-baseline and checkpoint rules
 

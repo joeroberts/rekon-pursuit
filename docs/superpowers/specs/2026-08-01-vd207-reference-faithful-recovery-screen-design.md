@@ -1,8 +1,9 @@
 # VD2-07x — Reference-faithful Settings screen design
 
 **Date:** 2026-08-01
-**Status:** Product-owner approved. This document supersedes the visual
-composition portions of `2026-08-01-vd207-settings-information-architecture-design.md`.
+**Status:** Product-owner approved; amended 2026-08-01 after visual owner
+feedback. This document supersedes the visual composition portions of
+`2026-08-01-vd207-settings-information-architecture-design.md`.
 **Controlling references:**
 
 - `/Users/jroberts/Downloads/Generated image 3 (1).png`
@@ -37,12 +38,18 @@ behavior may change.
   single-row icon-and-label selector: Workspace, Recovery & archives, Document
   references, and AI & connections.
 - Each selector uses a semantic SF Symbol, a generous hit target, and the same
-  cool-gray text family as the reference. The selected Recovery & archives
-  item uses cyan icon/text plus a cyan bottom rule that spans its tab cell; the
-  whole selector has a subdued bottom divider.
+  cool-gray text family as the reference. At wide width, the selected Recovery
+  & archives item uses cyan icon/text plus a cyan bottom rule that spans its
+  tab cell; the whole selector has a subdued bottom divider.
 - At compact width, retain the four destinations and semantic focus behavior in
-  a vertical layout. Never hide a section, replace local selection with a global
-  route, or persist it.
+  a vertical layout. Do **not** carry the wide cyan bottom rule into this
+  layout: it looks detached from a vertical selector. Instead, the selected
+  compact row uses a restrained cyan-tinted rounded selection surface plus
+  cyan icon/text; unselected rows stay transparent with cool-gray icon/text.
+  The row remains a complete labeled selector with the same selected,
+  non-selected, keyboard, pointer, and accessibility semantics as wide mode.
+  Never hide a section, replace local selection with a global route, or
+  persist it.
 
 ### Recovery & archives overview
 
@@ -81,15 +88,23 @@ successful write, `ContentView` presents a root-owned success dialog over the
 Recovery screen. It is not a fixture default, demo switch, or simulated success
 state.
 
-- The dialog uses a dark elevated rounded panel, an emerald success check,
-  `Protected copy exported` heading, and succinct confirmation copy.
-- It shows only safe, truthful export facts: the existing display filename and
-  a generic selected-local-folder label. It must not reveal an absolute path,
+- The dialog must closely follow the supplied reference rather than resemble a
+  generic macOS alert: center a dark, elevated, rounded panel over a subdued
+  Recovery background; place an emerald circular check at the top; then the
+  `Protected copy exported` heading and succinct confirmation copy. Use the
+  reference's spacious, centered hierarchy and a single, deliberate panel
+  outline/shadow.
+- Beneath the confirmation, show a bordered two-row export-facts group. Its
+  left labels are `Exported file` and `Saved to`; its values are respectively
+  the existing display filename and exactly `Selected local folder`. The rows
+  have a quiet divider between them. It must not reveal an absolute path,
   bookmark, recovery key, key-derived material, or any document metadata.
-- The existing recovery-key reminder stays visible without displaying the key.
-- The single `Done` action uses the blue-to-violet primary treatment from the
-  reference and only dismisses the success presentation. It does not mutate the
-  active workspace, rerun the export, or alter recovery state.
+- The existing recovery-key reminder follows the facts group with a small
+  emerald lock/check cue and no displayed key.
+- The single `Done` action is full panel width and uses the reference's
+  blue-to-violet primary treatment. It only dismisses the success presentation;
+  it does not mutate the active workspace, rerun the export, or alter recovery
+  state.
 - Existing export error and cancellation behavior remain root-owned and visible
   through the current presentation flow; a cancel/error never produces success.
 
@@ -172,8 +187,13 @@ Debug app and deterministic fixture host:
 - error text remains accessible; and
 - wide/compact rendered screenshots are compared against the approved
   composition for hierarchy, active-tab treatment, card layout, and dialog
-  hierarchy. Screenshot evidence must contain no recovery key or document
-  metadata.
+  hierarchy. The review includes a wide Recovery capture and a compact capture
+  with one clearly selected local-section row; the compact capture proves the
+  rounded cyan row treatment and the absence of a detached underline. The
+  real-export dialog capture proves the centered check → heading → confirmation
+  → two-row facts → reminder → full-width Done hierarchy. Each capture contains
+  only the app window—never desktop, Finder, another app, a chooser, or other
+  surrounding window chrome—and contains no recovery key or document metadata.
 
 ## Explicit non-goals
 

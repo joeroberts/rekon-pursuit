@@ -13,9 +13,40 @@
 3. `VD2-03` Home redesign — Accepted
 4. `VD2-04` Pipeline table and inspector — Accepted
 5. `VD2-05` Pipeline board and persisted stage movement — Accepted (approved, non-blocking macOS XCTest submenu-oracle debt)
-6. `VD2-06` Contacts master/detail redesign — Backlog
+6. `VD2-06` Contacts master/detail redesign — Accepted
 7. `VD2-07` Settings information architecture — Backlog
 8. `VD2-08` Visual QA and accessibility acceptance — Backlog
+
+## VD2-06 product-owner acceptance — 2026-08-01
+
+- The product owner explicitly accepted VD2-06 (`approved`). The acceptance
+  closes the Contacts master/detail redesign, based on the signed Debug
+  handoff and the completed independent technical gates recorded in
+  `docs/delivery/evidence/visual-design-v2/VD2-06-owner-handoff-2026-08-01.md`.
+- The three owner-approved VD2-08 accessibility/recovery automation debts
+  remain open: precise `contact-operation-error` accessibility values; verified
+  Tab then Space/Return activation for Back, Cancel, and Save; and automated
+  failed Link/Unlink UI injection. No broad VD2-08 campaign is accepted.
+- VD2-07 is eligible only for a separate TPM dependency-safe release. It
+  remains Backlog and is neither released nor in progress. VD2-08 remains
+  Backlog and blocked until VD2-03 through VD2-07 are accepted.
+
+## VD2-06 Task 2 technical completion and Task 3 release — 2026-08-01
+
+- Independent Code Review, fresh QA/accessibility, Architecture, TPM, and
+  Delivery gates accepted Task 2's bounded Contacts presentation extraction.
+  Fresh normally signed Debug QA evidence reports 3/0/0 GREEN for the unchanged
+  wide master/detail, compact detail/Back, and truthful-state selectors.
+- VD2-06 remains **In progress at Task 3 only**. Delivery released only the
+  focused deterministic regression, safety, persistence/audit, destructive,
+  keyboard, accessibility, and responsive evidence slice. Required regressions
+  include edit/new Cancel no-write, association failure/Retry recovery, live
+  editor resize retention, and duplicate normalized contact-ID disambiguation.
+- Task 4 remains blocked pending Task 3 GREEN and independent Code Review, QA,
+  Architecture, and Security/Privacy gates. VD2-07 and VD2-08 remain Backlog
+  and blocked; no product-owner acceptance or VD2-06 feature acceptance is
+  implied. Task evidence under `/tmp` and the pre-existing dirty-baseline
+  exact-symbol integration risk remain open.
 
 ## VD2-03 delivery transition — 2026-07-30
 
@@ -309,3 +340,27 @@
   recorded prerequisites. This is ordinary dependency sequencing, not a
   material blocker state. The authoritative delivery gate is
   `.superpowers/sdd/2026-07-31-vd206-contacts-master-detail/preimplementation-delivery-gate.md`.
+
+## VD2-06 Task 1 technical completion and Task 2 release — 2026-08-01
+
+- Independent Code Review, fresh QA, Architecture, TPM, and Delivery gates
+  accept Task 1's technical exit only: fixture-host 2/0 GREEN, model 3/0
+  GREEN, and signed UI 0/3 presentation-only RED after Contacts route
+  readiness.
+- `VD2-06` is **In progress at Task 2**. Delivery releases only the adaptive
+  Contacts presentation slice; it is the sole eligible work. Task 3 remains
+  blocked on Task 2 GREEN and Delivery release, and Task 4 remains blocked on
+  Task 3 GREEN plus its independent gates.
+- VD2-07 and VD2-08 remain Backlog/blocked. No product-owner acceptance,
+  VD2-06 feature acceptance, or VD2-07 release is implied.
+- Retained risks: `/tmp/rekon-vd206-task1-qa.iQ4zuE` evidence is ephemeral;
+  the exact Task 1 fixture hunk cannot be safely isolated into a commit from
+  the pre-existing dirty baseline. See the Task 1 delivery gate for detail.
+
+## VD2-06 final acceptance closeout — 2026-08-01
+
+- The product owner explicitly approved VD2-06 on 2026-08-01; all bounded
+  technical gates are accepted. The three owner-approved VD2-08
+  accessibility/recovery automation debts remain open.
+- VD2-07 is eligible but neither released nor started. VD2-08 remains blocked
+  pending VD2-03 through VD2-07 acceptance and retains those three debts.
