@@ -123,7 +123,7 @@ nonisolated enum OpportunityRoute: Equatable {
 
 struct AppShellView<Detail: View>: View {
     @Binding private var selection: DailyRoute
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var isSidebarVisible = true
     private let windowCanvasPolicy = RekonWindowCanvasPolicy.standard
     private let detailTitle: String
     private let selectDestination: (DailyRoute) -> Void
@@ -142,63 +142,30 @@ struct AppShellView<Detail: View>: View {
     }
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            VStack(alignment: .leading, spacing: RekonTheme.Spacing.standard) {
-                HStack(spacing: RekonTheme.Rail.brandSpacing) {
-                    Image(RekonVisualThemeContract.emblemAssetName)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(
-                            width: RekonVisualThemeContract.brandEmblemTargetSize,
-                            height: RekonVisualThemeContract.brandEmblemTargetSize
-                        )
-                    Text("Rekon Pursuit")
-                        .font(.system(size: RekonVisualThemeContract.brandLockupTextSize, weight: .semibold))
-                        .foregroundStyle(RekonTheme.shellForeground)
-                        .lineLimit(1)
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Rekon Pursuit")
-                .accessibilityIdentifier(RekonVisualThemeContract.brandLockupAccessibilityIdentifier)
-                .padding(.horizontal, RekonTheme.Rail.horizontalInset)
-                .padding(.top, RekonTheme.Rail.brandTopInset)
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: RekonTheme.Rail.destinationRowGap) {
-                        ForEach(AppDestination.sidebarDestinations) { destination in
-                            SidebarDestinationButton(
-                                destination: destination,
-                                isSelected: selection == DailyRoute(destination),
-                                select: { selectDestination(DailyRoute(destination)) }
-                            )
-                        }
-                    }
-                    .padding(.horizontal, RekonTheme.Rail.horizontalInset)
-                }
+        HSplitView {
+            if isSidebarVisible {
+                sidebarRail
             }
-            .navigationSplitViewColumnWidth(
-                min: RekonTheme.Rail.minimumWidth,
-                ideal: RekonTheme.Rail.idealWidth,
-                max: RekonTheme.Rail.maximumWidth
-            )
-            .background {
-                ZStack {
-                    RekonTheme.shellRailBackground
-                    RekonDecorativeBackground()
-                }
-            }
-        } detail: {
-            detail
-                .frame(
-                    maxWidth: windowCanvasPolicy.fillsDetailCanvas ? .infinity : nil,
-                    maxHeight: windowCanvasPolicy.fillsDetailCanvas ? .infinity : nil,
-                    alignment: .topLeading
-                )
-                .background(RekonTheme.shellToolbarBackground)
-                .navigationTitle(detailTitle)
+            detailContent
         }
         .tint(RekonTheme.shellSelectedLeadingAccent)
         .textFieldStyle(RekonTextFieldStyle())
-        .navigationSplitViewStyle(.balanced)
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    isSidebarVisible.toggle()
+                } label: {
+                    Image(systemName: isSidebarVisible ? "sidebar.left" : "sidebar.leading")
+                        .symbolRenderingMode(.hierarchical)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(RekonTheme.shellIcon)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(RekonVisualThemeContract.collapseControlAccessibilityIdentifier)
+                .accessibilityLabel(isSidebarVisible ? "Collapse sidebar" : "Show sidebar")
+                .help(isSidebarVisible ? "Collapse sidebar" : "Show sidebar")
+            }
+        }
         .frame(
             minWidth: RekonVisualThemeContract.minimumWindowWidth,
             minHeight: RekonVisualThemeContract.minimumWindowHeight
@@ -209,22 +176,6 @@ struct AppShellView<Detail: View>: View {
         )
         .background(RekonTheme.shellToolbarBackground.ignoresSafeArea())
         .background(RekonWindowChromeConfigurator(policy: windowCanvasPolicy))
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
-                } label: {
-                    Image(systemName: columnVisibility == .detailOnly ? "sidebar.leading" : "sidebar.left")
-                        .symbolRenderingMode(.hierarchical)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(RekonTheme.shellIcon)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier(RekonVisualThemeContract.collapseControlAccessibilityIdentifier)
-                .accessibilityLabel(columnVisibility == .detailOnly ? "Show sidebar" : "Collapse sidebar")
-                .help(columnVisibility == .detailOnly ? "Show sidebar" : "Collapse sidebar")
-            }
-        }
         .toolbarColorScheme(.dark, for: .windowToolbar)
         .toolbarBackground(RekonTheme.shellToolbarBackground, for: .windowToolbar)
         .toolbarBackground(
@@ -234,6 +185,69 @@ struct AppShellView<Detail: View>: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(RekonVisualThemeContract.shellAccessibilityIdentifier)
     }
+
+    private var sidebarRail: some View {
+        VStack(alignment: .leading, spacing: RekonTheme.Spacing.standard) {
+            HStack(spacing: RekonTheme.Rail.brandSpacing) {
+                Image(RekonVisualThemeContract.emblemAssetName)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(
+                        width: RekonVisualThemeContract.brandEmblemTargetSize,
+                        height: RekonVisualThemeContract.brandEmblemTargetSize
+                    )
+                Text("Rekon Pursuit")
+                    .font(.system(size: RekonVisualThemeContract.brandLockupTextSize, weight: .semibold))
+                    .foregroundStyle(RekonTheme.shellForeground)
+                    .lineLimit(1)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Rekon Pursuit")
+            .accessibilityIdentifier(RekonVisualThemeContract.brandLockupAccessibilityIdentifier)
+            .padding(.horizontal, RekonTheme.Rail.horizontalInset)
+            .padding(.top, RekonTheme.Rail.brandTopInset)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: RekonTheme.Rail.destinationRowGap) {
+                    ForEach(AppDestination.sidebarDestinations) { destination in
+                        SidebarDestinationButton(
+                            destination: destination,
+                            isSelected: selection == DailyRoute(destination),
+                            select: { selectDestination(DailyRoute(destination)) }
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, RekonTheme.Rail.horizontalInset)
+            }
+        }
+        .frame(
+            minWidth: RekonTheme.Rail.minimumWidth,
+            idealWidth: RekonTheme.Rail.idealWidth,
+            maxWidth: RekonTheme.Rail.maximumWidth,
+            maxHeight: .infinity,
+            alignment: .topLeading
+        )
+        .fixedSize(horizontal: true, vertical: false)
+        .background {
+            ZStack {
+                RekonTheme.shellRailBackground
+                RekonDecorativeBackground()
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("sidebar-rail")
+    }
+
+    private var detailContent: some View {
+        detail
+            .frame(
+                maxWidth: windowCanvasPolicy.fillsDetailCanvas ? .infinity : nil,
+                maxHeight: windowCanvasPolicy.fillsDetailCanvas ? .infinity : nil,
+                alignment: .topLeading
+            )
+            .background(RekonTheme.shellToolbarBackground)
+            .navigationTitle(detailTitle)
+    }
 }
 
 private struct SidebarDestinationButton: View {
@@ -241,9 +255,56 @@ private struct SidebarDestinationButton: View {
     let isSelected: Bool
     let select: () -> Void
     @FocusState private var isFocused: Bool
+    @State private var isPointerHovering = false
+    @State private var suppressingKeyboardFocusAfterPointerActivation = false
+
+    private var showsKeyboardFocus: Bool {
+        RekonRailDestinationPresentation.showsKeyboardFocus(
+            isFocused: isFocused,
+            suppressingAfterPointerActivation: suppressingKeyboardFocusAfterPointerActivation
+        )
+    }
+
+    private var outlinePresentation: RekonRailDestinationOutline {
+        RekonRailDestinationPresentation.outline(
+            isPointerHovering: isPointerHovering,
+            showsKeyboardFocus: showsKeyboardFocus
+        )
+    }
+
+    private var outlineColor: Color {
+        switch outlinePresentation {
+        case .pointerHover:
+            RekonTheme.shellPointerHoverRing
+        case .keyboardFocus:
+            RekonTheme.shellKeyboardFocusRing
+        case .none:
+            .clear
+        }
+    }
+
+    private var outlineGlow: Color {
+        switch outlinePresentation {
+        case .pointerHover:
+            RekonTheme.shellPointerHoverRing.opacity(0.32)
+        case .keyboardFocus:
+            RekonTheme.shellKeyboardFocusRing.opacity(0.28)
+        case .none:
+            .clear
+        }
+    }
+
+    private var rowShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
+    }
 
     var body: some View {
-        Button(action: select) {
+        Button {
+            // A mouse click can focus a native Button. Preserve the focus for
+            // keyboard traversal, but do not present it as a keyboard halo.
+            suppressingKeyboardFocusAfterPointerActivation = true
+            select()
+        } label: {
             HStack(spacing: RekonTheme.Rail.destinationLabelGap) {
                 Image(systemName: destination.icon)
                     .symbolRenderingMode(.hierarchical)
@@ -259,20 +320,19 @@ private struct SidebarDestinationButton: View {
             .padding(.vertical, RekonTheme.Spacing.tight)
             .frame(minHeight: RekonVisualThemeContract.railDestinationMinimumHeight)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(rowShape)
+            .onHover { isHovering in
+                isPointerHovering = isHovering
+            }
             .background(
                 isSelected ? RekonTheme.shellSelectedSurface : Color.clear,
-                in: RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
+                in: rowShape
             )
             .overlay(
-                RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
+                rowShape
                     .stroke(
-                        isFocused
-                            ? (isSelected ? RekonTheme.shellSelectedFocusRing : RekonTheme.shellFocusRing)
-                            : Color.clear,
-                        lineWidth: RekonRailDestinationPresentation.focusRingLineWidth(
-                            isSelected: isSelected,
-                            isFocused: isFocused
-                        )
+                        outlineColor,
+                        lineWidth: RekonRailDestinationPresentation.focusRingLineWidth(for: outlinePresentation)
                     )
             )
             .overlay(alignment: .leading) {
@@ -288,22 +348,32 @@ private struct SidebarDestinationButton: View {
                 }
             }
             .shadow(
-                color: isFocused
-                    ? (isSelected ? RekonTheme.shellSelectedFocusRing.opacity(0.24) : RekonTheme.shellFocusRing.opacity(0.32))
-                    : .clear,
+                color: outlineGlow,
                 radius: 7
             )
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(rowShape)
         .focusable()
         .focused($isFocused)
-        // The custom cyan outline above is the single visible keyboard focus
-        // treatment; suppress the system halo to avoid rendering two rings.
+        .onChange(of: isFocused) { _, focused in
+            if !focused {
+                suppressingKeyboardFocusAfterPointerActivation = false
+            }
+        }
+        .onKeyPress(.space) {
+            suppressingKeyboardFocusAfterPointerActivation = false
+            select()
+            return .handled
+        }
+        // The custom hover/focus treatments above are the only visible rings;
+        // suppress the system halo to avoid rendering a second outline.
         .focusEffectDisabled(true)
         .accessibilityLabel(destination.rawValue)
         // Exposes the same state as the visible focus ring to accessibility
         // automation without adding a user-facing label or changing selection.
-        .accessibilityValue(isFocused ? "Keyboard focus" : "")
+        .accessibilityValue(showsKeyboardFocus ? "Keyboard focus" : "")
         .accessibilityIdentifier(destination.accessibilityID)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }

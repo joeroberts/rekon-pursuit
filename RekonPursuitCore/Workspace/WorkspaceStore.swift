@@ -43,6 +43,44 @@ nonisolated private struct ManagedArchiveFile: Sendable {
     let identity: PortableArchiveExpiryFileIdentity
 }
 
+nonisolated enum PublicProfileURLValidator {
+    static func isValid(_ value: String) -> Bool {
+        guard let components = URLComponents(string: value),
+              let scheme = components.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              let host = components.host else {
+            return false
+        }
+        return isPublicHostname(host)
+    }
+
+    private static func isPublicHostname(_ host: String) -> Bool {
+        let hostname = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        guard !hostname.isEmpty,
+              hostname != "localhost",
+              hostname != "localdomain",
+              !hostname.hasSuffix(".localhost"),
+              !hostname.hasSuffix(".local"),
+              !hostname.hasSuffix(".localdomain") else {
+            return false
+        }
+
+        if let address = PublicIPAddress(hostname) {
+            return address.isPublic
+        }
+        var ipv4 = in_addr()
+        if inet_aton(hostname, &ipv4) == 1 {
+            let literal = withUnsafeBytes(of: &ipv4) { bytes in
+                bytes.map { String($0) }.joined(separator: ".")
+            }
+            return PublicIPAddress(literal)?.isPublic == true
+        }
+
+        let labels = hostname.split(separator: ".", omittingEmptySubsequences: false)
+        return labels.count > 1 && labels.allSatisfy { !$0.isEmpty }
+    }
+}
+
 final class WorkspaceStore {
     private let database: EncryptedDatabase
     private let clock: () -> Date
@@ -50,11 +88,13 @@ final class WorkspaceStore {
     private let actorID: String
     private let correlationID: String
     private let failBeforeActivityInsert: Bool
+    private let stageMoveFailurePoint: StageMoveFailurePoint?
     private let portableArchiveWorker: any PortableArchiveWorking
     private let portableArchiveExpiryWorker: any PortableArchiveExpiryWorking
     private let protectedExportWorker: ProtectedExportWorker
     private let lock = WorkspaceSynchronizationLock()
     private let reconciliationResultSelect = "SELECT id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status, check_operation_id, method, checker_version, http_status, mime_type, declared_bytes, received_bytes, content_sha256, response_date, last_modified, etag, retry_after, redirect_target_redacted, evidence_excerpt, redacted_error_code"
+    private let contactSelect = "SELECT contacts.id, contacts.name, contacts.employer, contacts.title, contacts.email, contacts.personal_email, contacts.mobile_phone, contacts.office_phone, contacts.profile_url, contacts.instagram_url, contacts.facebook_url, contacts.relationship_context, contacts.notes"
 
     init(
         database: EncryptedDatabase,
@@ -64,6 +104,7 @@ final class WorkspaceStore {
         actorID: String,
         correlationID: String,
         failBeforeActivityInsert: Bool = false,
+        stageMoveFailurePoint: StageMoveFailurePoint? = nil,
         archiveSigningKeyStore: any ArchiveSigningKeyStoring = ArchiveSigningKeyStore(),
         portableArchiveWorker: (any PortableArchiveWorking)? = nil,
         portableArchiveExpiryWorker: (any PortableArchiveExpiryWorking)? = nil,
@@ -81,6 +122,7 @@ final class WorkspaceStore {
         self.actorID = actorID
         self.correlationID = correlationID
         self.failBeforeActivityInsert = failBeforeActivityInsert
+        self.stageMoveFailurePoint = stageMoveFailurePoint
         self.portableArchiveWorker = portableArchiveWorker ?? PortableArchiveWorker(
             configuration: database.portableArchiveConnectionConfiguration(),
             signingKeyStore: archiveSigningKeyStore
@@ -257,7 +299,7 @@ final class WorkspaceStore {
             let calendar = Calendar(identifier: .gregorian)
             let startOfToday = calendar.startOfDay(for: readNow)
             let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
-            return try database.rows("SELECT task_reminders.id, task_reminders.opportunity_id, task_reminders.title, task_reminders.due_at, task_reminders.is_complete FROM task_reminders JOIN opportunities ON opportunities.id = task_reminders.opportunity_id WHERE task_reminders.is_complete = 0 AND opportunities.deleted_at IS NULL AND opportunities.stage != 'Closed' ORDER BY CASE WHEN task_reminders.due_at IS NULL THEN 4 WHEN task_reminders.due_at < ? THEN 1 WHEN task_reminders.due_at < ? THEN 2 ELSE 3 END, task_reminders.due_at, task_reminders.id", values: [.real(startOfToday.timeIntervalSince1970), .real(startOfTomorrow.timeIntervalSince1970)]).map(task(from:))
+            return try database.rows("SELECT task_reminders.id, task_reminders.opportunity_id, task_reminders.title, task_reminders.due_at, task_reminders.is_complete, EXISTS (SELECT 1 FROM reconciliation_reviews WHERE reconciliation_reviews.task_reminder_id = task_reminders.id) FROM task_reminders JOIN opportunities ON opportunities.id = task_reminders.opportunity_id WHERE task_reminders.is_complete = 0 AND opportunities.deleted_at IS NULL AND opportunities.stage != 'Closed' ORDER BY CASE WHEN task_reminders.due_at IS NULL THEN 4 WHEN task_reminders.due_at < ? THEN 1 WHEN task_reminders.due_at < ? THEN 2 ELSE 3 END, task_reminders.due_at, task_reminders.id", values: [.real(startOfToday.timeIntervalSince1970), .real(startOfTomorrow.timeIntervalSince1970)]).map(task(from:))
         }
     }
 
@@ -360,21 +402,41 @@ final class WorkspaceStore {
         }
     }
 
-    func changeStage(opportunityID: String, to stage: PipelineStage) throws {
+    @discardableResult
+    func moveStage(opportunityID: String, to stage: PipelineStage) throws -> StageMoveStoreOutcome {
         let commandNow = clock()
-        try synchronized {
-            guard try isActiveOpportunity(opportunityID) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
-            if stage == .closed, try hasUnconfirmedReconciliationReview(forOpportunityID: opportunityID) {
-                throw WorkspaceStoreError.closureNotConfirmed
-            }
+        return try synchronized {
+            guard try isActiveOpportunity(opportunityID) else { return .unavailable(opportunityID: opportunityID) }
             let currentStage = try activeOpportunityStage(id: opportunityID)
-            guard currentStage != stage else { return }
+            guard currentStage != stage else { return .noOp(opportunityID: opportunityID, stage: stage) }
+            if stage == .closed, try hasUnconfirmedReconciliationReview(forOpportunityID: opportunityID) {
+                return .reconciliationBlocked(opportunityID: opportunityID, target: stage)
+            }
             let event = ActivityEvent(id: nextIdentifier(), kind: "opportunity_stage_changed", opportunityID: opportunityID, actorID: actorID, correlationID: correlationID, occurredAt: commandNow)
+            var projection: PipelineStageMoveProjection?
             try database.transaction {
+                if stageMoveFailurePoint == .beforeWrite {
+                    throw WorkspaceStoreError.injectedFailure
+                }
                 try database.execute("UPDATE opportunities SET stage = ?, stage_changed_at = ? WHERE id = ?", values: [.text(stage.rawValue), .real(commandNow.timeIntervalSince1970), .text(opportunityID)])
                 try database.execute("INSERT INTO activity_events (id, kind, opportunity_id, actor_id, correlation_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?)", values: [.text(event.id), .text(event.kind), event.opportunityID.map(DatabaseValue.text) ?? .null, .text(event.actorID), .text(event.correlationID), .real(event.occurredAt.timeIntervalSince1970)])
                 try database.execute("INSERT INTO opportunity_stage_history (id, opportunity_id, from_stage, to_stage, occurred_at) VALUES (?, ?, ?, ?, ?)", values: [.text(nextIdentifier()), .text(opportunityID), .text(currentStage.rawValue), .text(stage.rawValue), .real(commandNow.timeIntervalSince1970)])
+                if stageMoveFailurePoint == .beforeProjectionRead {
+                    throw WorkspaceStoreError.injectedFailure
+                }
+                projection = try stageMoveProjection(opportunityID: opportunityID, attentionNow: commandNow)
             }
+            guard let projection else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+            return .persisted(PipelineStageMoveCommit(opportunityID: opportunityID, from: currentStage, to: stage, projection: projection))
+        }
+    }
+
+    func changeStage(opportunityID: String, to stage: PipelineStage) throws {
+        let outcome = try moveStage(opportunityID: opportunityID, to: stage)
+        switch outcome {
+        case .persisted, .noOp: return
+        case .reconciliationBlocked: throw WorkspaceStoreError.closureNotConfirmed
+        case .unavailable: throw WorkspaceStoreError.unexpectedDatabaseValue
         }
     }
 
@@ -466,9 +528,9 @@ final class WorkspaceStore {
         let commandNow = clock()
         let contact = try validatedContact(id: nil, command: command)
         return try synchronized {
-            let contact = Contact(id: nextIdentifier(), name: contact.name, employer: contact.employer, title: contact.title, email: contact.email, profileURL: contact.profileURL, relationshipContext: contact.relationshipContext, notes: contact.notes)
+            let contact = Contact(id: nextIdentifier(), name: contact.name, employer: contact.employer, title: contact.title, workEmail: contact.workEmail, personalEmail: contact.personalEmail, mobilePhone: contact.mobilePhone, officePhone: contact.officePhone, linkedInURL: contact.linkedInURL, instagramURL: contact.instagramURL, facebookURL: contact.facebookURL, relationshipContext: contact.relationshipContext, notes: contact.notes)
             try database.transaction {
-                try database.execute("INSERT INTO contacts (id, name, employer, title, email, profile_url, relationship_context, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", values: [.text(contact.id), .text(contact.name), .text(contact.employer), .text(contact.title), .text(contact.email), .text(contact.profileURL), .text(contact.relationshipContext), .text(contact.notes)])
+                try database.execute("INSERT INTO contacts (id, name, employer, title, email, personal_email, mobile_phone, office_phone, profile_url, instagram_url, facebook_url, relationship_context, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", values: [.text(contact.id), .text(contact.name), .text(contact.employer), .text(contact.title), .text(contact.workEmail), .text(contact.personalEmail), .text(contact.mobilePhone), .text(contact.officePhone), .text(contact.linkedInURL), .text(contact.instagramURL), .text(contact.facebookURL), .text(contact.relationshipContext), .text(contact.notes)])
                 try appendActivity(kind: "contact_created", opportunityID: nil, contactID: contact.id, occurredAt: commandNow)
             }
             return contact
@@ -481,7 +543,7 @@ final class WorkspaceStore {
         return try synchronized {
             guard try isActiveContact(id) else { throw WorkspaceStoreError.unexpectedDatabaseValue }
             try database.transaction {
-                try database.execute("UPDATE contacts SET name = ?, employer = ?, title = ?, email = ?, profile_url = ?, relationship_context = ?, notes = ? WHERE id = ?", values: [.text(contact.name), .text(contact.employer), .text(contact.title), .text(contact.email), .text(contact.profileURL), .text(contact.relationshipContext), .text(contact.notes), .text(id)])
+                try database.execute("UPDATE contacts SET name = ?, employer = ?, title = ?, email = ?, personal_email = ?, mobile_phone = ?, office_phone = ?, profile_url = ?, instagram_url = ?, facebook_url = ?, relationship_context = ?, notes = ? WHERE id = ?", values: [.text(contact.name), .text(contact.employer), .text(contact.title), .text(contact.workEmail), .text(contact.personalEmail), .text(contact.mobilePhone), .text(contact.officePhone), .text(contact.linkedInURL), .text(contact.instagramURL), .text(contact.facebookURL), .text(contact.relationshipContext), .text(contact.notes), .text(id)])
                 try appendActivity(kind: "contact_updated", opportunityID: nil, contactID: id, occurredAt: commandNow)
             }
             return contact
@@ -529,20 +591,20 @@ final class WorkspaceStore {
     func contacts(forOpportunityID opportunityID: String) throws -> [Contact] {
         try synchronized {
             guard try isActiveOpportunity(opportunityID) else { return [] }
-            return try database.rows("SELECT contacts.id, contacts.name, contacts.employer, contacts.title, contacts.email, contacts.profile_url, contacts.relationship_context, contacts.notes FROM contacts JOIN contact_opportunities ON contacts.id = contact_opportunities.contact_id WHERE contact_opportunities.opportunity_id = ? AND contacts.deleted_at IS NULL ORDER BY contacts.name, contacts.id", values: [.text(opportunityID)]).map(contact(from:))
+            return try database.rows(contactSelect + " FROM contacts JOIN contact_opportunities ON contacts.id = contact_opportunities.contact_id WHERE contact_opportunities.opportunity_id = ? AND contacts.deleted_at IS NULL ORDER BY contacts.name, contacts.id", values: [.text(opportunityID)]).map(contact(from:))
         }
     }
 
     func contacts() throws -> [Contact] {
         try synchronized {
-            try database.rows("SELECT id, name, employer, title, email, profile_url, relationship_context, notes FROM contacts WHERE deleted_at IS NULL ORDER BY name, id").map(contact(from:))
+            try database.rows(contactSelect + " FROM contacts WHERE contacts.deleted_at IS NULL ORDER BY contacts.name, contacts.id").map(contact(from:))
         }
     }
 
     func sameEmployerContacts(forOpportunityID opportunityID: String) throws -> [Contact] {
         try synchronized {
             guard try isActiveOpportunity(opportunityID) else { return [] }
-            return try database.rows("SELECT contacts.id, contacts.name, contacts.employer, contacts.title, contacts.email, contacts.profile_url, contacts.relationship_context, contacts.notes FROM contacts JOIN opportunities ON lower(trim(contacts.employer)) = lower(trim(opportunities.company)) WHERE opportunities.id = ? AND contacts.deleted_at IS NULL AND trim(contacts.employer) != '' AND NOT EXISTS (SELECT 1 FROM contact_opportunities WHERE contact_opportunities.contact_id = contacts.id AND contact_opportunities.opportunity_id = opportunities.id) ORDER BY contacts.name, contacts.id", values: [.text(opportunityID)]).map(contact(from:))
+            return try database.rows(contactSelect + " FROM contacts JOIN opportunities ON lower(trim(contacts.employer)) = lower(trim(opportunities.company)) WHERE opportunities.id = ? AND contacts.deleted_at IS NULL AND trim(contacts.employer) != '' AND NOT EXISTS (SELECT 1 FROM contact_opportunities WHERE contact_opportunities.contact_id = contacts.id AND contact_opportunities.opportunity_id = opportunities.id) ORDER BY contacts.name, contacts.id", values: [.text(opportunityID)]).map(contact(from:))
         }
     }
 
@@ -1402,6 +1464,19 @@ final class WorkspaceStore {
         return opportunityID
     }
 
+    /// Called only while the stage-move transaction and workspace lock are held.
+    private func stageMoveProjection(opportunityID: String, attentionNow: Date) throws -> PipelineStageMoveProjection {
+        let calendar = Calendar(identifier: .gregorian)
+        let startOfToday = calendar.startOfDay(for: attentionNow)
+        let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
+        return try PipelineStageMoveProjection(
+            opportunities: database.rows(opportunitySelect + " FROM opportunities WHERE deleted_at IS NULL ORDER BY created_at, id").map(opportunity(from:)),
+            activityEvents: database.rows("SELECT id, kind, opportunity_id, contact_id, actor_id, correlation_id, occurred_at FROM activity_events ORDER BY occurred_at, rowid").map(activityEvent(from:)),
+            needsAttention: database.rows("SELECT task_reminders.id, task_reminders.opportunity_id, task_reminders.title, task_reminders.due_at, task_reminders.is_complete, EXISTS (SELECT 1 FROM reconciliation_reviews WHERE reconciliation_reviews.task_reminder_id = task_reminders.id) FROM task_reminders JOIN opportunities ON opportunities.id = task_reminders.opportunity_id WHERE task_reminders.is_complete = 0 AND opportunities.deleted_at IS NULL AND opportunities.stage != 'Closed' ORDER BY CASE WHEN task_reminders.due_at IS NULL THEN 4 WHEN task_reminders.due_at < ? THEN 1 WHEN task_reminders.due_at < ? THEN 2 ELSE 3 END, task_reminders.due_at, task_reminders.id", values: [.real(startOfToday.timeIntervalSince1970), .real(startOfTomorrow.timeIntervalSince1970)]).map(task(from:)),
+            stageHistoryForTransition: database.rows("SELECT id, opportunity_id, from_stage, to_stage, occurred_at FROM opportunity_stage_history WHERE opportunity_id = ? ORDER BY occurred_at ASC, id ASC", values: [.text(opportunityID)]).map(stageHistoryEntry(from:))
+        )
+    }
+
     private func activeOpportunityStage(id: String) throws -> PipelineStage {
         guard case let .text(stageValue)? = try database.rows("SELECT stage FROM opportunities WHERE id = ? AND deleted_at IS NULL", values: [.text(id)]).first?.first,
               let stage = PipelineStage(rawValue: stageValue) else {
@@ -1450,19 +1525,7 @@ final class WorkspaceStore {
 
     private func isValidContactProfileURL(_ value: String) -> Bool {
         guard !value.isEmpty else { return true }
-        guard let components = URLComponents(string: value),
-              let scheme = components.scheme?.lowercased(),
-              ["http", "https"].contains(scheme),
-              let host = components.host,
-              isPublicHostname(host) else {
-            return false
-        }
-        return true
-    }
-
-    private func isPublicHostname(_ host: String) -> Bool {
-        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
-        return labels.count > 1 && labels.allSatisfy { !$0.isEmpty }
+        return PublicProfileURLValidator.isValid(value)
     }
 
     private func isHostfulAbsoluteURL(_ value: String) -> Bool {
@@ -1510,25 +1573,31 @@ final class WorkspaceStore {
     private func validatedContact(id: String?, command: CreateContact) throws -> Contact {
         let name = command.name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw WorkspaceStoreError.invalidContact }
-        let email = command.email.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isValidContactEmail(email) else { throw WorkspaceStoreError.invalidContactEmail }
-        let profileURL = command.profileURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isValidContactProfileURL(profileURL) else { throw WorkspaceStoreError.invalidContactProfileURL }
+        let workEmail = command.workEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard ContactEmailValidator.isValid(workEmail) else { throw WorkspaceStoreError.invalidContactWorkEmail }
+        let personalEmail = command.personalEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard ContactEmailValidator.isValid(personalEmail) else { throw WorkspaceStoreError.invalidContactPersonalEmail }
+        let linkedInURL = command.linkedInURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isValidContactProfileURL(linkedInURL) else { throw WorkspaceStoreError.invalidContactSocialURL }
+        let instagramURL = command.instagramURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isValidContactProfileURL(instagramURL) else { throw WorkspaceStoreError.invalidContactSocialURL }
+        let facebookURL = command.facebookURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isValidContactProfileURL(facebookURL) else { throw WorkspaceStoreError.invalidContactSocialURL }
         return Contact(
             id: id ?? "",
             name: name,
             employer: command.employer.trimmingCharacters(in: .whitespacesAndNewlines),
             title: command.title.trimmingCharacters(in: .whitespacesAndNewlines),
-            email: email,
-            profileURL: profileURL,
+            workEmail: workEmail,
+            personalEmail: personalEmail,
+            mobilePhone: command.mobilePhone.trimmingCharacters(in: .whitespacesAndNewlines),
+            officePhone: command.officePhone.trimmingCharacters(in: .whitespacesAndNewlines),
+            linkedInURL: linkedInURL,
+            instagramURL: instagramURL,
+            facebookURL: facebookURL,
             relationshipContext: command.relationshipContext.trimmingCharacters(in: .whitespacesAndNewlines),
             notes: command.notes.trimmingCharacters(in: .whitespacesAndNewlines)
         )
-    }
-
-    private func isValidContactEmail(_ value: String) -> Bool {
-        guard !value.isEmpty else { return true }
-        return value.range(of: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", options: .regularExpression) != nil
     }
 
     private func normalizedOpportunityKey(title: String, company: String) -> String {
@@ -1629,18 +1698,26 @@ final class WorkspaceStore {
     }
 
     private func task(from row: [DatabaseValue]) throws -> TaskReminder {
-        guard row.count == 5, case let .text(id) = row[0], case let .text(opportunityID) = row[1], case let .text(title) = row[2], case let .integer(isComplete) = row[4] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+        guard (row.count == 5 || row.count == 6), case let .text(id) = row[0], case let .text(opportunityID) = row[1], case let .text(title) = row[2], case let .integer(isComplete) = row[4] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
         let dueAt: Date?
         if case let .real(value) = row[3] { dueAt = Date(timeIntervalSince1970: value) } else { dueAt = nil }
-        return TaskReminder(id: id, opportunityID: opportunityID, title: title, dueAt: dueAt, isComplete: isComplete != 0)
+        let requiresClosureConfirmation: Bool
+        if row.count == 6, case let .integer(value) = row[5] {
+            requiresClosureConfirmation = value != 0
+        } else {
+            requiresClosureConfirmation = false
+        }
+        return TaskReminder(id: id, opportunityID: opportunityID, title: title, dueAt: dueAt, isComplete: isComplete != 0, requiresClosureConfirmation: requiresClosureConfirmation)
     }
 
     private func contact(from row: [DatabaseValue]) throws -> Contact {
-        guard row.count == 8,
+        guard row.count == 13,
               case let .text(id) = row[0], case let .text(name) = row[1], case let .text(employer) = row[2],
-              case let .text(title) = row[3], case let .text(email) = row[4], case let .text(profileURL) = row[5],
-              case let .text(relationshipContext) = row[6], case let .text(notes) = row[7] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
-        return Contact(id: id, name: name, employer: employer, title: title, email: email, profileURL: profileURL, relationshipContext: relationshipContext, notes: notes)
+              case let .text(title) = row[3], case let .text(workEmail) = row[4], case let .text(personalEmail) = row[5],
+              case let .text(mobilePhone) = row[6], case let .text(officePhone) = row[7], case let .text(linkedInURL) = row[8],
+              case let .text(instagramURL) = row[9], case let .text(facebookURL) = row[10],
+              case let .text(relationshipContext) = row[11], case let .text(notes) = row[12] else { throw WorkspaceStoreError.unexpectedDatabaseValue }
+        return Contact(id: id, name: name, employer: employer, title: title, workEmail: workEmail, personalEmail: personalEmail, mobilePhone: mobilePhone, officePhone: officePhone, linkedInURL: linkedInURL, instagramURL: instagramURL, facebookURL: facebookURL, relationshipContext: relationshipContext, notes: notes)
     }
 
     private func interaction(from row: [DatabaseValue]) throws -> Interaction {

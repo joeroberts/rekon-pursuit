@@ -582,6 +582,35 @@ enum PipelineStage: String, CaseIterable, Equatable {
     case closed = "Closed"
 }
 
+enum StageMoveStoreOutcome: Equatable {
+    case persisted(PipelineStageMoveCommit)
+    case noOp(opportunityID: String, stage: PipelineStage)
+    case reconciliationBlocked(opportunityID: String, target: PipelineStage)
+    case unavailable(opportunityID: String)
+}
+
+/// An internal, test-only transaction failure seam for the persisted stage-move
+/// command. It is supplied through `WorkspaceStore` construction and is never
+/// derived from workspace data or presentation state.
+enum StageMoveFailurePoint: Equatable {
+    case beforeWrite
+    case beforeProjectionRead
+}
+
+struct PipelineStageMoveCommit: Equatable {
+    let opportunityID: String
+    let from: PipelineStage
+    let to: PipelineStage
+    let projection: PipelineStageMoveProjection
+}
+
+struct PipelineStageMoveProjection: Equatable {
+    let opportunities: [Opportunity]
+    let activityEvents: [ActivityEvent]
+    let needsAttention: [TaskReminder]
+    let stageHistoryForTransition: [StageHistoryEntry]
+}
+
 struct StageHistoryEntry: Equatable {
     let id: String
     let opportunityID: String
@@ -596,6 +625,81 @@ struct TaskReminder: Equatable {
     let title: String
     let dueAt: Date?
     let isComplete: Bool
+    /// Reconciliation review tasks are complete only through an explicit
+    /// closure confirmation. The UI must not offer the ordinary complete
+    /// command for these tasks.
+    let requiresClosureConfirmation: Bool
+
+    init(
+        id: String,
+        opportunityID: String,
+        title: String,
+        dueAt: Date?,
+        isComplete: Bool,
+        requiresClosureConfirmation: Bool = false
+    ) {
+        self.id = id
+        self.opportunityID = opportunityID
+        self.title = title
+        self.dueAt = dueAt
+        self.isComplete = isComplete
+        self.requiresClosureConfirmation = requiresClosureConfirmation
+    }
+}
+
+enum ContactEmailValidator {
+    private static let maximumAddressByteCount = 254
+    private static let maximumLocalPartByteCount = 64
+    private static let maximumDomainByteCount = 253
+    private static let maximumDomainLabelByteCount = 63
+
+    static func isValid(_ value: String) -> Bool {
+        guard !value.isEmpty else { return true }
+        guard value.utf8.count <= maximumAddressByteCount else { return false }
+
+        let parts = value.split(separator: "@", omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return false }
+        let localPart = parts[0]
+        let domain = parts[1]
+        guard !localPart.isEmpty,
+              localPart.utf8.count <= maximumLocalPartByteCount,
+              !localPart.hasPrefix("."),
+              !localPart.hasSuffix("."),
+              !localPart.contains(".."),
+              localPart.unicodeScalars.allSatisfy(isAllowedLocalPartCharacter) else { return false }
+        guard domain.utf8.count <= maximumDomainByteCount else { return false }
+
+        let labels = domain.split(separator: ".", omittingEmptySubsequences: false)
+        guard labels.count >= 2, labels.allSatisfy(isValidDomainLabel),
+              let publicLabel = labels.last,
+              publicLabel.unicodeScalars.allSatisfy(isASCIIAlpha) else { return false }
+        return true
+    }
+
+    private static func isAllowedLocalPartCharacter(_ scalar: UnicodeScalar) -> Bool {
+        switch scalar.value {
+        case 43, 45, 46, 95:
+            return true
+        default:
+            return isASCIIAlphanumeric(scalar)
+        }
+    }
+
+    private static func isValidDomainLabel(_ label: Substring) -> Bool {
+        guard !label.isEmpty, label.utf8.count <= maximumDomainLabelByteCount,
+              let first = label.unicodeScalars.first,
+              let last = label.unicodeScalars.last,
+              isASCIIAlphanumeric(first), isASCIIAlphanumeric(last) else { return false }
+        return label.unicodeScalars.allSatisfy { isASCIIAlphanumeric($0) || $0.value == 45 }
+    }
+
+    private static func isASCIIAlphanumeric(_ scalar: UnicodeScalar) -> Bool {
+        isASCIIAlpha(scalar) || (48...57).contains(scalar.value)
+    }
+
+    private static func isASCIIAlpha(_ scalar: UnicodeScalar) -> Bool {
+        (65...90).contains(scalar.value) || (97...122).contains(scalar.value)
+    }
 }
 
 struct Contact: Equatable {
@@ -603,8 +707,13 @@ struct Contact: Equatable {
     let name: String
     let employer: String
     let title: String
-    let email: String
-    let profileURL: String
+    let workEmail: String
+    let personalEmail: String
+    let mobilePhone: String
+    let officePhone: String
+    let linkedInURL: String
+    let instagramURL: String
+    let facebookURL: String
     let relationshipContext: String
     let notes: String
 }
@@ -613,17 +722,40 @@ struct CreateContact {
     let name: String
     let employer: String
     let title: String
-    let email: String
-    let profileURL: String
+    let workEmail: String
+    let personalEmail: String
+    let mobilePhone: String
+    let officePhone: String
+    let linkedInURL: String
+    let instagramURL: String
+    let facebookURL: String
     let relationshipContext: String
     let notes: String
 
-    init(name: String, employer: String = "", title: String = "", email: String = "", profileURL: String = "", relationshipContext: String = "", notes: String = "") {
+    init(
+        name: String,
+        employer: String = "",
+        title: String = "",
+        workEmail: String = "",
+        personalEmail: String = "",
+        mobilePhone: String = "",
+        officePhone: String = "",
+        linkedInURL: String = "",
+        instagramURL: String = "",
+        facebookURL: String = "",
+        relationshipContext: String = "",
+        notes: String = ""
+    ) {
         self.name = name
         self.employer = employer
         self.title = title
-        self.email = email
-        self.profileURL = profileURL
+        self.workEmail = workEmail
+        self.personalEmail = personalEmail
+        self.mobilePhone = mobilePhone
+        self.officePhone = officePhone
+        self.linkedInURL = linkedInURL
+        self.instagramURL = instagramURL
+        self.facebookURL = facebookURL
         self.relationshipContext = relationshipContext
         self.notes = notes
     }
@@ -783,8 +915,9 @@ enum WorkspaceStoreError: Error, LocalizedError {
     case unexpectedDatabaseValue
     case unresolvedImportDecision
     case invalidContact
-    case invalidContactEmail
-    case invalidContactProfileURL
+    case invalidContactWorkEmail
+    case invalidContactPersonalEmail
+    case invalidContactSocialURL
     case invalidInteraction
     case invalidReconciliationResult
     case closureNotConfirmed
@@ -811,10 +944,12 @@ enum WorkspaceStoreError: Error, LocalizedError {
             return "Choose Skip or Keep separate for each duplicate CSV row."
         case .invalidContact:
             return "Enter a contact name."
-        case .invalidContactEmail:
-            return "Enter an email address with a local part, @, and domain."
-        case .invalidContactProfileURL:
-            return "Enter an absolute http or https profile URL with a public hostname."
+        case .invalidContactWorkEmail:
+            return "Enter a work email address with a local part, @, and domain."
+        case .invalidContactPersonalEmail:
+            return "Enter a personal email address with a local part, @, and domain."
+        case .invalidContactSocialURL:
+            return "Enter an absolute http or https social profile URL with a public hostname."
         case .invalidInteraction:
             return "Enter an interaction summary and choose a valid linked opportunity."
         case .invalidReconciliationResult:

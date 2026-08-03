@@ -36,6 +36,125 @@ final class RekonPursuitUITests: XCTestCase {
     }
 
     @MainActor
+    private func openContactsFixture(
+        windowSize: String = "wide",
+        fixture: String = "contacts",
+        session: String? = nil
+    ) -> XCUIApplication {
+        let app = launchApp(fixture: fixture, windowSize: windowSize, session: session)
+        let contacts = app.descendants(matching: .any)["sidebar-contacts"]
+        XCTAssertTrue(contacts.waitForExistence(timeout: 5), "Contacts navigation must be available in the ready fixture.")
+        contacts.tap()
+        XCTAssertTrue(contacts.isSelected, "The Contacts route must become selected before presentation contracts are evaluated.")
+        XCTAssertTrue(app.textFields["contact-search"].waitForExistence(timeout: 5), "The existing Contacts route must load before a VD2-06 presentation RED can qualify.")
+        return app
+    }
+
+    @MainActor
+    private func replaceText(in field: XCUIElement, with value: String) {
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "Expected the named field before replacing its value.")
+        field.click()
+        field.typeKey("a", modifierFlags: [.command])
+        field.typeText(value)
+    }
+
+    @MainActor
+    private func activityEvidence(named prefix: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["sidebar-activity-and-ai"].tap()
+        XCTAssertTrue(app.textFields["activity-search"].waitForExistence(timeout: 5), "Expected the real local Activity & AI ledger.")
+        return app.staticTexts
+            .matching(NSPredicate(format: "value BEGINSWITH %@", prefix))
+            .firstMatch
+    }
+
+    @MainActor
+    private func tabToKeyboardFocus(
+        _ target: XCUIElement,
+        in app: XCUIApplication,
+        maximumTabPresses: Int
+    ) -> Bool {
+        for _ in 0...maximumTabPresses {
+            if (target.value as? String ?? "").contains("Keyboard focus") {
+                return true
+            }
+            app.typeKey(.tab, modifierFlags: [])
+            let focusExpectation = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value CONTAINS %@", "Keyboard focus"),
+                object: target
+            )
+            if XCTWaiter().wait(for: [focusExpectation], timeout: 0.2) == .completed {
+                return true
+            }
+        }
+        return false
+    }
+
+    @MainActor
+    private func recordUnrenderedVisualSelectors(
+        _ selectors: [String],
+        in app: XCUIApplication
+    ) -> Bool {
+        var isMissingAnySelector = false
+        for selector in selectors {
+            let exactMatches = app.descendants(matching: .any)
+                .matching(NSPredicate(format: "identifier == %@", selector))
+                .count
+            let isRendered = exactMatches > 0
+                || (selector == "settings-reference-tab-strip"
+                    && app.descendants(matching: .any)["settings-secondary-navigation"].exists)
+                || (selector == "settings-reference-tab-recovery-archives"
+                    && app.buttons["settings-section-recovery-archives"].exists)
+            if !isRendered {
+                isMissingAnySelector = true
+                XCTFail("VD2-07x RED: unrendered visual selector \(selector)")
+            }
+        }
+        return isMissingAnySelector
+    }
+
+    @MainActor
+    private func assertNoActionableDescendants(
+        in element: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        for elementType in [XCUIElement.ElementType.button, .link, .menuButton, .textField, .switch, .checkBox] {
+            XCTAssertEqual(element.descendants(matching: elementType).count, 0, file: file, line: line)
+        }
+    }
+
+    @MainActor
+    private func assertNoDisclosedSettingsSentinels(
+        _ sentinels: [String],
+        in element: XCUIElement,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        for sentinel in sentinels {
+            let disclosed = element.descendants(matching: .any).matching(
+                NSPredicate(format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@", sentinel, sentinel)
+            ).firstMatch
+            XCTAssertFalse(disclosed.exists, "Settings disclosed \(sentinel).", file: file, line: line)
+        }
+    }
+
+    @MainActor
+    private func attachContactsPresentationScreenshot(_ app: XCUIApplication, named name: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
+    private func attachSettingsPresentationScreenshot(_ app: XCUIApplication, named name: String) {
+        let attachment = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
     private func openPipelineBoard(in app: XCUIApplication) {
         app.descendants(matching: .any)["sidebar-pipeline"].tap()
         let viewMode = app.descendants(matching: .any)["pipeline-view-mode"]
@@ -77,6 +196,23 @@ final class RekonPursuitUITests: XCTestCase {
         let item = app.menuItems[target]
         XCTAssertTrue(item.waitForExistence(timeout: 5))
         item.click()
+    }
+
+    @MainActor
+    private func canonicalStageSubmenu(from moveItem: XCUIElement) -> XCUIElement {
+        let expectedTargets = ["Saved", "Applied", "Screening", "Interviewing", "Offer", "Closed"]
+        let stageMenu = moveItem.descendants(matching: .menu).firstMatch
+        XCTAssertTrue(
+            stageMenu.waitForExistence(timeout: 5),
+            "Expected Move to stage… to expose its canonical submenu."
+        )
+        let directItems = stageMenu.children(matching: .menuItem)
+        XCTAssertEqual(directItems.count, expectedTargets.count)
+        for (index, title) in expectedTargets.enumerated() {
+            XCTAssertEqual(directItems.element(boundBy: index).label, title)
+        }
+        XCTAssertTrue(directItems["Saved"].isSelected)
+        return stageMenu
     }
 
     @MainActor
@@ -781,15 +917,10 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertEqual(outerMenu.menuItems.count, 2)
         XCTAssertEqual(outerMenu.menuItems.element(boundBy: 0).label, "Edit opportunity")
         XCTAssertEqual(outerMenu.menuItems.element(boundBy: 1).label, "Move to stage…")
-        move.click()
-        let expectedTargets = ["Saved", "Applied", "Screening", "Interviewing", "Offer", "Closed"]
-        let stageMenu = app.menus.containing(.menuItem, identifier: "Screening").firstMatch
+        move.hover()
+        XCTAssertTrue(app.menuItems["Saved"].waitForExistence(timeout: 5))
+        let stageMenu = canonicalStageSubmenu(from: move)
         XCTAssertTrue(stageMenu.waitForExistence(timeout: 5))
-        XCTAssertEqual(stageMenu.menuItems.count, expectedTargets.count)
-        for (index, title) in expectedTargets.enumerated() {
-            XCTAssertEqual(stageMenu.menuItems.element(boundBy: index).label, title)
-        }
-        XCTAssertTrue(stageMenu.menuItems["Saved"].isSelected)
         app.typeKey(.escape, modifierFlags: [])
         app.typeKey(.escape, modifierFlags: [])
 
@@ -985,14 +1116,10 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertTrue(app.menuItems["Edit opportunity"].waitForExistence(timeout: 5))
         let move = app.menuItems["Move to stage…"]
         XCTAssertTrue(move.exists)
-        move.click()
-        let expectedTargets = ["Saved", "Applied", "Screening", "Interviewing", "Offer", "Closed"]
-        let presentedMenu = app.menus.containing(.menuItem, identifier: "Screening").firstMatch
+        move.hover()
+        XCTAssertTrue(app.menuItems["Saved"].waitForExistence(timeout: 5))
+        let presentedMenu = canonicalStageSubmenu(from: move)
         XCTAssertTrue(presentedMenu.waitForExistence(timeout: 5))
-        for target in expectedTargets {
-            XCTAssertTrue(presentedMenu.menuItems[target].waitForExistence(timeout: 5))
-        }
-        XCTAssertEqual(presentedMenu.menuItems.count, expectedTargets.count)
         app.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(app.descendants(matching: .any)["pipeline-stage-move-outcome"].waitForNonExistence(timeout: 1))
     }
@@ -2222,6 +2349,331 @@ final class RekonPursuitUITests: XCTestCase {
     }
 
     @MainActor
+    func testVD206ContactsWideMasterDetailContract() {
+        // This catches a Contacts redesign that omits the named wide regions,
+        // independent scroll containers, selected-row value, or explicit
+        // action controls required for a usable master-detail presentation.
+        let app = openContactsFixture()
+        defer { attachContactsPresentationScreenshot(app, named: "VD2-06 Contacts wide master-detail RED") }
+
+        XCTAssertTrue(app.descendants(matching: .any)["contact-wide-master-detail"].waitForExistence(timeout: 2), "Missing VD2-06 wide Contacts master-detail region.")
+        XCTAssertTrue(app.descendants(matching: .any)["contact-list-scroll"].exists, "Missing VD2-06 independently scrollable contact list region.")
+        XCTAssertTrue(app.descendants(matching: .any)["contact-detail-scroll"].exists, "Missing VD2-06 independently scrollable contact detail region.")
+        XCTAssertTrue(app.descendants(matching: .any)["contact-row-contacts-primary"].exists, "Missing VD2-06 Contacts Primary row identifier.")
+        XCTAssertEqual(app.descendants(matching: .any)["contact-row-contacts-primary"].value as? String, "Selected", "Missing non-color selected Contacts Primary value.")
+        XCTAssertTrue(app.buttons["contact-new"].exists, "Missing VD2-06 New contact control.")
+        XCTAssertTrue(app.buttons["contact-edit"].exists, "Missing VD2-06 Edit contact control.")
+        XCTAssertTrue(app.buttons["contact-overflow"].exists, "Missing VD2-06 contact overflow control.")
+        XCTAssertTrue(app.buttons["contact-related-disclosure"].exists, "Missing VD2-06 related-opportunities disclosure control.")
+        XCTAssertTrue(app.buttons["contact-manage-related"].exists, "Missing VD2-06 Manage related opportunities control.")
+    }
+
+    @MainActor
+    func testVD206ContactsCompactDetailBackContract() {
+        // This catches a compact Contacts route that leaves the master pane in
+        // place, has no named Back control, or cannot restore focus to the
+        // selected source row after returning.
+        let app = openContactsFixture(windowSize: "compact")
+        defer { attachContactsPresentationScreenshot(app, named: "VD2-06 Contacts compact detail RED") }
+
+        XCTAssertTrue(app.descendants(matching: .any)["contact-row-contacts-primary"].waitForExistence(timeout: 2), "Missing VD2-06 compact Contacts Primary row identifier.")
+        app.descendants(matching: .any)["contact-row-contacts-primary"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["contact-compact-detail"].waitForExistence(timeout: 2), "Missing VD2-06 compact detail replacement region.")
+        XCTAssertTrue(app.buttons["contact-detail-back"].exists, "Missing VD2-06 compact Back control.")
+        XCTAssertEqual(app.descendants(matching: .any)["contact-focus-return"].value as? String, "Contacts Primary", "Missing VD2-06 focus-return state for Contacts Primary.")
+    }
+
+    @MainActor
+    func testVD206ContactsTruthfulEmptyStatesContract() {
+        // This catches an empty or filtered Contacts route that fabricates a
+        // selected record or leaves no stable, named state for empty results
+        // and unlinked related-opportunity management.
+        let emptyApp = openContactsFixture(fixture: "contacts-empty")
+        defer { attachContactsPresentationScreenshot(emptyApp, named: "VD2-06 Contacts truthful empty states RED") }
+
+        XCTAssertTrue(emptyApp.descendants(matching: .any)["contact-empty-state"].waitForExistence(timeout: 2), "Missing VD2-06 empty Contacts state.")
+        XCTAssertTrue(emptyApp.descendants(matching: .any)["contact-no-selection-state"].exists, "Missing VD2-06 no-selection Contacts state.")
+        XCTAssertTrue(emptyApp.descendants(matching: .any)["contact-related-opportunities-empty-state"].exists, "Missing VD2-06 no-related-opportunities state.")
+
+        let populatedApp = openContactsFixture(fixture: "contacts")
+        defer { attachContactsPresentationScreenshot(populatedApp, named: "VD2-06 Contacts no-results state RED") }
+        let search = populatedApp.textFields["contact-search"]
+        search.click()
+        search.typeText("No matching contact")
+        XCTAssertTrue(populatedApp.descendants(matching: .any)["contact-no-results-state"].waitForExistence(timeout: 2), "Missing VD2-06 Contacts no-results state.")
+    }
+
+    @MainActor
+    func testVD206ContactsEditCancelSaveAndRelaunchContract() {
+        // This catches a Contact editor that writes on Cancel, loses a valid
+        // save across a fresh process, or omits the existing local activity
+        // evidence for the real persistence path.
+        let session = "vd206-contact-editor-\(UUID().uuidString)"
+        var app = openContactsFixture(session: session)
+        let primaryRow = app.descendants(matching: .any)["contact-row-contacts-primary"]
+        XCTAssertTrue(primaryRow.waitForExistence(timeout: 5))
+
+        app.buttons["contact-edit"].click()
+        replaceText(in: app.textFields["contact-name"], with: "Cancelled edit")
+        app.buttons["Cancel"].click()
+        XCTAssertTrue(primaryRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            (primaryRow.value as? String ?? "").hasPrefix("Selected"),
+            "Cancelling an edit must retain the selected state even when keyboard focus is also exposed."
+        )
+
+        app.buttons["contact-new"].click()
+        replaceText(in: app.textFields["contact-name"], with: "Cancelled new contact")
+        app.buttons["Cancel"].click()
+        XCTAssertFalse(app.descendants(matching: .any)["contact-row-cancelled-new-contact"].exists)
+
+        app.buttons["contact-new"].click()
+        replaceText(in: app.textFields["contact-name"], with: "Contacts Saved")
+        app.buttons["save-contact"].click()
+        XCTAssertTrue(app.descendants(matching: .any)["contact-row-contacts-saved"].waitForExistence(timeout: 5))
+
+        app.terminate()
+        app = openContactsFixture(session: session)
+        XCTAssertTrue(app.descendants(matching: .any)["contact-row-contacts-primary"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.descendants(matching: .any)["contact-row-cancelled-new-contact"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["contact-row-contacts-saved"].exists)
+        XCTAssertTrue(
+            activityEvidence(named: "Contact Created", in: app).waitForExistence(timeout: 5),
+            "A valid Contact save must retain the existing local create activity after relaunch."
+        )
+    }
+
+    @MainActor
+    func testVD206ContactChannelsEditorAndDetailActionsContract() {
+        // This catches a missing editor channel, a channel value that does not
+        // survive the real save/relaunch path, or detail actions exposed for
+        // an empty channel.
+        let session = "vd206-contact-channels-\(UUID().uuidString)"
+        var app = openContactsFixture(session: session)
+        let primaryRow = app.descendants(matching: .any)["contact-row-contacts-primary"]
+        XCTAssertTrue(primaryRow.waitForExistence(timeout: 5))
+        primaryRow.click()
+        app.buttons["contact-edit"].click()
+        for identifier in ["contact-work-email", "contact-personal-email", "contact-mobile-phone", "contact-office-phone", "contact-linkedin", "contact-instagram", "contact-facebook"] {
+            XCTAssertTrue(app.textFields[identifier].waitForExistence(timeout: 5), "Missing Contact channel editor \(identifier).")
+        }
+        replaceText(in: app.textFields["contact-work-email"], with: "saved.work@example.test")
+        replaceText(in: app.textFields["contact-personal-email"], with: "saved.personal@example.test")
+        replaceText(in: app.textFields["contact-mobile-phone"], with: "+1 212 555 0191")
+        replaceText(in: app.textFields["contact-office-phone"], with: "+1 212 555 0192")
+        replaceText(in: app.textFields["contact-linkedin"], with: "https://linkedin.example.test/in/saved")
+        replaceText(in: app.textFields["contact-instagram"], with: "https://instagram.example.test/saved")
+        replaceText(in: app.textFields["contact-facebook"], with: "https://facebook.example.test/saved")
+        app.buttons["save-contact"].click()
+
+        app.terminate()
+        app = openContactsFixture(session: session)
+        app.descendants(matching: .any)["contact-row-contacts-primary"].click()
+        for label in [
+            "Work email for Contacts Primary: saved.work@example.test",
+            "Personal email for Contacts Primary: saved.personal@example.test",
+            "Mobile phone for Contacts Primary: +1 212 555 0191",
+            "Office phone for Contacts Primary: +1 212 555 0192",
+            "LinkedIn for Contacts Primary: https://linkedin.example.test/in/saved",
+            "Instagram for Contacts Primary: https://instagram.example.test/saved",
+            "Facebook for Contacts Primary: https://facebook.example.test/saved"
+        ] {
+            XCTAssertTrue(app.links.matching(NSPredicate(format: "label == %@", label)).firstMatch.waitForExistence(timeout: 5), "Missing populated Contact action \(label).")
+        }
+
+        app.descendants(matching: .any)["contact-row-contacts-secondary"].click()
+        XCTAssertEqual(app.links.matching(NSPredicate(format: "label CONTAINS %@", "for Contacts Secondary:")).count, 0, "Empty Contact channels must not expose detail actions.")
+    }
+
+    @MainActor
+    func testVD206ContactsRelatedOpportunitiesAndAssociationContract() {
+        // This catches related-opportunity browsing that writes implicitly or
+        // Link/Unlink commands that fail to use the persisted association and
+        // existing local audit path.
+        let session = "vd206-contact-association-\(UUID().uuidString)"
+        var app = openContactsFixture(session: session)
+        let disclosure = app.buttons["contact-related-disclosure"]
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 5))
+        disclosure.click()
+        XCTAssertTrue((disclosure.value as? String ?? "").hasPrefix("Expanded"))
+        XCTAssertTrue(app.buttons["Open"].waitForExistence(timeout: 5))
+        app.buttons["Open"].click()
+        XCTAssertTrue(app.buttons["Back to Pipeline"].waitForExistence(timeout: 5), "Open must use the canonical opportunity route.")
+        app.descendants(matching: .any)["sidebar-contacts"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["contact-row-contacts-primary"].waitForExistence(timeout: 5))
+
+        app.buttons["contact-manage-related"].click()
+        XCTAssertTrue(app.buttons["Link"].waitForExistence(timeout: 5))
+        app.buttons["Link"].click()
+        app.buttons["Done"].click()
+
+        app.terminate()
+        app = openContactsFixture(session: session)
+        app.buttons["contact-related-disclosure"].click()
+        XCTAssertEqual(app.buttons.matching(identifier: "Open").count, 2, "Explicit Link must persist the second fixture association after relaunch.")
+        XCTAssertTrue(
+            activityEvidence(named: "Contact Linked", in: app).waitForExistence(timeout: 5),
+            "Explicit Link must retain existing local activity evidence after relaunch."
+        )
+
+        app.descendants(matching: .any)["sidebar-contacts"].tap()
+        XCTAssertTrue(app.buttons["contact-manage-related"].waitForExistence(timeout: 5))
+        app.buttons["contact-manage-related"].click()
+        let unlink = app.buttons["Unlink"].firstMatch
+        XCTAssertTrue(unlink.waitForExistence(timeout: 5))
+        unlink.click()
+        app.buttons["Done"].click()
+
+        app.terminate()
+        app = openContactsFixture(session: session)
+        XCTAssertTrue(
+            activityEvidence(named: "Contact Unlinked", in: app).waitForExistence(timeout: 5),
+            "Explicit Unlink must retain existing local activity evidence after relaunch."
+        )
+        app.descendants(matching: .any)["sidebar-contacts"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["contact-row-contacts-primary"].waitForExistence(timeout: 5))
+        let persistedDisclosure = app.buttons["contact-related-disclosure"]
+        XCTAssertTrue(persistedDisclosure.waitForExistence(timeout: 5))
+        persistedDisclosure.click()
+        XCTAssertEqual(
+            app.buttons.matching(identifier: "Open").count,
+            1,
+            "Explicit Unlink must leave exactly one persisted related-opportunity Open action after relaunch."
+        )
+    }
+
+    @MainActor
+    func testVD206ContactsDeleteSafetyContract() {
+        // This catches a destructive flow that writes on cancellation or
+        // leaves a deleted Contact selected in the detail/relationship state.
+        let cancelSession = "vd206-contact-delete-cancel-\(UUID().uuidString)"
+        var cancelApp = openContactsFixture(session: cancelSession)
+        let cancelRow = cancelApp.descendants(matching: .any)["contact-row-contacts-primary"]
+        XCTAssertTrue(cancelRow.waitForExistence(timeout: 5))
+        cancelApp.buttons["contact-overflow"].click()
+        let cancelDeleteContact = cancelApp.sheets.buttons["Delete contact"].firstMatch
+        XCTAssertTrue(cancelDeleteContact.waitForExistence(timeout: 5))
+        cancelDeleteContact.click()
+        let cancelConfirmation = cancelApp.sheets.buttons["Cancel"]
+        XCTAssertTrue(cancelConfirmation.waitForExistence(timeout: 5))
+        cancelConfirmation.click()
+        XCTAssertTrue(cancelRow.waitForExistence(timeout: 5))
+        XCTAssertEqual(cancelRow.value as? String, "Selected")
+        cancelApp.terminate()
+        cancelApp = openContactsFixture(session: cancelSession)
+        XCTAssertTrue(cancelApp.descendants(matching: .any)["contact-row-contacts-primary"].waitForExistence(timeout: 5))
+
+        let confirmSession = "vd206-contact-delete-confirm-\(UUID().uuidString)"
+        var confirmApp = openContactsFixture(session: confirmSession)
+        confirmApp.buttons["contact-overflow"].click()
+        let confirmDeleteContact = confirmApp.sheets.buttons["Delete contact"].firstMatch
+        XCTAssertTrue(confirmDeleteContact.waitForExistence(timeout: 5))
+        confirmDeleteContact.click()
+        let confirmDeletion = confirmApp.sheets.buttons["Delete"]
+        XCTAssertTrue(confirmDeletion.waitForExistence(timeout: 5))
+        confirmDeletion.click()
+        XCTAssertTrue(confirmApp.descendants(matching: .any)["contact-row-contacts-primary"].waitForNonExistence(timeout: 5))
+        XCTAssertFalse(confirmApp.staticTexts["Contacts Primary"].exists, "A confirmed deletion must remove the stale selected detail.")
+        confirmApp.terminate()
+        confirmApp = openContactsFixture(session: confirmSession)
+        XCTAssertFalse(confirmApp.descendants(matching: .any)["contact-row-contacts-primary"].exists)
+        XCTAssertTrue(
+            activityEvidence(named: "Contact Deleted", in: confirmApp).waitForExistence(timeout: 5),
+            "Confirmed deletion must retain existing local deletion activity after relaunch."
+        )
+    }
+
+    @MainActor
+    func testVD206ContactsErrorAccessibilityContract() {
+        // This catches a validation failure that hides the draft/recovery
+        // controls, lacks a named accessible error, or confuses normalized
+        // duplicate Contact rows in the accessibility tree.
+        let session = "vd206-contact-accessibility-\(UUID().uuidString)"
+        let app = openContactsFixture(session: session)
+        let primaryRow = app.descendants(matching: .any)["contact-row-contacts-primary"]
+        XCTAssertTrue(primaryRow.waitForExistence(timeout: 5))
+        XCTAssertEqual(primaryRow.value as? String, "Selected")
+
+        let disclosure = app.buttons["contact-related-disclosure"]
+        disclosure.click()
+        XCTAssertTrue((disclosure.value as? String ?? "").hasPrefix("Expanded"), "Disclosure state needs an accessible non-color value.")
+
+        app.buttons["contact-new"].click()
+        replaceText(in: app.textFields["contact-name"], with: "Contacts Primary")
+        replaceText(in: app.textFields["contact-work-email"], with: "invalid@")
+        app.buttons["save-contact"].click()
+        let error = app.descendants(matching: .any)["contact-operation-error"]
+        XCTAssertTrue(error.waitForExistence(timeout: 5))
+        XCTAssertFalse(error.label.isEmpty)
+        XCTAssertTrue(app.buttons["save-contact"].exists)
+        XCTAssertTrue(app.buttons["Cancel"].exists)
+        XCTAssertEqual(
+            app.descendants(matching: .any)
+                .matching(identifier: "contact-row-contacts-primary").count,
+            1,
+            "Validation must not announce or persist a false success."
+        )
+
+        replaceText(in: app.textFields["contact-work-email"], with: "primary-duplicate@example.test")
+        app.buttons["save-contact"].click()
+        let duplicateRows = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "contact-row-contacts-primary-"))
+        XCTAssertEqual(duplicateRows.count, 2, "Normalized duplicate names must receive two persisted-ID-qualified row identifiers.")
+        XCTAssertNotEqual(duplicateRows.element(boundBy: 0).identifier, duplicateRows.element(boundBy: 1).identifier)
+    }
+
+    @MainActor
+    func testVD206ContactsKeyboardContract() {
+        // This catches Contacts controls that are present only for pointer use
+        // or lose their truthful compact/error states when activated through
+        // their semantic keyboard actions.
+        let app = openContactsFixture(windowSize: "compact")
+        let primaryRow = app.descendants(matching: .any)["contact-row-contacts-primary"]
+        XCTAssertTrue(primaryRow.waitForExistence(timeout: 5))
+        app.textFields["contact-search"].click()
+        XCTAssertTrue(
+            tabToKeyboardFocus(primaryRow, in: app, maximumTabPresses: 32),
+            "The compact contact row must expose keyboard focus before Space activates it."
+        )
+        app.typeKey(.space, modifierFlags: [])
+        XCTAssertTrue(app.descendants(matching: .any)["contact-compact-detail"].waitForExistence(timeout: 5))
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(primaryRow.waitForExistence(timeout: 5))
+
+        app.buttons["contact-new"].click()
+        XCTAssertTrue(app.textFields["contact-name"].waitForExistence(timeout: 5))
+        replaceText(in: app.textFields["contact-name"], with: "Keyboard contact")
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(primaryRow.waitForExistence(timeout: 5))
+
+        XCTAssertTrue(
+            tabToKeyboardFocus(primaryRow, in: app, maximumTabPresses: 32),
+            "The compact contact row must regain keyboard focus before Space opens detail."
+        )
+        app.typeKey(.space, modifierFlags: [])
+        let disclosure = app.buttons["contact-related-disclosure"]
+        XCTAssertTrue(
+            tabToKeyboardFocus(disclosure, in: app, maximumTabPresses: 32),
+            "The related-opportunities disclosure must expose keyboard focus before Space toggles it."
+        )
+        app.typeKey(.space, modifierFlags: [])
+        XCTAssertTrue((disclosure.value as? String ?? "").hasPrefix("Expanded"))
+        let manageRelated = app.buttons["contact-manage-related"]
+        XCTAssertTrue(
+            tabToKeyboardFocus(manageRelated, in: app, maximumTabPresses: 32),
+            "Manage related opportunities must expose keyboard focus before Space opens it."
+        )
+        app.typeKey(.space, modifierFlags: [])
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertFalse(app.buttons["Done"].waitForExistence(timeout: 2))
+
+        let emptyApp = openContactsFixture(fixture: "contacts-empty")
+        XCTAssertTrue(emptyApp.descendants(matching: .any)["contact-empty-state"].waitForExistence(timeout: 5))
+        XCTAssertTrue(emptyApp.descendants(matching: .any)["contact-no-selection-state"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     func testVD202RecoveryFixtureExposesAnExplicitRecoveryOnlySafetyMarker() {
         let app = launchApp(fixture: "recovery")
         XCTAssertTrue(
@@ -2258,6 +2710,226 @@ final class RekonPursuitUITests: XCTestCase {
     }
 
     @MainActor
+    func testVD207ReferenceRecoveryDashboardKeepsRailAndUsesCardComposition() {
+        let app = launchApp(fixture: "archive")
+        let rail = app.descendants(matching: .any)["sidebar-settings"]
+        XCTAssertTrue(rail.waitForExistence(timeout: 5))
+        rail.tap()
+        XCTAssertTrue(rail.isSelected)
+
+        let panel = app.descendants(matching: .any)["settings-section-recovery-archives-panel"]
+        XCTAssertTrue(panel.waitForExistence(timeout: 2))
+        for identifier in ["create-portable-archive", "create-protected-export", "purge-retained-archive-data", "restore-portable-archive"] {
+            XCTAssertTrue(app.buttons[identifier].exists, "Missing retained recovery action \(identifier).")
+        }
+        let summary = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "settings-archive-summary-"))
+            .firstMatch
+        XCTAssertTrue(summary.waitForExistence(timeout: 2))
+        XCTAssertEqual(
+            summary.value as? String,
+            "created=2025-05-06T12:00:00Z;expires=2025-06-05T12:00:00Z;lifecycle=Verified"
+        )
+        XCTAssertTrue(app.buttons["create-portable-archive"].isEnabled)
+        XCTAssertTrue(app.buttons["create-protected-export"].isEnabled)
+        XCTAssertTrue(app.buttons["purge-retained-archive-data"].isEnabled)
+        XCTAssertTrue(app.buttons["restore-portable-archive"].isEnabled)
+        attachSettingsPresentationScreenshot(app, named: "VD2-07x-wide-recovery")
+
+        app.buttons["create-portable-archive"].tap()
+        XCTAssertTrue(app.staticTexts["Create portable recovery archive"].waitForExistence(timeout: 2))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(summary.waitForExistence(timeout: 2))
+
+        app.buttons["create-protected-export"].tap()
+        XCTAssertTrue(app.staticTexts["Export protected copy"].waitForExistence(timeout: 2))
+        app.buttons["Choose destination and review"].tap()
+        let protectedExportError = app.staticTexts["protected-export-error"]
+        XCTAssertTrue(protectedExportError.waitForExistence(timeout: 2))
+        XCTAssertEqual(protectedExportError.label, "Enter the complete recovery key, including its checksum.")
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(summary.waitForExistence(timeout: 2))
+
+        app.buttons["purge-retained-archive-data"].tap()
+        XCTAssertTrue(app.staticTexts["Purge deleted data from retained archives"].waitForExistence(timeout: 2))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(summary.waitForExistence(timeout: 2))
+
+        if recordUnrenderedVisualSelectors([
+            "settings-reference-tab-strip",
+            "settings-reference-tab-recovery-archives",
+            "settings-recovery-overview-card",
+            "settings-recovery-status-enrollment",
+            "settings-recovery-status-state",
+            "settings-recovery-archive-detail-card",
+            "settings-recovery-action-create",
+            "settings-recovery-action-purge",
+            "settings-recovery-action-restore",
+            "settings-recovery-protected-export"
+        ], in: app) {
+            return
+        }
+
+        assertNoDisclosedSettingsSentinels(
+            ["fixture-document-hash", "application/pdf", "/private/", "recovery key"],
+            in: panel
+        )
+    }
+
+    @MainActor
+    func testVD207ReferenceRecoveryDoesNotInventExportSuccess() {
+        let app = launchApp(fixture: "archive")
+        let rail = app.descendants(matching: .any)["sidebar-settings"]
+        XCTAssertTrue(rail.waitForExistence(timeout: 5))
+        rail.tap()
+        XCTAssertTrue(rail.isSelected)
+        XCTAssertTrue(app.descendants(matching: .any)["settings-section-recovery-archives-panel"].waitForExistence(timeout: 2))
+        XCTAssertFalse(app.descendants(matching: .any)["settings-protected-export-success-dialog"].exists)
+    }
+
+    @MainActor
+    func testVD207ReferenceTabsKeepKeyboardSelectionAtCompactWidth() {
+        let app = launchApp(fixture: "populated", windowSize: "compact")
+        let rail = app.descendants(matching: .any)["sidebar-settings"]
+        XCTAssertTrue(rail.waitForExistence(timeout: 5))
+        rail.tap()
+        XCTAssertTrue(rail.isSelected)
+
+        let selectorsAndPanels = [
+            ("settings-section-workspace", "settings-section-workspace-panel"),
+            ("settings-section-recovery-archives", "settings-section-recovery-archives-panel"),
+            ("settings-section-document-references", "settings-section-document-references-panel"),
+            ("settings-section-ai-connections", "settings-section-ai-connections-panel")
+        ]
+        for (selector, _) in selectorsAndPanels {
+            let section = app.buttons[selector]
+            XCTAssertTrue(section.waitForExistence(timeout: 2))
+            XCTAssertTrue(section.isHittable)
+            XCTAssertTrue(
+                tabToKeyboardFocus(section, in: app, maximumTabPresses: 32),
+                "The compact Settings selector must expose semantic keyboard focus."
+            )
+        }
+
+        XCTAssertTrue(app.descendants(matching: .any)["settings-section-recovery-archives-panel"].waitForExistence(timeout: 2))
+        for (selector, panel) in selectorsAndPanels where selector != "settings-section-recovery-archives" {
+            let section = app.buttons[selector]
+            XCTAssertTrue(section.waitForExistence(timeout: 2))
+            XCTAssertTrue(tabToKeyboardFocus(section, in: app, maximumTabPresses: 32))
+            XCTAssertEqual(section.value as? String, "Not selected; Keyboard focus")
+            app.typeKey(.space, modifierFlags: [])
+            XCTAssertEqual(section.value as? String, "Selected; Keyboard focus")
+            XCTAssertTrue(app.descendants(matching: .any)[panel].waitForExistence(timeout: 2))
+            XCTAssertTrue(rail.isSelected)
+        }
+
+        if recordUnrenderedVisualSelectors([
+            "settings-reference-tab-strip",
+            "settings-reference-tab-recovery-archives"
+        ], in: app) {
+            return
+        }
+
+        for (selector, _) in selectorsAndPanels {
+            XCTAssertTrue(app.buttons[selector].exists)
+            XCTAssertTrue(app.buttons[selector].isHittable)
+        }
+    }
+
+    @MainActor
+    func testVD207ReferenceOtherSettingsSectionsUseTruthfulInformationalCards() {
+        let app = launchApp(fixture: "document-relink")
+        let rail = app.descendants(matching: .any)["sidebar-settings"]
+        XCTAssertTrue(rail.waitForExistence(timeout: 5))
+        rail.tap()
+        XCTAssertTrue(rail.isSelected)
+
+        app.buttons["settings-section-document-references"].tap()
+        let documentPanel = app.descendants(matching: .any)["settings-section-document-references-panel"]
+        XCTAssertTrue(documentPanel.waitForExistence(timeout: 2))
+        let summary = app.descendants(matching: .any)["settings-document-reference-summary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 2))
+        XCTAssertEqual(summary.value as? String, "0 available · 1 require relinking")
+        assertNoActionableDescendants(in: documentPanel)
+        assertNoDisclosedSettingsSentinels(
+            ["fixture-resume.pdf", "fixture-document-hash", "application/pdf", "/private/"],
+            in: documentPanel
+        )
+        if recordUnrenderedVisualSelectors([
+            "settings-document-overview-card",
+            "settings-document-available-card",
+            "settings-document-relink-card",
+            "settings-document-privacy-card"
+        ], in: app) {
+            return
+        }
+
+        XCTAssertTrue(app.descendants(matching: .any)["settings-document-available-card"].label.contains("Available"))
+        XCTAssertTrue(app.descendants(matching: .any)["settings-document-available-card"].label.contains("0"))
+        XCTAssertTrue(app.descendants(matching: .any)["settings-document-relink-card"].label.contains("Needs relinking"))
+        XCTAssertTrue(app.descendants(matching: .any)["settings-document-relink-card"].label.contains("1"))
+        XCTAssertTrue(app.descendants(matching: .any)["settings-document-privacy-card"].label.contains("names and locations stay private"))
+        attachSettingsPresentationScreenshot(app, named: "VD2-07x-wide-document-references")
+
+        app.buttons["settings-section-ai-connections"].tap()
+        let aiPanel = app.descendants(matching: .any)["settings-section-ai-connections-panel"]
+        XCTAssertTrue(aiPanel.waitForExistence(timeout: 2))
+        assertNoActionableDescendants(in: aiPanel)
+        assertNoDisclosedSettingsSentinels(
+            ["fixture-resume.pdf", "fixture-document-hash", "application/pdf", "/private/"],
+            in: aiPanel
+        )
+        if recordUnrenderedVisualSelectors([
+            "settings-ai-overview-card",
+            "settings-ai-assistant-card",
+            "settings-ai-email-calendar-card",
+            "settings-ai-cloud-card",
+            "settings-ai-privacy-card"
+        ], in: app) {
+            return
+        }
+
+        let aiOverview = app.descendants(matching: .any)["settings-ai-overview-card"]
+        XCTAssertTrue(aiOverview.label.contains("No activity recorded"))
+        XCTAssertTrue(aiOverview.label.contains("Connection status"))
+        XCTAssertTrue(aiOverview.label.contains("Offline"))
+        XCTAssertTrue(app.descendants(matching: .any)["settings-ai-assistant-card"].label.contains("AI assistant"))
+        XCTAssertTrue(app.descendants(matching: .any)["settings-ai-assistant-card"].label.contains("Not configured"))
+        XCTAssertTrue(app.descendants(matching: .any)["settings-ai-email-calendar-card"].label.contains("Email & calendar"))
+        XCTAssertTrue(app.descendants(matching: .any)["settings-ai-email-calendar-card"].label.contains("Not connected"))
+        XCTAssertTrue(app.descendants(matching: .any)["settings-ai-cloud-card"].label.contains("Cloud sync"))
+        XCTAssertTrue(app.descendants(matching: .any)["settings-ai-cloud-card"].label.contains("Not configured"))
+        attachSettingsPresentationScreenshot(app, named: "VD2-07x-wide-ai-connections")
+        assertNoActionableDescendants(in: documentPanel)
+        assertNoActionableDescendants(in: aiPanel)
+
+        app.buttons["settings-section-workspace"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["settings-section-workspace-panel"].waitForExistence(timeout: 2))
+        if recordUnrenderedVisualSelectors([
+            "settings-workspace-overview-card",
+            "settings-workspace-recovery-card",
+            "settings-workspace-return-card"
+        ], in: app) {
+            return
+        }
+
+        let workspaceCard = app.descendants(matching: .any)["settings-workspace-overview-card"]
+        XCTAssertTrue(workspaceCard.label.contains("Local workspace"))
+        XCTAssertTrue(workspaceCard.label.contains("Workspace status"))
+        XCTAssertTrue(workspaceCard.label.contains("Active"))
+        XCTAssertTrue(workspaceCard.label.contains("Storage"))
+        XCTAssertTrue(workspaceCard.label.contains("Local only"))
+
+        let returnCard = app.descendants(matching: .any)["settings-workspace-return-card"]
+        XCTAssertTrue(returnCard.label.contains("No preserved workspace available"))
+        XCTAssertTrue(returnCard.value as? String == "Disabled")
+        XCTAssertEqual(returnCard.descendants(matching: .button).count, 0)
+        XCTAssertEqual(returnCard.descendants(matching: .link).count, 0)
+        XCTAssertEqual(returnCard.descendants(matching: .menuButton).count, 0)
+        attachSettingsPresentationScreenshot(app, named: "VD2-07x-wide-workspace")
+    }
+
+    @MainActor
     func testVD207SettingsSecondaryNavigationIsKeyboardOperableAtCompactWidth() {
         let app = launchApp(fixture: "populated", windowSize: "compact")
         app.descendants(matching: .any)["sidebar-settings"].tap()
@@ -2274,6 +2946,40 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["settings-section-document-references-panel"].waitForExistence(timeout: 2))
         XCTAssertEqual(document.value as? String, "Selected; Keyboard focus")
         XCTAssertTrue(app.descendants(matching: .any)["sidebar-settings"].isSelected)
+    }
+
+    @MainActor
+    func testVD207ProtectedExportEntryUsesRootDialogAndRetainsErrorUntilCancel() {
+        let app = launchApp(fixture: "archive")
+        app.descendants(matching: .any)["sidebar-settings"].tap()
+        app.buttons["create-protected-export"].tap()
+
+        XCTAssertTrue(app.staticTexts["Export protected copy"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.textFields["Recovery key"].exists)
+        XCTAssertTrue(app.buttons["Choose destination and review"].exists)
+        XCTAssertEqual(
+            app.buttons["Choose destination and review"].frame.width,
+            app.textFields["Recovery key"].frame.width,
+            accuracy: 1,
+            "The protected-export primary action must span the custom dialog form width."
+        )
+        XCTAssertEqual(app.sheets.count, 0)
+
+        app.buttons["Choose destination and review"].tap()
+        let error = app.staticTexts["protected-export-error"]
+        XCTAssertTrue(error.waitForExistence(timeout: 2))
+        XCTAssertEqual(error.label, "Enter the complete recovery key, including its checksum.")
+        XCTAssertTrue(app.staticTexts["Export protected copy"].exists)
+        XCTAssertTrue(app.textFields["Recovery key"].exists)
+        XCTAssertTrue(app.buttons["Choose destination and review"].exists)
+        XCTAssertEqual(app.sheets.count, 0)
+        XCTAssertFalse(app.descendants(matching: .any)["settings-protected-export-success-dialog"].exists)
+
+        app.buttons["Cancel"].tap()
+        XCTAssertFalse(error.exists)
+        XCTAssertFalse(app.staticTexts["Export protected copy"].exists)
+        XCTAssertEqual(app.sheets.count, 0)
+        XCTAssertTrue(app.buttons["create-protected-export"].waitForExistence(timeout: 2))
     }
 
     @MainActor
@@ -2361,6 +3067,11 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertTrue(unavailable.label.contains("No AI requests"))
         XCTAssertTrue(unavailable.label.contains("Gmail"))
         XCTAssertTrue(unavailable.label.contains("Calendar"))
+        let unavailableStaticText = app.staticTexts["settings-ai-connections-unavailable"]
+        XCTAssertTrue(unavailableStaticText.waitForExistence(timeout: 2))
+        XCTAssertTrue(unavailableStaticText.label.contains("No AI requests"))
+        XCTAssertTrue(unavailableStaticText.label.contains("Gmail"))
+        XCTAssertTrue(unavailableStaticText.label.contains("Calendar"))
         XCTAssertEqual(aiPanel.descendants(matching: .button).count, 0)
         XCTAssertEqual(aiPanel.descendants(matching: .menuButton).count, 0)
         XCTAssertEqual(aiPanel.descendants(matching: .link).count, 0)
@@ -2398,5 +3109,89 @@ final class RekonPursuitUITests: XCTestCase {
         app.buttons["settings-section-document-references"].tap()
         XCTAssertTrue(documentSummary.waitForExistence(timeout: 2))
         XCTAssertEqual(documentSummary.value as? String, preRelaunchSummary)
+    }
+
+    @MainActor
+    func testVD207ReferenceTabsSelectByPointerAtCompactWidth() {
+        let app = launchApp(fixture: "populated", windowSize: "compact")
+        let rail = app.descendants(matching: .any)["sidebar-settings"]
+        XCTAssertTrue(rail.waitForExistence(timeout: 5))
+        rail.tap()
+        XCTAssertTrue(rail.isSelected)
+
+        let sections = [
+            ("settings-section-workspace", "settings-section-workspace-panel", "VD2-07x-compact-workspace"),
+            ("settings-section-recovery-archives", "settings-section-recovery-archives-panel", "VD2-07x-compact-recovery"),
+            ("settings-section-document-references", "settings-section-document-references-panel", "VD2-07x-compact-document-references"),
+            ("settings-section-ai-connections", "settings-section-ai-connections-panel", "VD2-07x-compact-ai-connections")
+        ]
+
+        for (selector, panel, screenshotName) in sections {
+            let section = app.buttons[selector]
+            XCTAssertTrue(section.waitForExistence(timeout: 2))
+            section.tap()
+            XCTAssertTrue(app.descendants(matching: .any)[panel].waitForExistence(timeout: 2))
+            XCTAssertTrue((section.value as? String ?? "").hasPrefix("Selected"))
+            XCTAssertTrue(rail.isSelected)
+            attachSettingsPresentationScreenshot(app, named: screenshotName)
+        }
+    }
+
+    @MainActor
+    func testVD207ReferenceAIVisualContentBoundary() {
+        let app = launchApp(fixture: "document-relink")
+        let rail = app.descendants(matching: .any)["sidebar-settings"]
+        XCTAssertTrue(rail.waitForExistence(timeout: 5))
+        rail.tap()
+        XCTAssertTrue(rail.isSelected)
+
+        app.buttons["settings-section-document-references"].tap()
+        let documentPanel = app.descendants(matching: .any)["settings-section-document-references-panel"]
+        XCTAssertTrue(documentPanel.waitForExistence(timeout: 2))
+        let summary = app.descendants(matching: .any)["settings-document-reference-summary"]
+        XCTAssertTrue(summary.waitForExistence(timeout: 2))
+        XCTAssertEqual(summary.value as? String, "0 available · 1 require relinking")
+        assertNoActionableDescendants(in: documentPanel)
+        assertNoDisclosedSettingsSentinels(
+            ["fixture-resume.pdf", "fixture-document-hash", "application/pdf", "/private/"],
+            in: documentPanel
+        )
+
+        app.buttons["settings-section-ai-connections"].tap()
+        let aiPanel = app.descendants(matching: .any)["settings-section-ai-connections-panel"]
+        XCTAssertTrue(aiPanel.waitForExistence(timeout: 2))
+
+        let overview = app.descendants(matching: .any)["settings-ai-overview-card"]
+        XCTAssertTrue(overview.waitForExistence(timeout: 2))
+        XCTAssertTrue(overview.label.contains("AI activity"))
+        XCTAssertTrue(overview.label.contains("No activity recorded"))
+        XCTAssertTrue(overview.label.contains("Connection status"))
+        XCTAssertTrue(overview.label.contains("Offline"))
+
+        let assistant = app.descendants(matching: .any)["settings-ai-assistant-card"]
+        XCTAssertTrue(assistant.waitForExistence(timeout: 2))
+        XCTAssertTrue(assistant.label.contains("AI assistant"))
+        XCTAssertTrue(assistant.label.contains("Not configured"))
+
+        let emailCalendar = app.descendants(matching: .any)["settings-ai-email-calendar-card"]
+        XCTAssertTrue(emailCalendar.waitForExistence(timeout: 2))
+        XCTAssertTrue(emailCalendar.label.contains("Email & calendar"))
+        XCTAssertTrue(emailCalendar.label.contains("Not connected"))
+
+        let cloud = app.descendants(matching: .any)["settings-ai-cloud-card"]
+        XCTAssertTrue(cloud.waitForExistence(timeout: 2))
+        XCTAssertTrue(cloud.label.contains("Cloud sync"))
+        XCTAssertTrue(cloud.label.contains("Not configured"))
+
+        let privacy = app.descendants(matching: .any)["settings-ai-privacy-card"]
+        XCTAssertTrue(privacy.waitForExistence(timeout: 2))
+        XCTAssertTrue(privacy.label.contains("workspace remains local and private"))
+
+        assertNoActionableDescendants(in: aiPanel)
+        assertNoDisclosedSettingsSentinels(
+            ["fixture-resume.pdf", "fixture-document-hash", "application/pdf", "/private/"],
+            in: aiPanel
+        )
+        attachSettingsPresentationScreenshot(app, named: "VD2-07x-wide-ai-connections")
     }
 }

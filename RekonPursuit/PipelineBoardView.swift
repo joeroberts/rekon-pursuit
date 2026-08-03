@@ -608,6 +608,7 @@ private struct PipelineOpportunityMoveCard: View {
                     .accessibilityIdentifier("pipeline-board-card-due-date-\(opportunity.id)")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("pipeline-opportunity-\(opportunity.id)")

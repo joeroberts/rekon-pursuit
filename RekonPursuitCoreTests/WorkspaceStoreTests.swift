@@ -4,6 +4,103 @@ import XCTest
 
 @MainActor
 final class WorkspaceStoreTests: XCTestCase {
+    private enum HistoricalWorkspaceSchemaVersion: Int, CaseIterable {
+        case eleven = 11
+        case sixteen = 16
+        case eighteen = 18
+        case nineteen = 19
+        case twenty = 20
+        case twentyTwo = 22
+    }
+
+    private struct HistoricalWorkspaceExpectation {
+        let schemaVersion: Int
+        let tables: Set<String>
+        let namedIndexes: Set<String>
+        let columnNamesByTable: [String: Set<String>]
+        let migrationHistoryRows: [[DatabaseValue]]
+    }
+
+    private let versionElevenDDL = [
+        "CREATE TABLE opportunities (id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, company TEXT NOT NULL, created_at REAL NOT NULL, stage TEXT NOT NULL DEFAULT 'Saved', next_action TEXT NOT NULL DEFAULT '', due_at REAL, deleted_at REAL)",
+        "CREATE TABLE task_reminders (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), title TEXT NOT NULL, due_at REAL, is_complete INTEGER NOT NULL DEFAULT 0)",
+        "CREATE TABLE activity_events (id TEXT PRIMARY KEY NOT NULL, kind TEXT NOT NULL, opportunity_id TEXT REFERENCES opportunities(id), contact_id TEXT, actor_id TEXT NOT NULL, correlation_id TEXT NOT NULL, occurred_at REAL NOT NULL)",
+        "CREATE TABLE contacts (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, employer TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', profile_url TEXT NOT NULL DEFAULT '', relationship_context TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', deleted_at REAL)",
+        "CREATE TABLE contact_opportunities (contact_id TEXT NOT NULL REFERENCES contacts(id), opportunity_id TEXT NOT NULL REFERENCES opportunities(id), PRIMARY KEY(contact_id, opportunity_id))",
+        "CREATE TABLE interactions (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), summary TEXT NOT NULL, occurred_at REAL NOT NULL)",
+        "CREATE TABLE workspace_metadata (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)",
+        "CREATE TABLE deletion_tombstones (subject_id TEXT PRIMARY KEY NOT NULL, subject_type TEXT NOT NULL, deleted_at REAL NOT NULL, display_value TEXT NOT NULL)",
+        "CREATE TABLE import_reports (id TEXT PRIMARY KEY NOT NULL, imported_count INTEGER NOT NULL, skipped_count INTEGER NOT NULL, duplicate_kept_count INTEGER NOT NULL, invalid_count INTEGER NOT NULL, created_at REAL NOT NULL)",
+        "CREATE TABLE opportunity_stage_history (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), from_stage TEXT, to_stage TEXT NOT NULL, occurred_at REAL NOT NULL)"
+    ]
+
+    private let versionTwelveThroughSixteenDDL = [
+        "DROP TABLE interactions",
+        "CREATE TABLE interactions (id TEXT PRIMARY KEY NOT NULL, contact_id TEXT REFERENCES contacts(id), opportunity_id TEXT REFERENCES opportunities(id), kind TEXT NOT NULL, summary TEXT NOT NULL, occurred_at REAL NOT NULL, next_touch_at REAL)",
+        "CREATE INDEX interactions_contact_occurred_at ON interactions(contact_id, occurred_at, id)",
+        "ALTER TABLE opportunities ADD COLUMN job_url TEXT NOT NULL DEFAULT ''",
+        "CREATE TABLE posting_checks (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), url TEXT NOT NULL, status TEXT NOT NULL, evidence TEXT NOT NULL, checked_at REAL NOT NULL)",
+        "CREATE INDEX posting_checks_opportunity_checked_at ON posting_checks(opportunity_id, checked_at, id)",
+        "CREATE TABLE document_references (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), kind TEXT NOT NULL, filename TEXT NOT NULL, content_type TEXT NOT NULL, source_hash TEXT NOT NULL, byte_count INTEGER NOT NULL, attached_at REAL NOT NULL, final_sent_at REAL)",
+        "CREATE INDEX document_references_opportunity_attached_at ON document_references(opportunity_id, attached_at, id)",
+        "ALTER TABLE opportunities ADD COLUMN job_description TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE opportunities ADD COLUMN notes TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE opportunities ADD COLUMN compensation TEXT",
+        "ALTER TABLE opportunities ADD COLUMN location TEXT",
+        "ALTER TABLE opportunities ADD COLUMN work_arrangement TEXT NOT NULL DEFAULT 'Not specified'",
+        "ALTER TABLE opportunities ADD COLUMN application_date REAL",
+        "ALTER TABLE opportunities ADD COLUMN response_state TEXT NOT NULL DEFAULT 'No response recorded'",
+        "ALTER TABLE opportunities ADD COLUMN stage_changed_at REAL",
+        "CREATE TABLE opportunity_response_history (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), from_state TEXT NOT NULL, to_state TEXT NOT NULL, occurred_at REAL NOT NULL)",
+        "CREATE INDEX opportunity_response_history_opportunity_occurred_at ON opportunity_response_history(opportunity_id, occurred_at DESC, id DESC)"
+    ]
+
+    private let versionSeventeenThroughEighteenDDL = [
+        "ALTER TABLE import_reports ADD COLUMN updated_count INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE import_reports ADD COLUMN source_basename TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE import_reports ADD COLUMN mapping_summary TEXT NOT NULL DEFAULT ''",
+        "CREATE TABLE import_report_rows (id TEXT PRIMARY KEY NOT NULL, report_id TEXT NOT NULL REFERENCES import_reports(id), source_row INTEGER NOT NULL, outcome TEXT NOT NULL, reason TEXT NOT NULL, duplicate_rationale TEXT NOT NULL, opportunity_id TEXT)",
+        "CREATE INDEX import_report_rows_report_row ON import_report_rows(report_id, source_row)",
+        "ALTER TABLE import_reports ADD COLUMN failed_count INTEGER NOT NULL DEFAULT 0"
+    ]
+
+    private let versionNineteenDDL = [
+        "CREATE TABLE reconciliation_reviews (opportunity_id TEXT PRIMARY KEY NOT NULL REFERENCES opportunities(id), task_reminder_id TEXT NOT NULL UNIQUE REFERENCES task_reminders(id), created_at REAL NOT NULL, closure_confirmed_at REAL)",
+        "CREATE INDEX reconciliation_reviews_task_reminder_id ON reconciliation_reviews(task_reminder_id)",
+        "CREATE TABLE reconciliation_results (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), url TEXT NOT NULL, recorded_at REAL NOT NULL, outcome TEXT NOT NULL, classification TEXT NOT NULL, reason TEXT NOT NULL, confidence TEXT, evidence TEXT NOT NULL, error TEXT NOT NULL, review_task_reminder_id TEXT REFERENCES task_reminders(id), closure_confirmed_at REAL, legacy_posting_check_id TEXT UNIQUE, legacy_status TEXT)",
+        "CREATE INDEX reconciliation_results_opportunity_recorded_at ON reconciliation_results(opportunity_id, recorded_at DESC, id DESC)"
+    ]
+
+    private let versionTwentyDDL = [
+        "CREATE TABLE reconciliation_check_operations (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), correlation_id TEXT NOT NULL UNIQUE, url_snapshot TEXT NOT NULL, state TEXT NOT NULL, started_at REAL NOT NULL, terminal_at REAL)",
+        "CREATE INDEX reconciliation_check_operations_opportunity_state ON reconciliation_check_operations(opportunity_id, state)",
+        "ALTER TABLE reconciliation_results ADD COLUMN check_operation_id TEXT REFERENCES reconciliation_check_operations(id)",
+        "ALTER TABLE reconciliation_results ADD COLUMN method TEXT",
+        "ALTER TABLE reconciliation_results ADD COLUMN checker_version TEXT",
+        "ALTER TABLE reconciliation_results ADD COLUMN http_status INTEGER",
+        "ALTER TABLE reconciliation_results ADD COLUMN mime_type TEXT",
+        "ALTER TABLE reconciliation_results ADD COLUMN declared_bytes INTEGER",
+        "ALTER TABLE reconciliation_results ADD COLUMN received_bytes INTEGER",
+        "ALTER TABLE reconciliation_results ADD COLUMN content_sha256 TEXT",
+        "ALTER TABLE reconciliation_results ADD COLUMN response_date TEXT",
+        "ALTER TABLE reconciliation_results ADD COLUMN last_modified TEXT",
+        "ALTER TABLE reconciliation_results ADD COLUMN etag TEXT",
+        "ALTER TABLE reconciliation_results ADD COLUMN retry_after TEXT",
+        "ALTER TABLE reconciliation_results ADD COLUMN redirect_target_redacted TEXT",
+        "ALTER TABLE reconciliation_results ADD COLUMN evidence_excerpt TEXT",
+        "ALTER TABLE reconciliation_results ADD COLUMN redacted_error_code TEXT"
+    ]
+
+    private let versionTwentyOneThroughTwentyTwoDDL = [
+        "ALTER TABLE opportunities ADD COLUMN compensation_minimum REAL",
+        "ALTER TABLE opportunities ADD COLUMN compensation_maximum REAL",
+        "ALTER TABLE opportunities ADD COLUMN compensation_pay_period TEXT",
+        "ALTER TABLE opportunities ADD COLUMN action_type TEXT NOT NULL DEFAULT 'No action'",
+        "ALTER TABLE opportunities ADD COLUMN action_custom_text TEXT",
+        "ALTER TABLE import_report_rows ADD COLUMN display_title TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE import_report_rows ADD COLUMN display_company TEXT NOT NULL DEFAULT ''"
+    ]
+
     private let key = Data(repeating: 7, count: 32)
     private let now = Date(timeIntervalSince1970: 1_704_067_200)
     private var databaseURL: URL!
@@ -173,7 +270,7 @@ final class WorkspaceStoreTests: XCTestCase {
     func testNewWorkspaceRecordsSchemaVersion() throws {
         let store = try makeStore()
 
-        XCTAssertEqual(try store.schemaVersion(), 25)
+        XCTAssertEqual(try store.schemaVersion(), WorkspaceMigrations.currentVersion)
         XCTAssertEqual(try store.opportunities(), [])
         XCTAssertEqual(try store.activityEvents(), [])
     }
@@ -189,7 +286,7 @@ final class WorkspaceStoreTests: XCTestCase {
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 25)
+        XCTAssertEqual(try store.schemaVersion(), WorkspaceMigrations.currentVersion)
         XCTAssertEqual(
             try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
             [
@@ -215,6 +312,15 @@ final class WorkspaceStoreTests: XCTestCase {
                 , [.integer(23), .text(WorkspaceMigrations.versionTwentyThreeChecksum)]
                 , [.integer(24), .text(WorkspaceMigrations.versionTwentyFourChecksum)]
                 , [.integer(25), .text(WorkspaceMigrations.versionTwentyFiveChecksum)]
+                , [.integer(26), .text(WorkspaceMigrations.versionTwentySixChecksum)]
+                , [.integer(27), .text(WorkspaceMigrations.versionTwentySevenChecksum)]
+                , [.integer(28), .text(WorkspaceMigrations.versionTwentyEightChecksum)]
+                , [.integer(29), .text(WorkspaceMigrations.versionTwentyNineChecksum)]
+                , [.integer(30), .text(WorkspaceMigrations.versionThirtyChecksum)]
+                , [.integer(31), .text(WorkspaceMigrations.versionThirtyOneChecksum)]
+                , [.integer(32), .text(WorkspaceMigrations.versionThirtyTwoChecksum)]
+                , [.integer(33), .text(WorkspaceMigrations.versionThirtyThreeChecksum)]
+                , [.integer(34), .text(WorkspaceMigrations.versionThirtyFourChecksum)]
             ]
         )
         XCTAssertEqual(try database.rows("SELECT id, title, company FROM opportunities"), [[.text("opportunity-1"), .text("Product Manager"), .text("Rekon Labs")]])
@@ -230,20 +336,73 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotArtifactURLs[2].path))
     }
 
+    func testVersionThirtyThreeContactMigrationPreservesLegacyChannelsAndDefaultsNewChannels() throws {
+        // This catches migration 34 losing legacy email/profile_url data or
+        // failing to provide safe defaults for every newly added column.
+        let seededStore = try makeStore()
+        try seededStore.close()
+        let database = try EncryptedDatabase.open(url: databaseURL, key: key, createIfMissing: false)
+        try database.transaction {
+            try database.execute("ALTER TABLE contacts RENAME TO contacts_v34")
+            try database.execute("CREATE TABLE contacts (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, employer TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', profile_url TEXT NOT NULL DEFAULT '', relationship_context TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', deleted_at REAL)")
+            try database.execute("INSERT INTO contacts (id, name, employer, title, email, profile_url, relationship_context, notes) VALUES ('legacy-contact', 'Legacy Alex', 'Rekon Labs', 'Recruiter', 'legacy.work@example.test', 'https://linkedin.example.test/in/legacy', 'Warm introduction', 'Legacy note')")
+            try database.execute("DROP TABLE contacts_v34")
+            try database.execute("DELETE FROM migration_history WHERE version = 34")
+            try database.execute("UPDATE schema_migrations SET version = 33")
+        }
+
+        let migratedStore = try WorkspaceStore(database: database, now: now, actorID: "local-user", correlationID: "fixture-correlation")
+        let contact = try XCTUnwrap(migratedStore.contacts().first)
+        XCTAssertEqual(try migratedStore.schemaVersion(), WorkspaceMigrations.currentVersion)
+        XCTAssertEqual(contact.workEmail, "legacy.work@example.test")
+        XCTAssertEqual(contact.linkedInURL, "https://linkedin.example.test/in/legacy")
+        XCTAssertEqual([contact.personalEmail, contact.mobilePhone, contact.officePhone, contact.instagramURL, contact.facebookURL], ["", "", "", "", ""])
+    }
+
+    func testVersionElevenFixtureHasOnlyVersionElevenFacts() throws {
+        let database = try makeHistoricalWorkspaceDatabase(at: databaseURL, version: .eleven)
+
+        try assertExactHistoricalSchema(database, version: .eleven)
+    }
+
+    func testVersionSixteenFixtureHasOnlyVersionSixteenFacts() throws {
+        let database = try makeHistoricalWorkspaceDatabase(at: databaseURL, version: .sixteen)
+
+        try assertExactHistoricalSchema(database, version: .sixteen)
+    }
+
+    func testVersionEighteenFixtureHasOnlyVersionEighteenFacts() throws {
+        let database = try makeHistoricalWorkspaceDatabase(at: databaseURL, version: .eighteen)
+
+        try assertExactHistoricalSchema(database, version: .eighteen)
+    }
+
+    func testVersionNineteenFixtureComposesExactVersionEighteenPlusNineteen() throws {
+        let database = try makeHistoricalWorkspaceDatabase(at: databaseURL, version: .nineteen)
+
+        try assertExactHistoricalSchema(database, version: .nineteen)
+    }
+
+    func testVersionTwentyFixtureHasOnlyVersionTwentyFacts() throws {
+        let database = try makeHistoricalWorkspaceDatabase(at: databaseURL, version: .twenty)
+
+        try assertExactHistoricalSchema(database, version: .twenty)
+    }
+
+    func testVersionTwentyTwoFixtureHasOnlyVersionTwentyTwoFacts() throws {
+        let database = try makeHistoricalWorkspaceDatabase(at: databaseURL, version: .twentyTwo)
+
+        try assertExactHistoricalSchema(database, version: .twentyTwo)
+    }
+
     func testVersionElevenInteractionRowsAreRetainedAsLegacyRowsDuringContactInteractionMigration() throws {
-        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
-        try database.execute("CREATE TABLE schema_migrations (version INTEGER NOT NULL)")
-        try database.execute("INSERT INTO schema_migrations (version) VALUES (11)")
-        try database.execute("CREATE TABLE contacts (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, employer TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', profile_url TEXT NOT NULL DEFAULT '', relationship_context TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', deleted_at REAL)")
-        try database.execute("CREATE TABLE opportunities (id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, company TEXT NOT NULL, created_at REAL NOT NULL, stage TEXT NOT NULL DEFAULT 'Saved', next_action TEXT NOT NULL DEFAULT '', due_at REAL, deleted_at REAL)")
-        try database.execute("CREATE TABLE interactions (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), summary TEXT NOT NULL, occurred_at REAL NOT NULL)")
-        try database.execute("CREATE TABLE import_reports (id TEXT PRIMARY KEY NOT NULL, imported_count INTEGER NOT NULL, skipped_count INTEGER NOT NULL, duplicate_kept_count INTEGER NOT NULL, invalid_count INTEGER NOT NULL, created_at REAL NOT NULL)")
+        let database = try makeHistoricalWorkspaceDatabase(at: databaseURL, version: .eleven)
         try database.execute("INSERT INTO opportunities (id, title, company, created_at) VALUES ('opportunity-1', 'Product Manager', 'Rekon Labs', 1704067200)")
         try database.execute("INSERT INTO interactions (id, opportunity_id, summary, occurred_at) VALUES ('interaction-1', 'opportunity-1', 'Legacy note', 1704067200)")
 
         let store = try WorkspaceStore(database: database, actorID: "test", correlationID: "test")
 
-        XCTAssertEqual(try store.schemaVersion(), 25)
+        XCTAssertEqual(try store.schemaVersion(), WorkspaceMigrations.currentVersion)
         XCTAssertEqual(try database.rows("SELECT id, contact_id, opportunity_id, kind, summary, occurred_at, next_touch_at FROM interactions"), [[.text("interaction-1"), .null, .text("opportunity-1"), .text("Note"), .text("Legacy note"), .real(1_704_067_200), .null]])
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
@@ -305,22 +464,26 @@ final class WorkspaceStoreTests: XCTestCase {
     }
 
     func testVersionSixteenToSeventeenMigrationAndFailureKeepSnapshot() throws {
-        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
-        try database.execute("CREATE TABLE schema_migrations (version INTEGER NOT NULL)")
-        try database.execute("INSERT INTO schema_migrations VALUES (16)")
-        try database.execute("CREATE TABLE import_reports (id TEXT PRIMARY KEY NOT NULL, imported_count INTEGER NOT NULL, skipped_count INTEGER NOT NULL, duplicate_kept_count INTEGER NOT NULL, invalid_count INTEGER NOT NULL, created_at REAL NOT NULL)")
-        try database.execute("INSERT INTO import_reports VALUES ('prior', 1, 0, 0, 0, ?)", values: [.real(now.timeIntervalSince1970)])
+        let database = try makeHistoricalWorkspaceDatabase(at: databaseURL, version: .sixteen)
+        try database.execute(
+            "INSERT INTO import_reports (id, imported_count, skipped_count, duplicate_kept_count, invalid_count, created_at) VALUES ('prior', 1, 0, 0, 0, ?)",
+            values: [.real(now.timeIntervalSince1970)]
+        )
         XCTAssertThrowsError(try WorkspaceMigrations.apply(to: database, failVersionSeventeen: true))
         XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(16)]])
         XCTAssertEqual(try database.rows("SELECT id FROM import_reports"), [[.text("prior")]])
         XCTAssertTrue(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
         try WorkspaceMigrations.apply(to: database)
-        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(22)]])
+        XCTAssertEqual(
+            try database.rows("SELECT version FROM schema_migrations"),
+            [[.integer(Int64(WorkspaceMigrations.currentVersion))]]
+        )
         XCTAssertEqual(try database.rows("SELECT updated_count, source_basename FROM import_reports"), [[.integer(0), .text("")]])
     }
 
     func testVersionEighteenPostingChecksMigrateLosslesslyToReadOnlyReconciliationHistory() throws {
-        let database = try makeVersionEighteenDatabase(at: databaseURL)
+        let database = try makeHistoricalWorkspaceDatabase(at: databaseURL, version: .eighteen)
+        try insertLegacyHistoricalOpportunity(into: database)
         try database.execute("INSERT INTO posting_checks (id, opportunity_id, url, status, evidence, checked_at) VALUES ('legacy-open', 'legacy-opportunity', 'https://jobs.example.com/open', 'Still open', 'Open evidence', 1704067200)")
         try database.execute("INSERT INTO posting_checks (id, opportunity_id, url, status, evidence, checked_at) VALUES ('legacy-possible', 'legacy-opportunity', 'https://jobs.example.com/possible', 'Possibly closed', 'Possible evidence', 1704067201)")
         try database.execute("INSERT INTO posting_checks (id, opportunity_id, url, status, evidence, checked_at) VALUES ('legacy-closed', 'legacy-opportunity', 'https://jobs.example.com/closed', 'Closed', 'Closed evidence', 1704067202)")
@@ -335,12 +498,16 @@ final class WorkspaceStoreTests: XCTestCase {
             [.text("legacy-review"), .text("Needs manual review"), .text("Needs manual review"), .text("Ambiguous"), .null]
         ])
         XCTAssertEqual(try database.rows("SELECT count(*) FROM reconciliation_reviews"), [[.integer(1)]])
-        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(22)]])
+        XCTAssertEqual(
+            try database.rows("SELECT version FROM schema_migrations"),
+            [[.integer(Int64(WorkspaceMigrations.currentVersion))]]
+        )
         XCTAssertFalse(FileManager.default.fileExists(atPath: database.migrationSnapshotURL.path))
     }
 
     func testFailedVersionNineteenMigrationRetainsVersionEighteenPostingChecksAndSnapshot() throws {
-        let database = try makeVersionEighteenDatabase(at: databaseURL)
+        let database = try makeHistoricalWorkspaceDatabase(at: databaseURL, version: .eighteen)
+        try insertLegacyHistoricalOpportunity(into: database)
         try database.execute("INSERT INTO posting_checks (id, opportunity_id, url, status, evidence, checked_at) VALUES ('legacy-closed', 'legacy-opportunity', 'https://jobs.example.com/closed', 'Closed', 'Closed evidence', 1704067202)")
 
         XCTAssertThrowsError(try WorkspaceMigrations.apply(to: database, failVersionNineteen: true))
@@ -352,11 +519,16 @@ final class WorkspaceStoreTests: XCTestCase {
     }
 
     func testVersionNineteenMigratesToTwentyWithoutChangingExistingReconciliationRows() throws {
-        let database = try makeVersionNineteenDatabase(at: databaseURL)
+        let database = try makeHistoricalWorkspaceDatabase(at: databaseURL, version: .nineteen)
+        try insertLegacyHistoricalOpportunity(into: database)
+        try insertVersionNineteenReconciliationResult(into: database)
 
         try WorkspaceMigrations.apply(to: database)
 
-        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(22)]])
+        XCTAssertEqual(
+            try database.rows("SELECT version FROM schema_migrations"),
+            [[.integer(Int64(WorkspaceMigrations.currentVersion))]]
+        )
         XCTAssertEqual(
             try database.rows("SELECT id, opportunity_id, url, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status, check_operation_id, method, checker_version, http_status, mime_type, declared_bytes, received_bytes, content_sha256, response_date, last_modified, etag, retry_after, redirect_target_redacted, evidence_excerpt, redacted_error_code FROM reconciliation_results"),
             [[
@@ -371,7 +543,7 @@ final class WorkspaceStoreTests: XCTestCase {
     }
 
     func testVersionTwentyMigrationRetainsLegacyCompensationAndActionText() throws {
-        let database = try makeVersionTwentyDatabase(at: databaseURL)
+        let database = try makeHistoricalWorkspaceDatabase(at: databaseURL, version: .twenty)
         let legacyAction = "  Ask Morgan for a referral  "
         try database.execute(
             "INSERT INTO opportunities (id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes, compensation, location, work_arrangement, application_date, response_state, stage_changed_at, deleted_at) VALUES ('legacy-opportunity', 'Legacy role', 'Rekon Labs', ?, 'Saved', ?, NULL, '', '', '', '150k base', NULL, 'Not specified', NULL, 'No response recorded', ?, NULL)",
@@ -380,7 +552,10 @@ final class WorkspaceStoreTests: XCTestCase {
 
         try WorkspaceMigrations.apply(to: database)
 
-        XCTAssertEqual(try database.rows("SELECT version FROM schema_migrations"), [[.integer(22)]])
+        XCTAssertEqual(
+            try database.rows("SELECT version FROM schema_migrations"),
+            [[.integer(Int64(WorkspaceMigrations.currentVersion))]]
+        )
         XCTAssertEqual(try database.rows("PRAGMA foreign_key_check"), [])
         let store = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test")
         let migrated = try XCTUnwrap(try store.opportunities().first)
@@ -397,7 +572,9 @@ final class WorkspaceStoreTests: XCTestCase {
     }
 
     func testFailedVersionTwentyMigrationKeepsVersionNineteenRowsAndVerifiedSnapshot() throws {
-        let database = try makeVersionNineteenDatabase(at: databaseURL)
+        let database = try makeHistoricalWorkspaceDatabase(at: databaseURL, version: .nineteen)
+        try insertLegacyHistoricalOpportunity(into: database)
+        try insertVersionNineteenReconciliationResult(into: database)
 
         XCTAssertThrowsError(try WorkspaceMigrations.apply(to: database, failVersionTwenty: true))
 
@@ -861,6 +1038,211 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents().last?.kind, "opportunity_stage_changed")
     }
 
+    func testStageMoveCommitsStageAuditHistoryAndProjectionTogether() throws {
+        let store = try makeStore()
+        _ = try store.create(CreateOpportunity(title: "Other opportunity", company: "Rekon Labs"))
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", nextAction: "Follow up", dueAt: now))
+        let activitiesBefore = try store.activityEvents()
+        let historyBefore = try store.stageHistory(forOpportunityID: opportunity.id)
+
+        let outcome = try store.moveStage(opportunityID: opportunity.id, to: .screening)
+
+        guard case let .persisted(commit) = outcome else {
+            return XCTFail("Expected a committed stage-move projection")
+        }
+        XCTAssertEqual(commit.opportunityID, opportunity.id)
+        XCTAssertEqual(commit.from, .saved)
+        XCTAssertEqual(commit.to, .screening)
+        let projectedMoved = try XCTUnwrap(commit.projection.opportunities.first { $0.id == opportunity.id })
+        let projectedOther = try XCTUnwrap(commit.projection.opportunities.first { $0.id != opportunity.id })
+        XCTAssertEqual(projectedMoved.stage, .screening)
+        XCTAssertEqual(projectedOther.stage, .saved)
+        XCTAssertEqual(commit.projection.activityEvents.count, activitiesBefore.count + 1)
+        XCTAssertEqual(commit.projection.stageHistoryForTransition.count, historyBefore.count + 1)
+        XCTAssertEqual(commit.projection.stageHistoryForTransition.last?.toStage, .screening)
+        XCTAssertEqual(commit.projection.needsAttention, try store.needsAttention())
+
+        let newlyAddedActivities = try store.activityEvents().filter { event in
+            !activitiesBefore.contains(event)
+        }
+        XCTAssertEqual(newlyAddedActivities.count, 1)
+        XCTAssertEqual(newlyAddedActivities.first?.kind, "opportunity_stage_changed")
+        XCTAssertEqual(newlyAddedActivities.first?.opportunityID, opportunity.id)
+        let newlyAddedHistory = try store.stageHistory(forOpportunityID: opportunity.id).filter { entry in
+            !historyBefore.contains(entry)
+        }
+        XCTAssertEqual(newlyAddedHistory.count, 1)
+        XCTAssertEqual(newlyAddedHistory.first?.opportunityID, opportunity.id)
+        XCTAssertEqual(newlyAddedHistory.first?.fromStage, .saved)
+        XCTAssertEqual(newlyAddedHistory.first?.toStage, .screening)
+
+        try store.close()
+        let reopened = try makeStore()
+        let reopenedMoved = try XCTUnwrap(try reopened.opportunities().first { $0.id == opportunity.id })
+        let reopenedOther = try XCTUnwrap(try reopened.opportunities().first { $0.id == projectedOther.id })
+        XCTAssertEqual(reopenedMoved.stage, .screening)
+        XCTAssertEqual(reopenedOther.stage, .saved)
+        XCTAssertEqual(try reopened.activityEvents().count, activitiesBefore.count + 1)
+        XCTAssertEqual(try reopened.stageHistory(forOpportunityID: opportunity.id).count, historyBefore.count + 1)
+    }
+
+    func testStageMoveSameStageClosedRetainsFullEncryptedReopenBaseline() throws {
+        let store = try makeStore()
+        let closed = try store.create(CreateOpportunity(title: "Closed role", company: "Rekon Labs", stage: .closed))
+        let opportunitiesBefore = try store.opportunities()
+        let activitiesBefore = try store.activityEvents()
+        let historyBefore = try store.stageHistory(forOpportunityID: closed.id)
+        let attentionBefore = try store.needsAttention()
+
+        XCTAssertEqual(try store.moveStage(opportunityID: closed.id, to: .closed), .noOp(opportunityID: closed.id, stage: .closed))
+        try store.close()
+        let reopened = try makeStore()
+
+        XCTAssertEqual(try reopened.opportunities(), opportunitiesBefore)
+        XCTAssertEqual(try reopened.activityEvents(), activitiesBefore)
+        XCTAssertEqual(try reopened.stageHistory(forOpportunityID: closed.id), historyBefore)
+        XCTAssertEqual(try reopened.needsAttention(), attentionBefore)
+    }
+
+    func testStageMoveDeletedOpportunityRetainsFullEncryptedReopenBaseline() throws {
+        let store = try makeStore()
+        let deleted = try store.create(CreateOpportunity(title: "Deleted role", company: "Rekon Labs", nextAction: "Follow up", dueAt: now))
+        try store.deleteOpportunity(id: deleted.id)
+        let opportunitiesBefore = try store.opportunities()
+        let activitiesBefore = try store.activityEvents()
+        let historyBefore = try store.stageHistory(forOpportunityID: deleted.id)
+        let attentionBefore = try store.needsAttention()
+
+        XCTAssertEqual(try store.moveStage(opportunityID: deleted.id, to: .screening), .unavailable(opportunityID: deleted.id))
+        try store.close()
+        let reopened = try makeStore()
+
+        XCTAssertEqual(try reopened.opportunities(), opportunitiesBefore)
+        XCTAssertEqual(try reopened.activityEvents(), activitiesBefore)
+        XCTAssertEqual(try reopened.stageHistory(forOpportunityID: deleted.id), historyBefore)
+        XCTAssertEqual(try reopened.needsAttention(), attentionBefore)
+    }
+
+    func testStageMoveReconciliationBlockedCloseRetainsFullEncryptedReopenBaseline() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(
+            title: "Blocked role",
+            company: "Rekon Labs",
+            nextAction: "Confirm review",
+            dueAt: now,
+            jobURL: "https://jobs.example.com/blocked"
+        ))
+        _ = try store.recordReconciliationResult(RecordReconciliationResult(
+            opportunityID: opportunity.id,
+            url: opportunity.jobURL,
+            outcome: .needsManualReview,
+            classification: .offlineUnchecked,
+            reason: .offlineUnchecked,
+            evidence: "Offline — check not run"
+        ))
+        let opportunitiesBefore = try store.opportunities()
+        let activitiesBefore = try store.activityEvents()
+        let historyBefore = try store.stageHistory(forOpportunityID: opportunity.id)
+        let attentionBefore = try store.needsAttention()
+
+        XCTAssertEqual(
+            try store.moveStage(opportunityID: opportunity.id, to: .closed),
+            .reconciliationBlocked(opportunityID: opportunity.id, target: .closed)
+        )
+        try store.close()
+        let reopened = try makeStore()
+
+        XCTAssertEqual(try reopened.opportunities(), opportunitiesBefore)
+        XCTAssertEqual(try reopened.activityEvents(), activitiesBefore)
+        XCTAssertEqual(try reopened.stageHistory(forOpportunityID: opportunity.id), historyBefore)
+        XCTAssertEqual(try reopened.needsAttention(), attentionBefore)
+    }
+
+    func testStageMoveSameStageIncludingClosedIsNoOpWithoutAuditOrHistory() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", stage: .closed))
+        let activitiesBefore = try store.activityEvents()
+        let historyBefore = try store.stageHistory(forOpportunityID: opportunity.id)
+
+        let outcome = try store.moveStage(opportunityID: opportunity.id, to: .closed)
+
+        XCTAssertEqual(outcome, .noOp(opportunityID: opportunity.id, stage: .closed))
+        XCTAssertEqual(try store.activityEvents(), activitiesBefore)
+        XCTAssertEqual(try store.stageHistory(forOpportunityID: opportunity.id), historyBefore)
+    }
+
+    func testStageMoveUnavailableAndBlockedCloseDoNotWriteAuditOrHistory() throws {
+        let store = try makeStore()
+        let opportunity = try store.create(CreateOpportunity(
+            title: "Product Manager",
+            company: "Rekon Labs",
+            jobURL: "https://jobs.example.com/product-manager"
+        ))
+        _ = try store.recordReconciliationResult(RecordReconciliationResult(
+            opportunityID: opportunity.id,
+            url: opportunity.jobURL,
+            outcome: .needsManualReview,
+            classification: .offlineUnchecked,
+            reason: .offlineUnchecked,
+            evidence: "Offline — check not run"
+        ))
+        let opportunitiesBefore = try store.opportunities()
+        let activitiesBefore = try store.activityEvents()
+        let historyBefore = try store.stageHistory(forOpportunityID: opportunity.id)
+        let tasksBefore = try store.needsAttention()
+
+        XCTAssertEqual(
+            try store.moveStage(opportunityID: opportunity.id, to: .closed),
+            .reconciliationBlocked(opportunityID: opportunity.id, target: .closed)
+        )
+        XCTAssertEqual(
+            try store.moveStage(opportunityID: "missing", to: .screening),
+            .unavailable(opportunityID: "missing")
+        )
+        XCTAssertEqual(try store.opportunities(), opportunitiesBefore)
+        XCTAssertEqual(try store.activityEvents(), activitiesBefore)
+        XCTAssertEqual(try store.stageHistory(forOpportunityID: opportunity.id), historyBefore)
+        XCTAssertEqual(try store.needsAttention(), tasksBefore)
+    }
+
+    func testStageMoveWriteFailureRollsBackStageAuditHistoryAndProjectionAfterReopen() throws {
+        let normal = try makeStore()
+        let opportunity = try normal.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", nextAction: "Follow up", dueAt: now))
+        let opportunitiesBefore = try normal.opportunities()
+        let eventsBefore = try normal.activityEvents()
+        let historyBefore = try normal.stageHistory(forOpportunityID: opportunity.id)
+        let tasksBefore = try normal.needsAttention()
+        try normal.close()
+        let failing = try makeStore(stageMoveFailurePoint: .beforeWrite)
+
+        XCTAssertThrowsError(try failing.moveStage(opportunityID: opportunity.id, to: .screening))
+        try failing.close()
+        let reopened = try makeStore()
+        XCTAssertEqual(try reopened.opportunities(), opportunitiesBefore)
+        XCTAssertEqual(try reopened.activityEvents(), eventsBefore)
+        XCTAssertEqual(try reopened.stageHistory(forOpportunityID: opportunity.id), historyBefore)
+        XCTAssertEqual(try reopened.needsAttention(), tasksBefore)
+    }
+
+    func testStageMoveProjectionFailureRollsBackStageAuditHistoryAndProjectionAfterReopen() throws {
+        let normal = try makeStore()
+        let opportunity = try normal.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs", nextAction: "Follow up", dueAt: now))
+        let opportunitiesBefore = try normal.opportunities()
+        let eventsBefore = try normal.activityEvents()
+        let historyBefore = try normal.stageHistory(forOpportunityID: opportunity.id)
+        let tasksBefore = try normal.needsAttention()
+        try normal.close()
+        let failing = try makeStore(stageMoveFailurePoint: .beforeProjectionRead)
+
+        XCTAssertThrowsError(try failing.moveStage(opportunityID: opportunity.id, to: .screening))
+        try failing.close()
+        let reopened = try makeStore()
+        XCTAssertEqual(try reopened.opportunities(), opportunitiesBefore)
+        XCTAssertEqual(try reopened.activityEvents(), eventsBefore)
+        XCTAssertEqual(try reopened.stageHistory(forOpportunityID: opportunity.id), historyBefore)
+        XCTAssertEqual(try reopened.needsAttention(), tasksBefore)
+    }
+
     func testStageHistoryRecordsCreationAndRealStageChanges() throws {
         let store = try makeStore()
         let opportunity = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
@@ -885,7 +1267,8 @@ final class WorkspaceStoreTests: XCTestCase {
             company: "Rekon Labs",
             stage: .screening,
             nextAction: "Prepare recruiter call",
-            dueAt: rescheduled
+            dueAt: rescheduled,
+            stageChangedAt: now
         )
 
         XCTAssertEqual(try store.opportunities(), [
@@ -897,7 +1280,9 @@ final class WorkspaceStoreTests: XCTestCase {
                 stage: .screening,
                 nextAction: "Prepare recruiter call",
                 dueAt: rescheduled,
-                stageChangedAt: now
+                stageChangedAt: now,
+                actionType: .other,
+                actionCustomText: "Prepare recruiter call"
             )
         ])
         XCTAssertEqual(try store.needsAttention().map(\.title), ["Prepare recruiter call"])
@@ -939,8 +1324,8 @@ final class WorkspaceStoreTests: XCTestCase {
             name: "Alex Morgan",
             employer: "Rekon Labs",
             title: "Recruiter",
-            email: "alex@example.com",
-            profileURL: "https://example.com/alex",
+            workEmail: "alex@example.com",
+            linkedInURL: "https://example.com/alex",
             relationshipContext: "Met at conference",
             notes: "Prefers email."
         ))
@@ -952,18 +1337,128 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.activityEvents().last?.contactID, contact.id)
     }
 
-    func testContactRejectsMalformedEmailOrProfileURLWithoutWriting() throws {
+    func testContactChannelsPersistAcrossCreateUpdateAndReopenAndRejectMalformedInputWithoutWriting() throws {
+        // This catches a channel that is silently omitted from the SQL mapping,
+        // a reopen that decodes the wrong column, or rejected input that writes.
         let store = try makeStore()
+        let created = try store.createContact(CreateContact(
+            name: "Alex Morgan", workEmail: "alex.work@example.test", personalEmail: "alex.personal@example.test",
+            mobilePhone: "+1 212 555 0101", officePhone: "+1 212 555 0102",
+            linkedInURL: "https://linkedin.example.test/in/alex", instagramURL: "https://instagram.example.test/alex",
+            facebookURL: "https://facebook.example.test/alex"
+        ))
+        XCTAssertEqual(try store.contacts(), [created])
 
-        XCTAssertThrowsError(try store.createContact(CreateContact(name: "Alex Morgan", email: "alex@")))
-        XCTAssertThrowsError(try store.createContact(CreateContact(name: "Alex Morgan", profileURL: "linkedin.com/in/alex")))
-        XCTAssertThrowsError(try store.createContact(CreateContact(name: "Alex Morgan", profileURL: "https:///in/alex")))
-        for profileURL in ["https://microsoft", "https://.", "https://.com", "https://example.", "https://foo..bar"] {
-            XCTAssertThrowsError(try store.createContact(CreateContact(name: "Alex Morgan", profileURL: profileURL)))
+        try store.updateContact(id: created.id, command: CreateContact(
+            name: "Alex Morgan", workEmail: "updated.work@example.test", personalEmail: "updated.personal@example.test",
+            mobilePhone: "+1 212 555 0191", officePhone: "+1 212 555 0192",
+            linkedInURL: "https://linkedin.example.test/in/updated", instagramURL: "https://instagram.example.test/updated",
+            facebookURL: "https://facebook.example.test/updated"
+        ))
+        try store.close()
+        let reopened = try WorkspaceStore(database: EncryptedDatabase.open(url: databaseURL, key: key, createIfMissing: false), now: now, actorID: "local-user", correlationID: "fixture-correlation")
+        let updated = try XCTUnwrap(reopened.contacts().first)
+        XCTAssertEqual([updated.workEmail, updated.personalEmail, updated.mobilePhone, updated.officePhone, updated.linkedInURL, updated.instagramURL, updated.facebookURL], ["updated.work@example.test", "updated.personal@example.test", "+1 212 555 0191", "+1 212 555 0192", "https://linkedin.example.test/in/updated", "https://instagram.example.test/updated", "https://facebook.example.test/updated"])
+
+        let contactsBeforeRejections = try reopened.contacts()
+        let activitiesBeforeRejections = try reopened.activityEvents()
+        XCTAssertThrowsError(try reopened.createContact(CreateContact(name: "Bad work", workEmail: "alex@")))
+        XCTAssertThrowsError(try reopened.createContact(CreateContact(name: "Bad personal", personalEmail: "alex@")))
+        for socialURL in ["linkedin.example.test/alex", "https:///alex"] {
+            XCTAssertThrowsError(try reopened.createContact(CreateContact(name: "Bad LinkedIn", linkedInURL: socialURL)))
+            XCTAssertThrowsError(try reopened.createContact(CreateContact(name: "Bad Instagram", instagramURL: socialURL)))
+            XCTAssertThrowsError(try reopened.createContact(CreateContact(name: "Bad Facebook", facebookURL: socialURL)))
         }
+        XCTAssertEqual(try reopened.contacts(), contactsBeforeRejections)
+        XCTAssertEqual(try reopened.activityEvents(), activitiesBeforeRejections)
+    }
 
-        XCTAssertEqual(try store.contacts(), [])
-        XCTAssertEqual(try store.activityEvents(), [])
+    func testContactProfileURLsRejectPrivateAndLocalHostsWithoutWriting() throws {
+        // This catches a profile URL validator that treats a dotted private IP
+        // address or local DNS alias as a public URL and persists it.
+        let store = try makeStore()
+        let publicHTTP = try store.createContact(CreateContact(
+            name: "Public HTTP",
+            linkedInURL: "http://profiles.example.test/alex"
+        ))
+        let publicHTTPS = try store.createContact(CreateContact(
+            name: "Public HTTPS",
+            linkedInURL: "https://profiles.example.test/alex"
+        ))
+        let publicIPAddress = try store.createContact(CreateContact(
+            name: "Public IP address",
+            linkedInURL: "http://8.8.8.8/profile"
+        ))
+        XCTAssertEqual(
+            try store.contacts().map(\.linkedInURL),
+            [publicHTTP.linkedInURL, publicHTTPS.linkedInURL, publicIPAddress.linkedInURL]
+        )
+
+        let contactsBeforeRejections = try store.contacts()
+        let activitiesBeforeRejections = try store.activityEvents()
+        let unsafeURLs = [
+            "https://127.0.0.1/profile",
+            "https://127.1/profile",
+            "https://10.0.0.1/profile",
+            "https://172.16.0.1/profile",
+            "https://192.168.0.1/profile",
+            "https://169.254.169.254/latest/meta-data",
+            "https://localhost.localdomain/profile",
+            "https://printer.local/profile",
+            "https://[::1]/profile",
+            "https://[fe80::1]/profile",
+            "https://[fd00::1]/profile"
+        ]
+
+        for url in unsafeURLs {
+            XCTAssertThrowsError(
+                try store.createContact(CreateContact(name: "Rejected profile", linkedInURL: url)),
+                "accepted unsafe profile URL: \(url)"
+            )
+            XCTAssertEqual(try store.contacts(), contactsBeforeRejections, "contact state changed for \(url)")
+            XCTAssertEqual(try store.activityEvents(), activitiesBeforeRejections, "activity evidence changed for \(url)")
+        }
+    }
+
+    func testContactEmailHandlerTargetsRejectUnsafeWorkAndPersonalValuesWithoutWriting() throws {
+        // This catches either contact-email field accepting URL-handler syntax
+        // on create or update and mutating the contact or its activity evidence.
+        let store = try makeStore()
+        let original = try store.createContact(CreateContact(
+            name: "Alex Morgan",
+            workEmail: "alex.work@example.test",
+            personalEmail: "alex.personal@example.test"
+        ))
+        let contactsBeforeRejections = try store.contacts()
+        let activitiesBeforeRejections = try store.activityEvents()
+        let unsafeAddresses = [
+            "question": "victim@example.test?cc=attacker.example.test",
+            "fragment": "victim#tag@example.test",
+            "slash": "victim/name@example.test",
+            "ampersand": "victim&other@example.test",
+            "additional-at": "victim@example.test@attacker.test"
+        ]
+
+        for (label, address) in unsafeAddresses {
+            XCTAssertThrowsError(
+                try store.createContact(CreateContact(name: "Rejected work \(label)", workEmail: address)),
+                "work email accepted \(label)"
+            )
+            XCTAssertThrowsError(
+                try store.createContact(CreateContact(name: "Rejected personal \(label)", personalEmail: address)),
+                "personal email accepted \(label)"
+            )
+            XCTAssertThrowsError(
+                try store.updateContact(id: original.id, command: CreateContact(name: "Changed work", workEmail: address)),
+                "work email update accepted \(label)"
+            )
+            XCTAssertThrowsError(
+                try store.updateContact(id: original.id, command: CreateContact(name: "Changed personal", personalEmail: address)),
+                "personal email update accepted \(label)"
+            )
+            XCTAssertEqual(try store.contacts(), contactsBeforeRejections, "contact state changed for \(label)")
+            XCTAssertEqual(try store.activityEvents(), activitiesBeforeRejections, "activity evidence changed for \(label)")
+        }
     }
 
     func testContactRetainsMultilineRelationshipContextAndNotes() throws {
@@ -1015,7 +1510,7 @@ final class WorkspaceStoreTests: XCTestCase {
         let store = try makeStore()
         let first = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
         let second = try store.create(CreateOpportunity(title: "Director", company: "Rekon Labs"))
-        let contact = try store.createContact(CreateContact(name: "Alex Morgan", employer: "Rekon Labs", email: "alex@example.com"))
+        let contact = try store.createContact(CreateContact(name: "Alex Morgan", employer: "Rekon Labs", workEmail: "alex@example.com"))
 
         try store.linkContact(contactID: contact.id, toOpportunityID: first.id)
         try store.linkContact(contactID: contact.id, toOpportunityID: second.id)
@@ -1678,27 +2173,31 @@ final class WorkspaceStoreTests: XCTestCase {
     }
 
     func testVersionTwentyTwoDocumentReferenceMigrationRequiresRelinkWithoutRetainingBookmarkData() throws {
-        let database = try EncryptedDatabase.open(url: databaseURL, key: key)
-        let currentStore = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test")
-        let opportunity = try currentStore.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
-        _ = try currentStore.recordDocumentReference(RecordDocumentReference(
-            opportunityID: opportunity.id,
-            kind: .resume,
-            filename: "resume.pdf",
-            contentType: "application/pdf",
-            sourceHash: String(repeating: "c", count: 64),
-            byteCount: 2_048,
-            bookmarkData: Data([0x01, 0x02])
-        ))
-        try database.execute("ALTER TABLE document_references DROP COLUMN bookmark_data")
-        try database.execute("ALTER TABLE document_references DROP COLUMN availability")
-        try database.execute("DELETE FROM migration_history WHERE version = 23")
-        try database.execute("UPDATE schema_migrations SET version = 22")
+        let database = try makeHistoricalWorkspaceDatabase(at: databaseURL, version: .twentyTwo)
+        try insertLegacyHistoricalOpportunity(into: database)
+        try database.execute(
+            """
+            INSERT INTO document_references (
+                id, opportunity_id, kind, filename, content_type, source_hash,
+                byte_count, attached_at, final_sent_at
+            ) VALUES (
+                'document-v22', 'legacy-opportunity', 'Résumé', 'resume.pdf',
+                'application/pdf', ?, 2048, ?, NULL
+            )
+            """,
+            values: [
+                .text(String(repeating: "c", count: 64)),
+                .real(now.timeIntervalSince1970)
+            ]
+        )
+        let versionTwentyTwoDocumentColumns = try database.rows("PRAGMA table_info(document_references)")
+        XCTAssertFalse(versionTwentyTwoDocumentColumns.contains { $0.count > 1 && $0[1] == .text("bookmark_data") })
+        XCTAssertFalse(versionTwentyTwoDocumentColumns.contains { $0.count > 1 && $0[1] == .text("availability") })
 
         let migratedStore = try WorkspaceStore(database: database, now: now, actorID: "test", correlationID: "test")
-        let reference = try XCTUnwrap(migratedStore.documentReferences(forOpportunityID: opportunity.id).first)
+        let reference = try XCTUnwrap(migratedStore.documentReferences(forOpportunityID: "legacy-opportunity").first)
 
-        XCTAssertEqual(try migratedStore.schemaVersion(), 25)
+        XCTAssertEqual(try migratedStore.schemaVersion(), WorkspaceMigrations.currentVersion)
         XCTAssertNil(reference.bookmarkData)
         XCTAssertEqual(reference.availability, .relinkRequired)
     }
@@ -1773,7 +2272,10 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(try store.taskReminder(id: reviewTaskID)?.isComplete, false)
     }
 
-    private func makeStore(failBeforeActivityInsert: Bool = false) throws -> WorkspaceStore {
+    private func makeStore(
+        failBeforeActivityInsert: Bool = false,
+        stageMoveFailurePoint: StageMoveFailurePoint? = nil
+    ) throws -> WorkspaceStore {
         let database = try EncryptedDatabase.open(url: databaseURL, key: key)
         var identifier = 0
         return try WorkspaceStore(
@@ -1785,45 +2287,478 @@ final class WorkspaceStoreTests: XCTestCase {
             },
             actorID: "local-user",
             correlationID: "fixture-correlation",
-            failBeforeActivityInsert: failBeforeActivityInsert
+            failBeforeActivityInsert: failBeforeActivityInsert,
+            stageMoveFailurePoint: stageMoveFailurePoint
         )
     }
 
-    private func makeVersionEighteenDatabase(at url: URL) throws -> EncryptedDatabase {
+    private func makeHistoricalWorkspaceDatabase(
+        at url: URL,
+        version: HistoricalWorkspaceSchemaVersion
+    ) throws -> EncryptedDatabase {
         let database = try EncryptedDatabase.open(url: url, key: key)
-        _ = try WorkspaceStore(database: database, now: now, actorID: "fixture", correlationID: "fixture")
-        try database.execute("INSERT INTO opportunities (id, title, company, created_at, stage, next_action, due_at, job_url, job_description, notes, compensation, location, work_arrangement, application_date, response_state, stage_changed_at, deleted_at) VALUES ('legacy-opportunity', 'Legacy role', 'Rekon Labs', ?, 'Saved', '', NULL, '', '', '', NULL, NULL, 'Not specified', NULL, 'No response recorded', ?, NULL)", values: [.real(now.timeIntervalSince1970), .real(now.timeIntervalSince1970)])
-        try database.execute("DROP TABLE IF EXISTS reconciliation_check_operations")
-        try database.execute("DROP TABLE reconciliation_results")
-        try database.execute("DROP TABLE reconciliation_reviews")
-        try database.execute("DELETE FROM migration_history WHERE version = 20")
-        try database.execute("DELETE FROM migration_history WHERE version = 19")
-        try database.execute("UPDATE schema_migrations SET version = 18")
-        return database
+        do {
+            try database.execute("CREATE TABLE schema_migrations (version INTEGER NOT NULL)")
+            try database.execute(
+                "INSERT INTO schema_migrations (version) VALUES (?)",
+                values: [.integer(Int64(version.rawValue))]
+            )
+            try database.execute(
+                "CREATE TABLE migration_history (version INTEGER PRIMARY KEY NOT NULL, checksum TEXT NOT NULL)"
+            )
+            try installHistoricalWorkspaceSchema(on: database, through: version)
+            try insertHistoricalMigrationHistory(into: database, through: version)
+            try database.execute(
+                """
+                INSERT INTO workspace_metadata (key, value)
+                VALUES ('workspace_id', '00000000000040008000000000000001')
+                """
+            )
+            try assertExactHistoricalSchema(database, version: version)
+            return database
+        } catch {
+            try? database.close()
+            throw error
+        }
     }
 
-    private func makeVersionNineteenDatabase(at url: URL) throws -> EncryptedDatabase {
-        let database = try makeVersionEighteenDatabase(at: url)
-        try database.execute("CREATE TABLE reconciliation_reviews (opportunity_id TEXT PRIMARY KEY NOT NULL REFERENCES opportunities(id), task_reminder_id TEXT NOT NULL UNIQUE REFERENCES task_reminders(id), created_at REAL NOT NULL, closure_confirmed_at REAL)")
-        try database.execute("CREATE INDEX reconciliation_reviews_task_reminder_id ON reconciliation_reviews(task_reminder_id)")
-        try database.execute("CREATE TABLE reconciliation_results (id TEXT PRIMARY KEY NOT NULL, opportunity_id TEXT NOT NULL REFERENCES opportunities(id), url TEXT NOT NULL, recorded_at REAL NOT NULL, outcome TEXT NOT NULL, classification TEXT NOT NULL, reason TEXT NOT NULL, confidence TEXT, evidence TEXT NOT NULL, error TEXT NOT NULL, review_task_reminder_id TEXT REFERENCES task_reminders(id), closure_confirmed_at REAL, legacy_posting_check_id TEXT UNIQUE, legacy_status TEXT)")
-        try database.execute("CREATE INDEX reconciliation_results_opportunity_recorded_at ON reconciliation_results(opportunity_id, recorded_at DESC, id DESC)")
-        try database.execute("INSERT INTO reconciliation_results (id, opportunity_id, url, recorded_at, outcome, classification, reason, confidence, evidence, error, review_task_reminder_id, closure_confirmed_at, legacy_posting_check_id, legacy_status) VALUES ('result-v19', 'legacy-opportunity', 'https://jobs.example.com/role', ?, 'Needs manual review', 'Ambiguous', 'manual review', 'Medium', 'Existing R4 evidence', '', NULL, NULL, NULL, NULL)", values: [.real(now.timeIntervalSince1970)])
-        try database.execute("INSERT INTO migration_history (version, checksum) VALUES (19, ?)", values: [.text(WorkspaceMigrations.versionNineteenChecksum)])
-        try database.execute("UPDATE schema_migrations SET version = 19")
-        return database
+    private func installHistoricalWorkspaceSchema(
+        on database: EncryptedDatabase,
+        through version: HistoricalWorkspaceSchemaVersion
+    ) throws {
+        switch version {
+        case .eleven:
+            try executeHistoricalDDL(versionElevenDDL, on: database)
+        case .sixteen:
+            try installHistoricalWorkspaceSchema(on: database, through: .eleven)
+            try executeHistoricalDDL(versionTwelveThroughSixteenDDL, on: database)
+        case .eighteen:
+            try installHistoricalWorkspaceSchema(on: database, through: .sixteen)
+            try executeHistoricalDDL(versionSeventeenThroughEighteenDDL, on: database)
+        case .nineteen:
+            try installHistoricalWorkspaceSchema(on: database, through: .eighteen)
+            try executeHistoricalDDL(versionNineteenDDL, on: database)
+        case .twenty:
+            try installHistoricalWorkspaceSchema(on: database, through: .nineteen)
+            try executeHistoricalDDL(versionTwentyDDL, on: database)
+        case .twentyTwo:
+            try installHistoricalWorkspaceSchema(on: database, through: .twenty)
+            try executeHistoricalDDL(versionTwentyOneThroughTwentyTwoDDL, on: database)
+        }
     }
 
-    private func makeVersionTwentyDatabase(at url: URL) throws -> EncryptedDatabase {
-        let database = try EncryptedDatabase.open(url: url, key: key)
-        _ = try WorkspaceStore(database: database, now: now, actorID: "fixture", correlationID: "fixture")
-        try database.execute("ALTER TABLE opportunities DROP COLUMN action_custom_text")
-        try database.execute("ALTER TABLE opportunities DROP COLUMN action_type")
-        try database.execute("ALTER TABLE opportunities DROP COLUMN compensation_pay_period")
-        try database.execute("ALTER TABLE opportunities DROP COLUMN compensation_maximum")
-        try database.execute("ALTER TABLE opportunities DROP COLUMN compensation_minimum")
-        try database.execute("DELETE FROM migration_history WHERE version = 21")
-        try database.execute("UPDATE schema_migrations SET version = 20")
-        return database
+    private func executeHistoricalDDL(
+        _ statements: [String],
+        on database: EncryptedDatabase
+    ) throws {
+        for statement in statements {
+            try database.execute(statement)
+        }
+    }
+
+    private func insertHistoricalMigrationHistory(
+        into database: EncryptedDatabase,
+        through version: HistoricalWorkspaceSchemaVersion
+    ) throws {
+        let rows: [(version: Int, checksum: String)] = [
+            (4, WorkspaceMigrations.baselineChecksum),
+            (5, WorkspaceMigrations.versionFiveChecksum),
+            (6, WorkspaceMigrations.versionSixChecksum),
+            (7, WorkspaceMigrations.versionSevenChecksum),
+            (8, WorkspaceMigrations.versionEightChecksum),
+            (9, WorkspaceMigrations.versionNineChecksum),
+            (10, WorkspaceMigrations.versionTenChecksum),
+            (11, WorkspaceMigrations.versionElevenChecksum),
+            (12, WorkspaceMigrations.versionTwelveChecksum),
+            (13, WorkspaceMigrations.versionThirteenChecksum),
+            (14, WorkspaceMigrations.versionFourteenChecksum),
+            (15, WorkspaceMigrations.versionFifteenChecksum),
+            (16, WorkspaceMigrations.versionSixteenChecksum),
+            (17, WorkspaceMigrations.versionSeventeenChecksum),
+            (18, WorkspaceMigrations.versionEighteenChecksum),
+            (19, WorkspaceMigrations.versionNineteenChecksum),
+            (20, WorkspaceMigrations.versionTwentyChecksum),
+            (21, WorkspaceMigrations.versionTwentyOneChecksum),
+            (22, WorkspaceMigrations.versionTwentyTwoChecksum)
+        ]
+        for row in rows where row.version <= version.rawValue {
+            try database.execute(
+                "INSERT INTO migration_history (version, checksum) VALUES (?, ?)",
+                values: [.integer(Int64(row.version)), .text(row.checksum)]
+            )
+        }
+    }
+
+    private func assertExactHistoricalSchema(
+        _ database: EncryptedDatabase,
+        version: HistoricalWorkspaceSchemaVersion
+    ) throws {
+        let expectation = expectedHistoricalWorkspace(version: version)
+        XCTAssertEqual(
+            try database.rows("SELECT version FROM schema_migrations"),
+            [[.integer(Int64(expectation.schemaVersion))]],
+            "v\(version.rawValue) schema_migrations must contain exactly the selected version"
+        )
+        XCTAssertEqual(
+            try database.rows("SELECT key, value FROM workspace_metadata ORDER BY key"),
+            [[.text("workspace_id"), .text("00000000000040008000000000000001")]],
+            "v\(version.rawValue) workspace identity mismatch"
+        )
+        XCTAssertEqual(
+            try database.rows("SELECT version, checksum FROM migration_history ORDER BY version"),
+            expectation.migrationHistoryRows,
+            "v\(version.rawValue) migration history must be contiguous and exact"
+        )
+
+        let actualTables = Set<String>(
+            try database.rows(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            ).compactMap { row in
+                guard case let .text(name)? = row.first else { return nil }
+                return name
+            }
+        )
+        XCTAssertEqual(actualTables, expectation.tables, historicalTableMismatchMessage(for: version))
+
+        let actualIndexes = Set<String>(
+            try database.rows(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            ).compactMap { row in
+                guard case let .text(name)? = row.first else { return nil }
+                return name
+            }
+        )
+        XCTAssertEqual(
+            actualIndexes,
+            expectation.namedIndexes,
+            "v\(version.rawValue) named-index set mismatch"
+        )
+        XCTAssertEqual(
+            Set(expectation.columnNamesByTable.keys),
+            expectation.tables,
+            "v\(version.rawValue) expected column manifest must cover every table exactly"
+        )
+
+        for table in expectation.tables.sorted() {
+            let actualColumns = Set<String>(
+                try database.rows("PRAGMA table_info('\(table)')").compactMap { row in
+                    guard row.count > 1, case let .text(name) = row[1] else { return nil }
+                    return name
+                }
+            )
+            XCTAssertEqual(
+                actualColumns,
+                expectation.columnNamesByTable[table],
+                historicalColumnMismatchMessage(for: version, table: table)
+            )
+        }
+
+        for table in actualTables.subtracting(["schema_migrations", "migration_history", "workspace_metadata"]).sorted() {
+            XCTAssertEqual(
+                try database.rows("SELECT count(*) FROM '\(table)'"),
+                [[.integer(0)]],
+                "v\(version.rawValue) \(table) must not contain implicit fixture rows"
+            )
+        }
+    }
+
+    private func historicalTableMismatchMessage(
+        for version: HistoricalWorkspaceSchemaVersion
+    ) -> String {
+        switch version {
+        case .eleven:
+            return "v11 table set mismatch: task_reminders is required"
+        case .sixteen:
+            return "v16 table set mismatch: posting_checks is required"
+        case .eighteen:
+            return "v18 table set mismatch: reconciliation_results must be absent"
+        case .nineteen:
+            return "v19 table set mismatch: reconciliation_check_operations must be absent"
+        case .twenty:
+            return "v20 table set mismatch"
+        case .twentyTwo:
+            return "v22 table set mismatch"
+        }
+    }
+
+    private func historicalColumnMismatchMessage(
+        for version: HistoricalWorkspaceSchemaVersion,
+        table: String
+    ) -> String {
+        if version == .twenty, table == "opportunities" {
+            return "v20 opportunities column-name set mismatch: compensation_minimum must be absent"
+        }
+        if version == .twentyTwo, table == "document_references" {
+            return "v22 document_references column-name set mismatch: bookmark_data and availability must be absent"
+        }
+        return "v\(version.rawValue) \(table) column-name set mismatch"
+    }
+
+    private func expectedHistoricalWorkspace(
+        version: HistoricalWorkspaceSchemaVersion
+    ) -> HistoricalWorkspaceExpectation {
+        let tables: Set<String>
+        let namedIndexes: Set<String>
+        switch version {
+        case .eleven:
+            tables = [
+                "schema_migrations", "migration_history", "opportunities",
+                "task_reminders", "activity_events", "contacts",
+                "contact_opportunities", "interactions", "workspace_metadata",
+                "deletion_tombstones", "import_reports", "opportunity_stage_history"
+            ]
+            namedIndexes = []
+        case .sixteen:
+            tables = [
+                "schema_migrations", "migration_history", "opportunities",
+                "task_reminders", "activity_events", "contacts",
+                "contact_opportunities", "interactions", "workspace_metadata",
+                "deletion_tombstones", "import_reports", "opportunity_stage_history",
+                "posting_checks", "document_references", "opportunity_response_history"
+            ]
+            namedIndexes = [
+                "interactions_contact_occurred_at",
+                "posting_checks_opportunity_checked_at",
+                "document_references_opportunity_attached_at",
+                "opportunity_response_history_opportunity_occurred_at"
+            ]
+        case .eighteen:
+            tables = [
+                "schema_migrations", "migration_history", "opportunities",
+                "task_reminders", "activity_events", "contacts",
+                "contact_opportunities", "interactions", "workspace_metadata",
+                "deletion_tombstones", "import_reports", "opportunity_stage_history",
+                "posting_checks", "document_references", "opportunity_response_history",
+                "import_report_rows"
+            ]
+            namedIndexes = [
+                "interactions_contact_occurred_at",
+                "posting_checks_opportunity_checked_at",
+                "document_references_opportunity_attached_at",
+                "opportunity_response_history_opportunity_occurred_at",
+                "import_report_rows_report_row"
+            ]
+        case .nineteen:
+            tables = [
+                "schema_migrations", "migration_history", "opportunities",
+                "task_reminders", "activity_events", "contacts",
+                "contact_opportunities", "interactions", "workspace_metadata",
+                "deletion_tombstones", "import_reports", "opportunity_stage_history",
+                "posting_checks", "document_references", "opportunity_response_history",
+                "import_report_rows", "reconciliation_reviews", "reconciliation_results"
+            ]
+            namedIndexes = [
+                "interactions_contact_occurred_at",
+                "posting_checks_opportunity_checked_at",
+                "document_references_opportunity_attached_at",
+                "opportunity_response_history_opportunity_occurred_at",
+                "import_report_rows_report_row",
+                "reconciliation_reviews_task_reminder_id",
+                "reconciliation_results_opportunity_recorded_at"
+            ]
+        case .twenty, .twentyTwo:
+            tables = [
+                "schema_migrations", "migration_history", "opportunities",
+                "task_reminders", "activity_events", "contacts",
+                "contact_opportunities", "interactions", "workspace_metadata",
+                "deletion_tombstones", "import_reports", "opportunity_stage_history",
+                "posting_checks", "document_references", "opportunity_response_history",
+                "import_report_rows", "reconciliation_reviews", "reconciliation_results",
+                "reconciliation_check_operations"
+            ]
+            namedIndexes = [
+                "interactions_contact_occurred_at",
+                "posting_checks_opportunity_checked_at",
+                "document_references_opportunity_attached_at",
+                "opportunity_response_history_opportunity_occurred_at",
+                "import_report_rows_report_row",
+                "reconciliation_reviews_task_reminder_id",
+                "reconciliation_results_opportunity_recorded_at",
+                "reconciliation_check_operations_opportunity_state"
+            ]
+        }
+
+        var columns: [String: Set<String>] = [
+            "schema_migrations": ["version"],
+            "migration_history": ["version", "checksum"],
+            "task_reminders": ["id", "opportunity_id", "title", "due_at", "is_complete"],
+            "activity_events": [
+                "id", "kind", "opportunity_id", "contact_id", "actor_id",
+                "correlation_id", "occurred_at"
+            ],
+            "contacts": [
+                "id", "name", "employer", "title", "email", "profile_url",
+                "relationship_context", "notes", "deleted_at"
+            ],
+            "contact_opportunities": ["contact_id", "opportunity_id"],
+            "workspace_metadata": ["key", "value"],
+            "deletion_tombstones": ["subject_id", "subject_type", "deleted_at", "display_value"],
+            "opportunity_stage_history": [
+                "id", "opportunity_id", "from_stage", "to_stage", "occurred_at"
+            ]
+        ]
+
+        if version == .eleven {
+            columns["opportunities"] = [
+                "id", "title", "company", "created_at", "stage", "next_action",
+                "due_at", "deleted_at"
+            ]
+            columns["interactions"] = ["id", "opportunity_id", "summary", "occurred_at"]
+            columns["import_reports"] = [
+                "id", "imported_count", "skipped_count", "duplicate_kept_count",
+                "invalid_count", "created_at"
+            ]
+        } else {
+            columns["opportunities"] = [
+                "id", "title", "company", "created_at", "stage", "next_action",
+                "due_at", "deleted_at", "job_url", "job_description", "notes",
+                "compensation", "location", "work_arrangement", "application_date",
+                "response_state", "stage_changed_at"
+            ]
+            columns["interactions"] = [
+                "id", "contact_id", "opportunity_id", "kind", "summary",
+                "occurred_at", "next_touch_at"
+            ]
+            columns["posting_checks"] = [
+                "id", "opportunity_id", "url", "status", "evidence", "checked_at"
+            ]
+            columns["document_references"] = [
+                "id", "opportunity_id", "kind", "filename", "content_type",
+                "source_hash", "byte_count", "attached_at", "final_sent_at"
+            ]
+            columns["opportunity_response_history"] = [
+                "id", "opportunity_id", "from_state", "to_state", "occurred_at"
+            ]
+            columns["import_reports"] = [
+                "id", "imported_count", "skipped_count", "duplicate_kept_count",
+                "invalid_count", "created_at"
+            ]
+        }
+
+        if version.rawValue >= HistoricalWorkspaceSchemaVersion.eighteen.rawValue {
+            columns["import_reports"] = [
+                "id", "imported_count", "skipped_count", "duplicate_kept_count",
+                "invalid_count", "created_at", "updated_count", "source_basename",
+                "mapping_summary", "failed_count"
+            ]
+            columns["import_report_rows"] = [
+                "id", "report_id", "source_row", "outcome", "reason",
+                "duplicate_rationale", "opportunity_id"
+            ]
+        }
+
+        if version.rawValue >= HistoricalWorkspaceSchemaVersion.nineteen.rawValue {
+            columns["reconciliation_reviews"] = [
+                "opportunity_id", "task_reminder_id", "created_at", "closure_confirmed_at"
+            ]
+            columns["reconciliation_results"] = [
+                "id", "opportunity_id", "url", "recorded_at", "outcome",
+                "classification", "reason", "confidence", "evidence", "error",
+                "review_task_reminder_id", "closure_confirmed_at",
+                "legacy_posting_check_id", "legacy_status"
+            ]
+        }
+
+        if version.rawValue >= HistoricalWorkspaceSchemaVersion.twenty.rawValue {
+            columns["reconciliation_check_operations"] = [
+                "id", "opportunity_id", "correlation_id", "url_snapshot",
+                "state", "started_at", "terminal_at"
+            ]
+            columns["reconciliation_results"] = [
+                "id", "opportunity_id", "url", "recorded_at", "outcome",
+                "classification", "reason", "confidence", "evidence", "error",
+                "review_task_reminder_id", "closure_confirmed_at",
+                "legacy_posting_check_id", "legacy_status", "check_operation_id",
+                "method", "checker_version", "http_status", "mime_type",
+                "declared_bytes", "received_bytes", "content_sha256",
+                "response_date", "last_modified", "etag", "retry_after",
+                "redirect_target_redacted", "evidence_excerpt", "redacted_error_code"
+            ]
+        }
+
+        if version == .twentyTwo {
+            columns["opportunities"] = [
+                "id", "title", "company", "created_at", "stage", "next_action",
+                "due_at", "deleted_at", "job_url", "job_description", "notes",
+                "compensation", "location", "work_arrangement", "application_date",
+                "response_state", "stage_changed_at", "compensation_minimum",
+                "compensation_maximum", "compensation_pay_period", "action_type",
+                "action_custom_text"
+            ]
+            columns["import_report_rows"] = [
+                "id", "report_id", "source_row", "outcome", "reason",
+                "duplicate_rationale", "opportunity_id", "display_title",
+                "display_company"
+            ]
+        }
+
+        let allMigrationHistoryRows: [[DatabaseValue]] = [
+            [.integer(4), .text("363c516ac302e21fedd5407bb547daa516b957f592ee7a0505f7e3d8f88ce6e9")],
+            [.integer(5), .text("5fa294b9f447a4acebdd8961a43f4214788bf67fab3b0165c327f4a032e4e36b")],
+            [.integer(6), .text("ca983bac7d74e8f3c4107bc4c893c30a244467a27f301b4dbe929580673841b8")],
+            [.integer(7), .text("8e651b7b00affb52940b0d3873439a64f9cec7448cef601e0553e636fe8159f9")],
+            [.integer(8), .text("ad8da3456b86cc4a74c5438126ca448261760e29c1adda72cde837ed297c195e")],
+            [.integer(9), .text("c155d40c9ad76659e9e26660e4802ee1a324cd81f3dd6b2950ed48e7730df7dd")],
+            [.integer(10), .text("5dea6b590574cf8aba5cc0e26c1a91c24bfd517dcfe04a586b341432f4478cff")],
+            [.integer(11), .text("2787c3a077d6038cdbc0e04192469c586a376752293e35e37273cfb4591d90bd")],
+            [.integer(12), .text("d6ac5e4b99e8f6d9eabd3c9bb14ac186b22a7c2995b56aa230bc399f29a45c67")],
+            [.integer(13), .text("fc1a67cc69bc1e1753627154ffe426d45dcd8c40c1c6bbfe8e9af283b571fc5a")],
+            [.integer(14), .text("a5124dad9f2faccedbf6a89289263372fea732fdbe5f21c1c25c9f7f15086333")],
+            [.integer(15), .text("9ee95b90bd209947f260e9c8aca9b13be63a6ebb5baa9a8af45abf69afbe858e")],
+            [.integer(16), .text("ded7964daa1d739c95b9368b423c916c74610ee05cfb3b311bca8b3f665fb558")],
+            [.integer(17), .text("ee5d2ea234ba5dcb8a31fbe1b77adeb68ab211074f17f9c875934f0f07379c95")],
+            [.integer(18), .text("ede096d54d80a8add35b640127686b3e5d7415fc72f3dd97832add02812e7c85")],
+            [.integer(19), .text("b77fca7a7d83a9ceee85e48862beadd303016e1cd5c4aded14b67f110dfa03d5")],
+            [.integer(20), .text("f8479d3ccd283df05793c7680af5131a9ec03c5265fc53add03b03dc0f70dc44")],
+            [.integer(21), .text("ee3b09829091f7dacd090d6c368a0875cd0e3b4f037ddc653a0696ee7063b63a")],
+            [.integer(22), .text("c24963911d57d3e250de2fb101041f2f4a13e2780ec0009a8a59d8923ce915c9")]
+        ]
+
+        return HistoricalWorkspaceExpectation(
+            schemaVersion: version.rawValue,
+            tables: tables,
+            namedIndexes: namedIndexes,
+            columnNamesByTable: columns,
+            migrationHistoryRows: Array(allMigrationHistoryRows.prefix(version.rawValue - 3))
+        )
+    }
+
+    private func insertLegacyHistoricalOpportunity(
+        into database: EncryptedDatabase
+    ) throws {
+        try database.execute(
+            """
+            INSERT INTO opportunities (
+                id, title, company, created_at, stage, next_action, due_at,
+                job_url, job_description, notes, compensation, location,
+                work_arrangement, application_date, response_state,
+                stage_changed_at, deleted_at
+            ) VALUES (
+                'legacy-opportunity', 'Legacy role', 'Rekon Labs', ?,
+                'Saved', '', NULL, '', '', '', NULL, NULL, 'Not specified',
+                NULL, 'No response recorded', ?, NULL
+            )
+            """,
+            values: [.real(now.timeIntervalSince1970), .real(now.timeIntervalSince1970)]
+        )
+    }
+
+    private func insertVersionNineteenReconciliationResult(
+        into database: EncryptedDatabase
+    ) throws {
+        try database.execute(
+            """
+            INSERT INTO reconciliation_results (
+                id, opportunity_id, url, recorded_at, outcome, classification,
+                reason, confidence, evidence, error, review_task_reminder_id,
+                closure_confirmed_at, legacy_posting_check_id, legacy_status
+            ) VALUES (
+                'result-v19', 'legacy-opportunity', 'https://jobs.example.com/role',
+                ?, 'Needs manual review', 'Ambiguous', 'manual review', 'Medium',
+                'Existing R4 evidence', '', NULL, NULL, NULL, NULL
+            )
+            """,
+            values: [.real(now.timeIntervalSince1970)]
+        )
     }
 }
