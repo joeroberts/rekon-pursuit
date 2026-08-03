@@ -27,42 +27,47 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(snapshot.activeOpportunityCount, 4)
         XCTAssertEqual(snapshot.appliedThisWeekCount, 1)
         XCTAssertEqual(snapshot.interviewCount, 1)
-        XCTAssertEqual(snapshot.upcomingTasks.map(\.id), ["task"])
+        XCTAssertTrue(snapshot.upcomingOpportunities.isEmpty)
     }
 
     func testHomeDashboardSnapshotOrdersAttentionAndDoesNotFabricateEmptyState() {
         let now = Date(timeIntervalSince1970: 1_746_576_000)
+        let opportunities = [
+            Opportunity(id: "one", title: "Undated role", company: "Rekon Labs", createdAt: now, nextAction: "Follow up")
+        ]
         let tasks = [
             TaskReminder(id: "undated", opportunityID: "one", title: "Undated", dueAt: nil, isComplete: false),
             TaskReminder(id: "later", opportunityID: "one", title: "Later", dueAt: now.addingTimeInterval(3_600), isComplete: false),
             TaskReminder(id: "earlier", opportunityID: "one", title: "Earlier", dueAt: now.addingTimeInterval(-3_600), isComplete: false),
             TaskReminder(id: "complete", opportunityID: "one", title: "Complete", dueAt: now, isComplete: true)
         ]
-        let snapshot = HomeDashboardSnapshot(opportunities: [], attentionTasks: tasks, now: now, calendar: .current)
+        let snapshot = HomeDashboardSnapshot(opportunities: opportunities, attentionTasks: tasks, now: now, calendar: .current)
 
-        XCTAssertEqual(snapshot.attentionTasks.map(\.id), ["earlier", "later", "undated"])
-        XCTAssertEqual(snapshot.upcomingTasks.map(\.id), ["earlier", "later", "undated"])
-        XCTAssertEqual(snapshot.activeOpportunityCount, 0)
+        XCTAssertEqual(snapshot.attentionTasks.map(\.id), ["earlier"])
+        XCTAssertEqual(snapshot.upcomingOpportunities.map(\.id), ["one"])
+        XCTAssertEqual(snapshot.activeOpportunityCount, 1)
         XCTAssertEqual(snapshot.appliedThisWeekCount, 0)
         XCTAssertEqual(snapshot.interviewCount, 0)
     }
 
-    func testHomeDashboardSnapshotNextUpExcludesTheFirstThreeAttentionTasks() {
+    func testHomeDashboardSnapshotSeparatesFutureScheduledActionsFromAttention() {
         let now = Date(timeIntervalSince1970: 1_746_576_000)
-        let tasks = (0..<4).map { index in
-            TaskReminder(
-                id: "task-\(index)",
-                opportunityID: "opportunity-\(index)",
-                title: "Task \(index)",
-                dueAt: now.addingTimeInterval(TimeInterval(index * 3_600)),
-                isComplete: false
-            )
-        }
+        let opportunities = [
+            Opportunity(id: "tomorrow", title: "Platform Engineer", company: "Apex Cloud", createdAt: now, nextAction: "Phone screen", dueAt: now.addingTimeInterval(86_400)),
+            Opportunity(id: "later", title: "Staff Engineer", company: "Rekon Labs", createdAt: now, nextAction: "Final interview", dueAt: now.addingTimeInterval(3 * 86_400)),
+            Opportunity(id: "past", title: "Past role", company: "Rekon Labs", createdAt: now, nextAction: "Follow up", dueAt: now.addingTimeInterval(-3_600)),
+            Opportunity(id: "blank", title: "Blank action", company: "Rekon Labs", createdAt: now, nextAction: " ", dueAt: now.addingTimeInterval(86_400)),
+            Opportunity(id: "outside-week", title: "Later role", company: "Rekon Labs", createdAt: now, nextAction: "Panel interview", dueAt: now.addingTimeInterval(8 * 86_400)),
+            Opportunity(id: "closed", title: "Closed role", company: "Rekon Labs", createdAt: now, stage: .closed, nextAction: "Meeting", dueAt: now.addingTimeInterval(2 * 86_400))
+        ]
+        let tasks = [
+            TaskReminder(id: "overdue", opportunityID: "past", title: "Follow up", dueAt: now.addingTimeInterval(-3_600), isComplete: false)
+        ]
 
-        let snapshot = HomeDashboardSnapshot(opportunities: [], attentionTasks: tasks, now: now, calendar: .current)
+        let snapshot = HomeDashboardSnapshot(opportunities: opportunities, attentionTasks: tasks, now: now, calendar: .current)
 
-        XCTAssertEqual(snapshot.attentionTasks.prefix(3).map(\.id), ["task-0", "task-1", "task-2"])
-        XCTAssertEqual(snapshot.upcomingTasks.dropFirst(3).prefix(3).map(\.id), ["task-3"])
+        XCTAssertEqual(snapshot.attentionTasks.map(\.id), ["overdue"])
+        XCTAssertEqual(snapshot.upcomingOpportunities.map(\.id), ["tomorrow", "later"])
     }
 
     func testHomeDashboardSnapshotCountsAnApplicationAcrossCalendarYearWeekBoundary() {

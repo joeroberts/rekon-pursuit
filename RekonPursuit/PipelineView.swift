@@ -109,7 +109,7 @@ struct PipelineView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Pipeline").font(.largeTitle.bold())
+                Text("Opportunities").font(.largeTitle.bold())
                 Spacer()
                 Button("Import CSV", action: importCSV)
                     .buttonStyle(PipelineSecondaryButtonStyle())
@@ -122,7 +122,7 @@ struct PipelineView: View {
             if visibleOpportunities.isEmpty {
                 FlexibleCenteredContent {
                     if model.opportunities.isEmpty {
-                        ContentUnavailableView("No opportunities", systemImage: "briefcase", description: Text("Add an opportunity to begin tracking your pipeline."))
+                        ContentUnavailableView("No opportunities", systemImage: "briefcase", description: Text("Add an opportunity to begin tracking your opportunities."))
                         Button("Add opportunity", action: addOpportunity)
                             .buttonStyle(RekonPrimaryButtonStyle())
                     } else {
