@@ -64,21 +64,89 @@ form, including any of the following:
 
 Task 1's additive selector matrix remains a behavior-preservation gate; it is
 not proof of visual acceptance. Task 2/3 must add an independent visual
-verification package with deterministic Contacts and Opportunity fixtures at
-wide and compact widths:
+verification package. It is a required merge gate, not a request for another
+product-owner decision.
 
-- capture signed app screenshots of the Contacts edit/new route and
-  Opportunity add/overview route in idle and keyboard-focused states;
-- compare each capture directly to the two controlling references, recording
-  pass/fail for label placement, single-surface construction, border/focus
-  hierarchy, section/divider rhythm, multiline treatment, and responsive
-  column behavior;
-- execute the existing compact/large-text UI checks and confirm no clipping
-  or action inaccessibility; and
-- require independent QA visual acceptance against these product-owner-approved
-  references before the PR is eligible to merge. Do not wait for an additional
-  product-owner review; a selector-only GREEN result cannot waive a visual
-  mismatch.
+### Deterministic signed-capture matrix
+
+The visual test fixture must create one deterministic existing Contact and one
+deterministic existing Opportunity, navigate from a clean launched app, and
+record **all sixteen** signed screenshots below. Each run must write the
+screenshots to one result bundle named
+`VD2-07b-reference-faithful-visuals.xcresult`; the attachment name in that
+bundle must exactly match the corresponding filename below. No capture may be
+reused to stand in for another route, viewport, or state.
+
+| Route | 1600 × 1000 wide | 860 × 640 compact |
+| --- | --- | --- |
+| Contacts — edit | `vd207b-contacts-edit-wide-idle.png`<br>`vd207b-contacts-edit-wide-focus.png` | `vd207b-contacts-edit-compact-idle.png`<br>`vd207b-contacts-edit-compact-focus.png` |
+| Contacts — new | `vd207b-contacts-new-wide-idle.png`<br>`vd207b-contacts-new-wide-focus.png` | `vd207b-contacts-new-compact-idle.png`<br>`vd207b-contacts-new-compact-focus.png` |
+| Opportunity — add | `vd207b-opportunity-add-wide-idle.png`<br>`vd207b-opportunity-add-wide-focus.png` | `vd207b-opportunity-add-compact-idle.png`<br>`vd207b-opportunity-add-compact-focus.png` |
+| Opportunity — overview | `vd207b-opportunity-overview-wide-idle.png`<br>`vd207b-opportunity-overview-wide-focus.png` | `vd207b-opportunity-overview-compact-idle.png`<br>`vd207b-opportunity-overview-compact-focus.png` |
+
+“Wide” and “compact” mean the literal app-frame sizes in the table, set before
+route navigation and asserted by the UI test before each capture. The test
+must fail if the resulting application frame differs from the requested frame
+by more than 2 points in either dimension. It must use a fixed locale,
+calendar, content-size category, and fixture content; test-state timestamps
+and randomly generated labels may not appear in the captured form area.
+
+### Required route prelude and geometry checks
+
+Before every capture, the UI test must prove the route is fully settled:
+
+1. Launch cleanly, install the deterministic fixture, set the literal frame,
+   navigate to the named route, and wait for its title plus the primary form
+   action to exist and be hittable.
+2. For `*-idle`, do not leave a text input as first responder. For `*-focus`,
+   click the named first editable field (Contacts: `Name`; Opportunity: `Job
+   title`), type a deterministic single character, and keep that field focused
+   at capture time. The capture and assertion must prove keyboard focus by the
+   active insertion caret or the platform focus indicator; an outline alone is
+   insufficient evidence.
+3. Assert that each sampled label's frame ends above its associated control
+   (`label.maxY <= control.minY`), that neither intersects, and that the
+   control is a single surface rather than a containing label/control capsule.
+   Sampling must include Name, a contact information field, and Relationship
+   context/Notes on Contacts; and Job title, a single-line field, a multiline
+   field, and a picker on Opportunity.
+4. Assert visible action access: the route's primary and cancel/back action
+   frames are within the app frame or reachable by the route's documented
+   scroll action. Assert no sampled label, value, validation message, text
+   editor, picker, or primary action is clipped or overlaps another sampled
+   element.
+5. On wide Opportunity captures, assert the existing compensation and
+   logistics groups use at least two visible columns where their controls fit;
+   on compact captures, assert those peer controls stack in reading order with
+   no horizontal overlap. These assertions must be made from live element
+   frames, not inferred from screenshots.
+
+### Screenshot comparison checklist and merge evidence
+
+An independent QA verifier must inspect the sixteen finalized attachments in
+`VD2-07b-reference-faithful-visuals.xcresult` against the controlling Contacts
+and Opportunity references. Its signed report must record pass/fail, with a
+capture filename for every verdict, for:
+
+- labels above controls and no embedded-label or label/input capsule;
+- one quiet, compact control surface at idle, with no nested border or
+  permanently cyan/high-chrome outline;
+- focused control's restrained cyan focus indication plus a non-color focus
+  cue and visible caret/keyboard-focus proof;
+- section titles/dividers, label-to-control spacing, vertical rhythm, and
+  multiline-editor height matching the reference family;
+- concise Contacts detail-panel geometry rather than repetitive boxed rows;
+- responsive Opportunity columns at 1600 × 1000 and non-overlapping compact
+  stacking at 860 × 640; and
+- retained labels, values, validation, keyboard behavior, and accessible
+  actions.
+
+The report must cite the finalized result-bundle path and the executed test
+command. A selector-only GREEN result, an implementer self-review, or an
+uninspected screenshot set cannot satisfy this gate. The VD2-07b PR is not
+eligible to merge until an independent QA comparison records all sixteen
+captures and accepts the checklist; this gate does not require waiting for a
+further product-owner approval.
 
 ## Non-scope invariants
 
