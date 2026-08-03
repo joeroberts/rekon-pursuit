@@ -364,3 +364,17 @@
   accessibility/recovery automation debts remain open.
 - VD2-07 is eligible but neither released nor started. VD2-08 remains blocked
   pending VD2-03 through VD2-07 acceptance and retains those three debts.
+
+## VD2-07b backlog registration — 2026-08-02
+
+- The product owner created `VD2-07b` as a separate Backlog task for shared
+  form-input visual alignment. It covers every app-owned form input, including
+  Contacts editor/search, Pipeline opportunity forms, and protected-export
+  dialogs.
+- The visual target is the approved dark inset control system: consistent
+  border, label and section spacing, and cyan focus presentation. Current
+  behavior, persistence, validation, native save/open panels, and existing
+  accessibility ownership are unchanged.
+- `VD2-07b` depends on `VD2-06` and `VD2-07`. It is not released for planning
+  or implementation. `VD2-08` continues to own the deferred accessibility
+  work and is not advanced by this registration.

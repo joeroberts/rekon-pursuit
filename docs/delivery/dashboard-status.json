@@ -540,6 +540,24 @@
       "needsUserAction": false
     },
     {
+      "id": "VD2-07b",
+      "phaseId": "post_mvp_refinement",
+      "title": "Shared form-input visual alignment",
+      "workType": "Visual alignment",
+      "status": "backlog",
+      "releaseCondition": "Requires separately approved and released scope while preserving existing Contacts, Pipeline, and protected-export behavior, persistence, validation, and native save-panel semantics.",
+      "latestTransition": "Created as Backlog from the product-owner-approved cross-screen input-surface reference; no implementation is released.",
+      "evidence": {
+        "label": "VD2-07b task brief",
+        "href": "../task-briefs/VD2-07b-shared-form-input-alignment.md"
+      },
+      "dependsOnTaskIds": [
+        "VD2-06",
+        "VD2-07"
+      ],
+      "needsUserAction": false
+    },
+    {
       "id": "VD2-08",
       "phaseId": "post_mvp_refinement",
       "title": "Visual QA and accessibility acceptance",
