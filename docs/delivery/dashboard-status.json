@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "activePhaseId": "post_mvp_refinement",
-  "activeTaskId": "VD2-07c",
+  "activeTaskId": "VD2-07d",
   "nextEligibleTaskId": null,
   "phases": [
     {
@@ -403,9 +403,9 @@
       "phaseId": "post_mvp_refinement",
       "title": "Precise local activity search and date filtering",
       "workType": "Activity & AI UX",
-      "status": "backlog",
+      "status": "in_progress",
       "releaseCondition": "Requires a separately approved local-only release that preserves the retained activity ledger and current general multi-word fallback, adds quoted text for an exact event phrase, a visible exact-label/identifier filter, and a non-persistent date menu: All dates, Today, Last 7 days, Last 30 days, and Custom range. Event-type chips and an activity-detail inspector are not included without separate approval.",
-      "latestTransition": "Product owner approved quoted exact-event phrases, a visible exact-label/identifier filter, and the local non-persistent date menu on 2026-08-02; the card was renamed from UX-D12 to VD2-07d so it follows VD2-07c and feeds VD2-08 accessibility acceptance. The supplied reference is visual direction only for the date control; no event-type filter or detail-inspector scope is recorded.",
+      "latestTransition": "Released after VD2-07c merged on 2026-08-03. Implementation is starting from updated main and remains limited to quoted search, exact-label/identifier filtering, and the local non-persistent date menu.",
       "dependsOnTaskIds": [
         "VD2-07c"
       ],
@@ -561,9 +561,9 @@
       "phaseId": "post_mvp_refinement",
       "title": "Activity & AI submenu and bounded ledger",
       "workType": "Activity & AI UX",
-      "status": "in_progress",
+      "status": "accepted",
       "releaseCondition": "Requires a separately approved release that keeps one Activity & AI sidebar destination and adds Settings-style horizontal Activity ledger and AI assistant sub-navigation, with restrained cyan icon/text and indicator-line selection in both wide and narrow windows. The default Activity ledger page has one Local activity ledger work area, a dark styled search control, structured icon/label/right-aligned-timestamp rows, and a window-responsive fixed-height scroll viewport showing no more than 50 rows while retaining every activity entry for scrolling and search. The AI assistant page is only the approved local/private coming-soon placeholder. No AI form, buttons, provider settings, execution, network capability, or new ledger data may be added.",
-      "latestTransition": "Released after VD2-07b merged on 2026-08-03. Implementation is starting from updated main and remains limited to the approved Activity ledger and local/private AI placeholder scope.",
+      "latestTransition": "Merged to main through PR #7 on 2026-08-03. The release adds only the approved local Activity ledger presentation and local/private AI placeholder; no AI execution or network capability was added.",
       "dependsOnTaskIds": [
         "VD2-02",
         "VD2-07"
