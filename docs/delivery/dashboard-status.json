@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "activePhaseId": "post_mvp_refinement",
-  "activeTaskId": "VD2-08",
+  "activeTaskId": null,
   "nextEligibleTaskId": null,
   "phases": [
     {
@@ -575,9 +575,9 @@
       "phaseId": "post_mvp_refinement",
       "title": "Visual QA and accessibility acceptance",
       "workType": "Acceptance",
-      "status": "in_progress",
-      "releaseCondition": "Requires VD2-03 through VD2-07 accepted; it must close the carried Settings compact-keyboard and AI text-semantic accessibility debts, the owner-approved VD2-06 Contacts accessibility/recovery automation debts, and the VD2-05 Board card-anchor accessibility-semantic debt. It also requires a new whole-app visual and accessibility acceptance pass that verifies visual language, persistence, failure states, and product-owner workflow acceptance.",
-      "latestTransition": "VD2-08 accessibility slice merged in PR #11 on 2026-08-03: compact Settings keyboard focus, truthful AI-unavailable semantics, Contacts keyboard/error semantics, and Board card-anchor semantics are complete. Final product-owner whole-app visual/workflow acceptance remains in progress.",
+      "status": "blocked",
+      "releaseCondition": "Requires the accepted VD2 foundations, the four visual-parity tasks, the VD2-08 accessibility deep dive, closure of Board issues #1 and #2, and a whole-app visual/accessibility acceptance pass that verifies visual language, persistence, failure states, and product-owner workflows.",
+      "latestTransition": "Paused by the product owner on 2026-08-03 pending visual-parity remediation, then the separately released VD2-08 accessibility deep dive. The prior accessibility slice remains merged in PR #11.",
       "evidence": {
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
@@ -590,8 +590,106 @@
         "VD2-07",
         "VD2-07b",
         "VD2-07c",
-        "VD2-07d"
+        "VD2-07d",
+        "VD2-09",
+        "VD2-10",
+        "VD2-11",
+        "VD2-12",
+        "VD2-08a"
       ],
+      "needsUserAction": true,
+      "userActionDetail": "Release the first dependency-safe visual-parity task only after its required planning and review gates are recorded."
+    },
+    {
+      "id": "VD2-09",
+      "phaseId": "post_mvp_refinement",
+      "title": "Home visual parity",
+      "workType": "Visual remediation",
+      "status": "backlog",
+      "releaseCondition": "Requires a reference-faithful Home implementation covering heading hierarchy, Needs attention, Pipeline snapshot, Next up, action sizing, and data-driven behavior preservation.",
+      "latestTransition": "GitHub issue #15 recorded on 2026-08-03; no implementation is released.",
+      "dependsOnTaskIds": [
+        "VD2-03"
+      ],
+      "needsUserAction": false
+    },
+    {
+      "id": "VD2-10",
+      "phaseId": "post_mvp_refinement",
+      "title": "Pipeline visual parity — controls, Table, and Board",
+      "workType": "Visual remediation",
+      "status": "backlog",
+      "releaseCondition": "Requires a reference-faithful Pipeline implementation that retains Include closed, corrects controls and Table/Board presentation, and preserves pipeline behavior.",
+      "latestTransition": "GitHub issue #16 recorded on 2026-08-03; no implementation is released.",
+      "dependsOnTaskIds": [
+        "VD2-04",
+        "VD2-05"
+      ],
+      "needsUserAction": false
+    },
+    {
+      "id": "VD2-11",
+      "phaseId": "post_mvp_refinement",
+      "title": "Contacts visual parity",
+      "workType": "Visual remediation",
+      "status": "backlog",
+      "releaseCondition": "Requires a reference-faithful Contacts list, filters, profile detail, relationship context, notes, related opportunities, and action treatment while preserving persistence and accessibility semantics.",
+      "latestTransition": "GitHub issue #17 recorded on 2026-08-03; no implementation is released.",
+      "dependsOnTaskIds": [
+        "VD2-06"
+      ],
+      "needsUserAction": false
+    },
+    {
+      "id": "VD2-12",
+      "phaseId": "post_mvp_refinement",
+      "title": "Settings visual parity — recovery dialog and document references presentation",
+      "workType": "Visual remediation",
+      "status": "backlog",
+      "releaseCondition": "Requires the custom recovery-archive dialog pattern and reference-faithful Document references presentation without changing recovery or privacy contracts.",
+      "latestTransition": "GitHub issue #18 recorded on 2026-08-03; no implementation is released.",
+      "dependsOnTaskIds": [
+        "VD2-07"
+      ],
+      "needsUserAction": false
+    },
+    {
+      "id": "VD2-13",
+      "phaseId": "post_mvp_refinement",
+      "title": "Document inventory and opportunity-linkage analytics",
+      "workType": "Document workflow",
+      "status": "backlog",
+      "releaseCondition": "Requires an approved private document-management contract covering inventory, opportunity linkage, document actions, and explicitly associative outcome analytics.",
+      "latestTransition": "GitHub issue #19 recorded on 2026-08-03 as separate feature work; no implementation is released.",
+      "dependsOnTaskIds": [
+        "VD2-12"
+      ],
+      "needsUserAction": false
+    },
+    {
+      "id": "VD2-08a",
+      "phaseId": "post_mvp_refinement",
+      "title": "VD2-08 accessibility deep dive",
+      "workType": "Accessibility acceptance",
+      "status": "backlog",
+      "releaseCondition": "Released only after visual-parity remediation. Requires independent whole-app keyboard, assistive-technology, focus, semantic, persistence, and failure-state evidence, including closure of Board issues #1 and #2.",
+      "latestTransition": "GitHub issue #20 recorded on 2026-08-03; no accessibility deep dive is released before visual remediation.",
+      "dependsOnTaskIds": [
+        "VD2-09",
+        "VD2-10",
+        "VD2-11",
+        "VD2-12"
+      ],
+      "needsUserAction": false
+    },
+    {
+      "id": "OPS-CI-01",
+      "phaseId": "post_mvp_refinement",
+      "title": "CI triage and resolution / issue logging",
+      "workType": "Delivery operations",
+      "status": "backlog",
+      "releaseCondition": "Requires evidence for every failing CI job and either a bounded dedicated fix or a linked actionable GitHub issue with the reproduction command and delivery impact.",
+      "latestTransition": "GitHub issue #21 recorded on 2026-08-03; no triage work is released.",
       "needsUserAction": false
     },
     {
