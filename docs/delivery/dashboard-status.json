@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "activePhaseId": "post_mvp_refinement",
-  "activeTaskId": "VD2-07b",
+  "activeTaskId": "VD2-07c",
   "nextEligibleTaskId": null,
   "phases": [
     {
@@ -547,9 +547,9 @@
       "phaseId": "post_mvp_refinement",
       "title": "Shared app-owned form-control alignment",
       "workType": "Visual alignment",
-      "status": "in_progress",
+      "status": "accepted",
       "releaseCondition": "Accepted after the approved reference-faithful form-control implementation passes signed functional, screenshot/geometry, accessibility, security/privacy, code-review, QA, and delivery gates. Native macOS file panels remain excluded and all existing behavior, bindings, validation, persistence, and native-file-panel semantics remain unchanged.",
-      "latestTransition": "Implementation released on 2026-08-03 after the exhaustive Task 1 RED contract, fresh Architecture, QA, Security/privacy, and Delivery gates. Reference-faithful Contacts and Opportunity visual evidence is in progress; VD2-07c remains unopened.",
+      "latestTransition": "Merged to main through PR #5 on 2026-08-03. The restarted native-field slice replaces the layered wrapper with explicit labels, one quiet native surface, real focus treatment, and compact responsive grouping.",
       "dependsOnTaskIds": [
         "VD2-06",
         "VD2-07"
@@ -561,9 +561,9 @@
       "phaseId": "post_mvp_refinement",
       "title": "Activity & AI submenu and bounded ledger",
       "workType": "Activity & AI UX",
-      "status": "backlog",
+      "status": "in_progress",
       "releaseCondition": "Requires a separately approved release that keeps one Activity & AI sidebar destination and adds Settings-style horizontal Activity ledger and AI assistant sub-navigation, with restrained cyan icon/text and indicator-line selection in both wide and narrow windows. The default Activity ledger page has one Local activity ledger work area, a dark styled search control, structured icon/label/right-aligned-timestamp rows, and a window-responsive fixed-height scroll viewport showing no more than 50 rows while retaining every activity entry for scrolling and search. The AI assistant page is only the approved local/private coming-soon placeholder. No AI form, buttons, provider settings, execution, network capability, or new ledger data may be added.",
-      "latestTransition": "Product owner supplied the complete Activity & AI scope on 2026-08-02: preserve the existing dark visual language, global route, full retained-ledger search, and narrow-window selection treatment; do not add AI capability.",
+      "latestTransition": "Released after VD2-07b merged on 2026-08-03. Implementation is starting from updated main and remains limited to the approved Activity ledger and local/private AI placeholder scope.",
       "dependsOnTaskIds": [
         "VD2-02",
         "VD2-07"
