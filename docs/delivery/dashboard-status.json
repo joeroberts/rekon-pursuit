@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "activePhaseId": "post_mvp_refinement",
-  "activeTaskId": null,
+  "activeTaskId": "VD2-07b",
   "nextEligibleTaskId": null,
   "phases": [
     {
@@ -547,9 +547,9 @@
       "phaseId": "post_mvp_refinement",
       "title": "Shared app-owned form-control alignment",
       "workType": "Visual alignment",
-      "status": "backlog",
-      "releaseCondition": "Requires a separately approved release that standardizes every app-owned editable/search control across the app, including Contacts, Pipeline, Settings, and app dialogs; this includes text, search, multiline, numeric, and custom picker controls. Native macOS file panels remain excluded. Existing behavior, bindings, validation, persistence, and native-file-panel semantics must remain unchanged.",
-      "latestTransition": "Product owner approved the shared form-control boundary on 2026-08-02: standardize every app-owned field and exclude native macOS file panels. No implementation is released.",
+      "status": "in_progress",
+      "releaseCondition": "Accepted after the approved reference-faithful form-control implementation passes signed functional, screenshot/geometry, accessibility, security/privacy, code-review, QA, and delivery gates. Native macOS file panels remain excluded and all existing behavior, bindings, validation, persistence, and native-file-panel semantics remain unchanged.",
+      "latestTransition": "Implementation released on 2026-08-03 after the exhaustive Task 1 RED contract, fresh Architecture, QA, Security/privacy, and Delivery gates. Reference-faithful Contacts and Opportunity visual evidence is in progress; VD2-07c remains unopened.",
       "dependsOnTaskIds": [
         "VD2-06",
         "VD2-07"
