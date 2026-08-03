@@ -649,6 +649,13 @@ private struct OpportunityOverviewView: View {
     let showReconcile: () -> Void
     let chooseDocument: () -> Void
     let relinkDocument: (DocumentReference) -> Void
+    @FocusState private var focusedEditor: OverviewEditor?
+
+    private enum OverviewEditor: Hashable {
+        case description
+        case notes
+    }
+
     var body: some View {
         Group {
             if let opportunity = model.opportunity(id: opportunityID), model.selectedOpportunityID == opportunityID {
@@ -661,27 +668,33 @@ private struct OpportunityOverviewView: View {
                         }
                         VStack(alignment: .leading, spacing: 3) { Text(opportunity.title).font(.largeTitle.bold()); Text(opportunity.company).foregroundStyle(RekonTheme.secondaryText) }
                         GroupBox("Opportunity") {
-                            Form {
-                                TextField("Job title", text: $model.selectedTitle).accessibilityIdentifier("selected-opportunity-title")
-                                TextField("Company", text: $model.selectedCompany)
-                                TextField("Job URL (optional)", text: $model.selectedJobURL)
+                            VStack(alignment: .leading, spacing: RekonTheme.Spacing.standard) {
+                                overviewTextField("Job title", text: $model.selectedTitle, accessibilityIdentifier: "selected-opportunity-title")
+                                overviewTextField("Company", text: $model.selectedCompany)
+                                overviewTextField("Job URL (optional)", text: $model.selectedJobURL)
                                 if let warning = model.selectedJobURLWarning { Text(warning).font(.caption).foregroundStyle(.orange) }
-                                Text("Job description").font(.caption).foregroundStyle(.secondary)
-                                TextEditor(text: $model.selectedJobDescription).frame(minHeight: 110)
-                                Text("Notes").font(.caption).foregroundStyle(.secondary)
-                                TextEditor(text: $model.selectedNotes).frame(minHeight: 90)
-                                Section("Compensation") {
+                                overviewEditor("Job description", text: $model.selectedJobDescription, focus: .description, minHeight: 110)
+                                overviewEditor("Notes", text: $model.selectedNotes, focus: .notes, minHeight: 90)
+                                overviewSection("Compensation") {
                                     if !model.selectedCompensation.isEmpty { Text("Imported: \(model.selectedCompensation)").font(.caption).foregroundStyle(.secondary) }
-                                    TextField("Minimum (USD)", text: $model.selectedCompensationMinimum)
-                                    TextField("Maximum (USD)", text: $model.selectedCompensationMaximum)
-                                    Picker("Pay period", selection: $model.selectedCompensationPayPeriod) { ForEach(CompensationPayPeriod.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                                    HStack(spacing: RekonTheme.Spacing.standard) {
+                                        overviewTextField("Minimum (USD)", text: $model.selectedCompensationMinimum)
+                                        overviewTextField("Maximum (USD)", text: $model.selectedCompensationMaximum)
+                                    }
+                                    overviewPicker("Pay period") {
+                                        Picker("Pay period", selection: $model.selectedCompensationPayPeriod) { ForEach(CompensationPayPeriod.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                                    }
                                     if let formatted = model.formattedCompensation(for: opportunity) { Text(formatted).font(.caption).foregroundStyle(.secondary) }
                                 }
-                                TextField("Location (optional)", text: $model.selectedLocation)
-                                Picker("Work arrangement", selection: $model.selectedWorkArrangement) { ForEach(WorkArrangement.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                                Picker("Stage", selection: $model.selectedStage) { ForEach(PipelineStage.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                                Picker("Next action", selection: $model.selectedActionType) { ForEach(OpportunityActionType.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                                if model.selectedActionType == .other { TextField("Other action", text: $model.selectedActionCustomText) }
+                                overviewSection("Location & logistics") {
+                                    overviewTextField("Location (optional)", text: $model.selectedLocation)
+                                    HStack(spacing: RekonTheme.Spacing.standard) {
+                                        overviewPicker("Work arrangement") { Picker("Work arrangement", selection: $model.selectedWorkArrangement) { ForEach(WorkArrangement.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
+                                        overviewPicker("Stage") { Picker("Stage", selection: $model.selectedStage) { ForEach(PipelineStage.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
+                                        overviewPicker("Next action") { Picker("Next action", selection: $model.selectedActionType) { ForEach(OpportunityActionType.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
+                                    }
+                                    if model.selectedActionType == .other { overviewTextField("Other action", text: $model.selectedActionCustomText) }
+                                }
                                 Toggle("Add a due date", isOn: $model.selectedHasDueDate)
                                 if model.selectedHasDueDate { DatePicker("Due", selection: $model.selectedDueAt, displayedComponents: [.date, .hourAndMinute]) }
                                 HStack { Button("Save changes locally") { model.saveRouteOpportunity(id: opportunityID) }.accessibilityIdentifier("save-opportunity-changes"); Button("Reschedule action") { model.rescheduleRouteTask(id: opportunityID) }.disabled(model.selectedNextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
@@ -693,6 +706,48 @@ private struct OpportunityOverviewView: View {
                 }
             } else { MissingOpportunityView(back: back) }
         }
+    }
+
+    @ViewBuilder private func overviewTextField(_ title: String, text: Binding<String>, accessibilityIdentifier: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: RekonTheme.Spacing.micro) {
+            Text(title).font(.caption).foregroundStyle(RekonTheme.secondaryText)
+            if let accessibilityIdentifier {
+                TextField(title, text: text)
+                    .textFieldStyle(RekonQuietTextFieldStyle())
+                    .accessibilityIdentifier(accessibilityIdentifier)
+            } else {
+                TextField(title, text: text)
+                    .textFieldStyle(RekonQuietTextFieldStyle())
+            }
+        }
+    }
+
+    private func overviewEditor(_ title: String, text: Binding<String>, focus: OverviewEditor, minHeight: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: RekonTheme.Spacing.micro) {
+            Text(title).font(.caption).foregroundStyle(RekonTheme.secondaryText)
+            TextEditor(text: text)
+                .focused($focusedEditor, equals: focus)
+                .frame(minHeight: minHeight)
+                .rekonQuietTextEditorSurface(isFocused: focusedEditor == focus)
+        }
+    }
+
+    private func overviewSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: RekonTheme.Spacing.tight) {
+            HStack(spacing: RekonTheme.Spacing.tight) {
+                Text(title).font(.headline)
+                Rectangle().fill(RekonTheme.borderSubtle).frame(height: 1)
+            }
+            content()
+        }
+    }
+
+    private func overviewPicker<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: RekonTheme.Spacing.micro) {
+            Text(title).font(.caption).foregroundStyle(RekonTheme.secondaryText)
+            content().pickerStyle(.menu)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -803,12 +858,16 @@ private struct ReconcilePostingView: View {
                             }
                         }
                         GroupBox("Manual review") {
-                            Form {
-                                Picker("Local outcome", selection: $model.reconciliationOutcome) { ForEach(ReconciliationOutcome.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                                Picker("Classification", selection: $model.reconciliationClassification) { ForEach(ReconciliationClassification.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                                Picker("Reason", selection: $model.reconciliationReason) { ForEach(ReconciliationReason.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                                Picker("Confidence", selection: $model.reconciliationConfidence) { ForEach(ReconciliationConfidence.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                                TextField("Evidence or error reviewed", text: $model.reconciliationEvidence, axis: .vertical)
+                            VStack(alignment: .leading, spacing: RekonTheme.Spacing.standard) {
+                                reconcilePicker("Local outcome") { Picker("Local outcome", selection: $model.reconciliationOutcome) { ForEach(ReconciliationOutcome.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
+                                reconcilePicker("Classification") { Picker("Classification", selection: $model.reconciliationClassification) { ForEach(ReconciliationClassification.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
+                                reconcilePicker("Reason") { Picker("Reason", selection: $model.reconciliationReason) { ForEach(ReconciliationReason.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
+                                reconcilePicker("Confidence") { Picker("Confidence", selection: $model.reconciliationConfidence) { ForEach(ReconciliationConfidence.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
+                                VStack(alignment: .leading, spacing: RekonTheme.Spacing.micro) {
+                                    Text("Evidence or error reviewed").font(.caption).foregroundStyle(RekonTheme.secondaryText)
+                                    TextField("Evidence or error reviewed", text: $model.reconciliationEvidence, axis: .vertical)
+                                        .textFieldStyle(RekonQuietTextFieldStyle())
+                                }
                                 HStack { Button("Record local review") { _ = model.selectRouteOpportunity(id: opportunityID); model.recordReconciliation() }; Button("Record offline — check not run") { _ = model.selectRouteOpportunity(id: opportunityID); model.reconciliationOutcome = .needsManualReview; model.reconciliationClassification = .offlineUnchecked; model.reconciliationReason = .offlineUnchecked; model.reconciliationEvidence = "Offline — check not run"; model.recordReconciliation() }; Button("Confirm closure…", action: confirmClosure) }
                                 if let task = model.selectedReconciliationTask {
                                     HStack {
@@ -825,6 +884,13 @@ private struct ReconcilePostingView: View {
                     }.padding(28).frame(maxWidth: 880, alignment: .leading)
                 }
             } else { MissingOpportunityView(back: back) }
+        }
+    }
+
+    private func reconcilePicker<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: RekonTheme.Spacing.micro) {
+            Text(title).font(.caption).foregroundStyle(RekonTheme.secondaryText)
+            content().pickerStyle(.menu)
         }
     }
 }
@@ -864,33 +930,43 @@ struct FlexibleCenteredContent<Content: View>: View {
 private struct AddOpportunityView: View {
     @ObservedObject var model: WorkspaceViewModel
     let cancel: () -> Void
+    @FocusState private var focusedEditor: AddOpportunityEditor?
+
+    private enum AddOpportunityEditor: Hashable {
+        case description
+        case notes
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Add opportunity").font(.largeTitle.bold())
-                Form {
-                    TextField("Job title", text: $model.title).accessibilityIdentifier("opportunity-title")
-                    TextField("Company", text: $model.company).accessibilityIdentifier("opportunity-company")
-                    TextField("Job URL (optional)", text: $model.jobURL)
+                VStack(alignment: .leading, spacing: RekonTheme.Spacing.standard) {
+                    addTextField("Job title", text: $model.title, accessibilityIdentifier: "opportunity-title")
+                    addTextField("Company", text: $model.company, accessibilityIdentifier: "opportunity-company")
+                    addTextField("Job URL (optional)", text: $model.jobURL)
                     if let warning = model.jobURLWarning { Text(warning).font(.caption).foregroundStyle(.orange).accessibilityIdentifier("add-opportunity-url-warning") }
-                    Text("Job description").font(.caption).foregroundStyle(.secondary)
-                    TextEditor(text: $model.jobDescription).frame(minHeight: 110)
-                    Text("Notes").font(.caption).foregroundStyle(.secondary)
-                    TextEditor(text: $model.notes).frame(minHeight: 90)
-                    Section("Job details") {
-                        TextField("Minimum (USD)", text: $model.compensationMinimum)
-                        TextField("Maximum (USD)", text: $model.compensationMaximum)
-                        Picker("Pay period", selection: $model.compensationPayPeriod) { ForEach(CompensationPayPeriod.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                        TextField("Location (optional)", text: $model.location)
-                        Picker("Work arrangement", selection: $model.workArrangement) { ForEach(WorkArrangement.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                    addEditor("Job description", text: $model.jobDescription, focus: .description, minHeight: 110)
+                    addEditor("Notes", text: $model.notes, focus: .notes, minHeight: 90)
+                    addSection("Compensation") {
+                        HStack(spacing: RekonTheme.Spacing.standard) {
+                            addTextField("Minimum (USD)", text: $model.compensationMinimum)
+                            addTextField("Maximum (USD)", text: $model.compensationMaximum)
+                        }
+                        addPicker("Pay period") { Picker("Pay period", selection: $model.compensationPayPeriod) { ForEach(CompensationPayPeriod.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
+                    }
+                    addSection("Location & logistics") {
+                        addTextField("Location (optional)", text: $model.location)
+                        addPicker("Work arrangement") { Picker("Work arrangement", selection: $model.workArrangement) { ForEach(WorkArrangement.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
                         Toggle("Add applied date", isOn: $model.hasApplicationDate)
                         if model.hasApplicationDate { DatePicker("Applied date", selection: $model.applicationDate, displayedComponents: .date) }
-                        Picker("Current response", selection: $model.responseState) { ForEach(ResponseState.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                        addPicker("Current response") { Picker("Current response", selection: $model.responseState) { ForEach(ResponseState.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
                     }
-                    Picker("Stage", selection: $model.stage) { ForEach(PipelineStage.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                    Picker("Next action", selection: $model.actionType) { ForEach(OpportunityActionType.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                    if model.actionType == .other { TextField("Other action", text: $model.actionCustomText).accessibilityIdentifier("opportunity-next-action") }
+                    HStack(spacing: RekonTheme.Spacing.standard) {
+                        addPicker("Stage") { Picker("Stage", selection: $model.stage) { ForEach(PipelineStage.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
+                        addPicker("Next action") { Picker("Next action", selection: $model.actionType) { ForEach(OpportunityActionType.allCases, id: \.self) { Text($0.rawValue).tag($0) } } }
+                    }
+                    if model.actionType == .other { addTextField("Other action", text: $model.actionCustomText, accessibilityIdentifier: "opportunity-next-action") }
                     Toggle("Add a due date", isOn: $model.hasDueDate)
                     if model.hasDueDate { DatePicker("Due", selection: $model.dueAt, displayedComponents: [.date, .hourAndMinute]) }
                     HStack {
@@ -905,12 +981,54 @@ private struct AddOpportunityView: View {
                             Text(error)
                                 .font(.caption)
                                 .foregroundStyle(.red)
-                                .accessibilityIdentifier("add-opportunity-save-error")
-                        }
+                            .accessibilityIdentifier("add-opportunity-save-error")
                     }
+                }
                 }
             }.padding(28).frame(maxWidth: 860, alignment: .leading)
         }
+    }
+
+    @ViewBuilder private func addTextField(_ title: String, text: Binding<String>, accessibilityIdentifier: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: RekonTheme.Spacing.micro) {
+            Text(title).font(.caption).foregroundStyle(RekonTheme.secondaryText)
+            if let accessibilityIdentifier {
+                TextField(title, text: text)
+                    .textFieldStyle(RekonQuietTextFieldStyle())
+                    .accessibilityIdentifier(accessibilityIdentifier)
+            } else {
+                TextField(title, text: text)
+                    .textFieldStyle(RekonQuietTextFieldStyle())
+            }
+        }
+    }
+
+    private func addEditor(_ title: String, text: Binding<String>, focus: AddOpportunityEditor, minHeight: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: RekonTheme.Spacing.micro) {
+            Text(title).font(.caption).foregroundStyle(RekonTheme.secondaryText)
+            TextEditor(text: text)
+                .focused($focusedEditor, equals: focus)
+                .frame(minHeight: minHeight)
+                .rekonQuietTextEditorSurface(isFocused: focusedEditor == focus)
+        }
+    }
+
+    private func addSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: RekonTheme.Spacing.tight) {
+            HStack(spacing: RekonTheme.Spacing.tight) {
+                Text(title).font(.headline)
+                Rectangle().fill(RekonTheme.borderSubtle).frame(height: 1)
+            }
+            content()
+        }
+    }
+
+    private func addPicker<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: RekonTheme.Spacing.micro) {
+            Text(title).font(.caption).foregroundStyle(RekonTheme.secondaryText)
+            content().pickerStyle(.menu)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
