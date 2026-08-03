@@ -18,7 +18,10 @@ struct HomeDashboardSnapshot: Equatable {
         calendar: Calendar
     ) {
         let incompleteTasks = attentionTasks
-            .filter { !$0.isComplete && ($0.dueAt.map { $0 <= now } ?? true) }
+            .filter { task in
+                guard !task.isComplete, let dueAt = task.dueAt else { return false }
+                return dueAt <= now
+            }
             .sorted { lhs, rhs in
                 switch (lhs.dueAt, rhs.dueAt) {
                 case let (left?, right?):
@@ -44,13 +47,23 @@ struct HomeDashboardSnapshot: Equatable {
         interviewCount = opportunities.filter { $0.stage == .interviewing }.count
         upcomingOpportunities = opportunities
             .filter { opportunity in
-                guard let dueAt = opportunity.dueAt,
-                      opportunity.stage != .closed,
-                      dueAt >= now,
-                      dueAt <= calendar.date(byAdding: .day, value: 7, to: now)! else { return false }
-                return !opportunity.nextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                guard opportunity.stage != .closed,
+                      !opportunity.nextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+                guard let dueAt = opportunity.dueAt else { return true }
+                return dueAt >= now && dueAt <= calendar.date(byAdding: .day, value: 7, to: now)!
             }
-            .sorted { ($0.dueAt ?? .distantFuture) < ($1.dueAt ?? .distantFuture) }
+            .sorted { lhs, rhs in
+                switch (lhs.dueAt, rhs.dueAt) {
+                case let (left?, right?):
+                    return left == right ? lhs.id < rhs.id : left < right
+                case (.some, .none):
+                    return true
+                case (.none, .some):
+                    return false
+                case (.none, .none):
+                    return lhs.id < rhs.id
+                }
+            }
     }
 }
 
@@ -110,26 +123,10 @@ struct HomeView: View {
     }
 
     private var header: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center) {
-                title
-                Spacer()
-                addOpportunityButton
-            }
-            VStack(alignment: .leading, spacing: 12) {
-                title
-                HStack {
-                    Spacer()
-                    addOpportunityButton
-                }
-            }
+        HStack {
+            Spacer()
+            addOpportunityButton
         }
-    }
-
-    private var title: some View {
-        Text("Home")
-            .font(.system(size: 42, weight: .bold, design: .rounded))
-            .foregroundStyle(RekonTheme.primaryText)
     }
 
     private var addOpportunityButton: some View {
@@ -151,7 +148,7 @@ struct HomeView: View {
                 tint: RekonTheme.violet
             )
             if snapshot.attentionTasks.isEmpty {
-                HomeEmptyAttentionCard(addOpportunity: addOpportunity)
+                HomeEmptyAttentionCard()
             } else {
                 VStack(spacing: 8) {
                     ForEach(snapshot.attentionTasks.prefix(3), id: \.id) { task in
@@ -172,13 +169,19 @@ struct HomeView: View {
     private var snapshotSection: some View {
         HomeSectionPanel {
             HomeSectionHeader(
-                title: "Pipeline snapshot",
+                title: "Opportunities",
                 subtitle: "Your opportunities at a glance",
                 symbol: "chart.bar.xaxis",
                 tint: RekonTheme.accent
             )
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: 14) { metricCards }
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: 14), count: 3),
+                    spacing: 14
+                ) {
+                    metricCards
+                }
+                .frame(minWidth: 720)
                 VStack(spacing: 12) { metricCards }
             }
         }
@@ -248,10 +251,10 @@ private struct HomeSectionPanel<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 18) {
             content
         }
-        .padding(20)
+        .padding(24)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RekonTheme.surfaceGradient, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -269,19 +272,19 @@ private struct HomeSectionHeader: View {
     let tint: Color
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 16) {
             Image(systemName: symbol)
-                .font(.system(size: 23, weight: .medium))
+                .font(.system(size: symbol == "clock" ? 30 : 26, weight: title == "Needs attention" ? .bold : .medium))
                 .foregroundStyle(LinearGradient(colors: [tint, tint.opacity(0.58)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .frame(width: 54, height: 54)
+                .frame(width: symbol == "clock" ? 64 : 60, height: symbol == "clock" ? 64 : 60)
                 .background(LinearGradient(colors: [tint.opacity(0.25), tint.opacity(0.07)], startPoint: .topLeading, endPoint: .bottomTrailing), in: Circle())
                 .overlay(Circle().stroke(tint.opacity(0.5), lineWidth: 1))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.title2.weight(.bold))
+                    .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(RekonTheme.primaryText)
                 Text(subtitle)
-                    .font(.subheadline)
+                    .font(.system(size: 16))
                     .foregroundStyle(RekonTheme.secondaryText)
             }
         }
@@ -295,32 +298,31 @@ private struct HomeAttentionCard: View {
     let snooze: () -> Void
     let reschedule: () -> Void
     let complete: () -> Void
+    @State private var isActionMenuPresented = false
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: 10) {
+            HStack(alignment: .center, spacing: 18) {
                 taskIcon
                 identity
                 Spacer(minLength: 0)
-                dueDate
                 actionMenu
-                openButton(minimumWidth: 150)
+                openButton(width: 180)
             }
-            .frame(minWidth: 700, alignment: .leading)
+            .frame(minWidth: 560, alignment: .leading)
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .center, spacing: 10) {
                     taskIcon
                     identity
                 }
                 HStack(spacing: 8) {
-                    dueDate
                     actionMenu
                     Spacer(minLength: 0)
-                    openButton(minimumWidth: 108)
+                    openButton(width: 124)
                 }
             }
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(RekonTheme.border.opacity(0.82), lineWidth: 1))
@@ -330,21 +332,21 @@ private struct HomeAttentionCard: View {
 
     private var taskIcon: some View {
         Image(systemName: "briefcase")
-            .font(.title2)
+            .font(.system(size: 26, weight: .bold))
             .foregroundStyle(LinearGradient(colors: [RekonTheme.violet, RekonTheme.violet.opacity(0.58)], startPoint: .topLeading, endPoint: .bottomTrailing))
-            .frame(width: 54, height: 54)
+            .frame(width: 60, height: 60)
             .background(LinearGradient(colors: [RekonTheme.violet.opacity(0.25), RekonTheme.violet.opacity(0.07)], startPoint: .topLeading, endPoint: .bottomTrailing), in: Circle())
             .overlay(Circle().stroke(RekonTheme.violet.opacity(0.45), lineWidth: 1))
     }
 
     private var identity: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 5) {
             Text(opportunity?.title ?? task.title)
-                .font(.headline.weight(.semibold))
+                .font(.system(size: 19, weight: .semibold))
                 .foregroundStyle(RekonTheme.primaryText)
                 .lineLimit(2)
-            Text(opportunity.map { "\($0.company) · \(task.title)" } ?? task.title)
-                .font(.subheadline)
+            Text(opportunity?.company ?? task.title)
+                .font(.system(size: 16))
                 .foregroundStyle(RekonTheme.secondaryText)
                 .lineLimit(2)
         }
@@ -352,46 +354,83 @@ private struct HomeAttentionCard: View {
     }
 
     private var actionMenu: some View {
-        Menu {
-            Button("Snooze 1 day", action: snooze)
-                .accessibilityIdentifier("home-snooze-\(task.id)")
-            Button("Reschedule…", action: reschedule)
-                .accessibilityIdentifier("home-reschedule-\(task.id)")
-            if !task.requiresClosureConfirmation {
-                Divider()
-                Button("Complete", action: complete)
-                    .accessibilityIdentifier("home-complete-\(task.id)")
+        dueDate
+            .overlay {
+                Button {
+                    isActionMenuPresented.toggle()
+                } label: {
+                    Color.clear
+                        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .frame(width: 188, height: 64)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Actions for \(task.title)")
+                .accessibilityIdentifier("home-actions-\(task.id)")
+                .popover(isPresented: $isActionMenuPresented, arrowEdge: .bottom) {
+                    attentionActionMenu
+                }
             }
-        } label: {
-            Image(systemName: "ellipsis")
-                .frame(width: 28, height: 28)
-        }
-        .accessibilityLabel("Actions for \(task.title)")
-        .accessibilityIdentifier("home-actions-\(task.id)")
     }
 
-    private func openButton(minimumWidth: CGFloat) -> some View {
+    private var attentionActionMenu: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            attentionMenuButton("Snooze 1 day", identifier: "home-snooze-\(task.id)", action: snooze)
+            attentionMenuButton("Reschedule…", identifier: "home-reschedule-\(task.id)", action: reschedule)
+            if !task.requiresClosureConfirmation {
+                Divider()
+                    .overlay(RekonTheme.border.opacity(0.8))
+                attentionMenuButton("Complete", identifier: "home-complete-\(task.id)", action: complete)
+            }
+        }
+        .padding(8)
+        .frame(minWidth: 196, alignment: .leading)
+        .rekonFloatingMenuSurface()
+    }
+
+    private func attentionMenuButton(_ title: String, identifier: String, action: @escaping () -> Void) -> some View {
+        Button {
+            isActionMenuPresented = false
+            action()
+        } label: {
+            Text(title)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(RekonTheme.primaryText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(identifier)
+    }
+
+    private func openButton(width: CGFloat) -> some View {
         Button("Open", action: open)
-            .buttonStyle(RekonSecondaryButtonStyle())
-            .frame(minWidth: minimumWidth)
+            .buttonStyle(RekonAccentOutlineButtonStyle(labelFont: .system(size: 19, weight: .semibold)))
+            .frame(width: width, height: 54)
             .accessibilityLabel("Open \(task.title)")
             .accessibilityIdentifier("home-open-\(task.id)")
     }
 
     private var dueDate: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Label(task.title, systemImage: "calendar")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(RekonTheme.primaryText)
-                .lineLimit(1)
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(RekonTheme.violet)
+                Text(actionTitle)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(RekonTheme.primaryText)
+                    .lineLimit(1)
+            }
             Text(relativeDueLabel)
-                .font(.subheadline.weight(.semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(dueColor)
         }
-        .frame(minWidth: 0, idealWidth: 128, alignment: .leading)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 9)
-        .background(RekonTheme.backgroundRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 18)
+        .frame(width: 188, height: 64, alignment: .leading)
+        .rekonActionSummarySurface()
         .accessibilityIdentifier("home-due-\(task.id)")
         .accessibilityValue(task.dueAt.map { String($0.timeIntervalSince1970) } ?? "none")
     }
@@ -399,6 +438,26 @@ private struct HomeAttentionCard: View {
     private var relativeDueLabel: String {
         guard let dueAt = task.dueAt else { return "No due date" }
         return "Due \(dueAt.formatted(.relative(presentation: .named)))"
+    }
+
+    private var actionTitle: String {
+        if task.requiresClosureConfirmation {
+            return "Review reconciliation"
+        }
+        switch opportunity?.actionType {
+        case .apply:
+            return "Apply"
+        case .followUp:
+            return "Follow up"
+        case .interviewPrep:
+            return "Interview prep"
+        case .other:
+            let customText = opportunity?.actionCustomText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return customText.isEmpty ? task.title : customText
+        case .noAction, .none:
+            let nextAction = opportunity?.nextAction.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return nextAction.isEmpty ? task.title : nextAction
+        }
     }
 
     private var dueColor: Color {
@@ -415,9 +474,9 @@ private struct HomeMetricCard: View {
     let accessibilityIdentifier: String
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 16) {
             Image(systemName: symbol)
-                .font(.system(size: 26, weight: .medium))
+                .font(.system(size: 30, weight: .medium))
                 .foregroundStyle(
                     LinearGradient(
                         colors: [tint, tint.opacity(0.58)],
@@ -425,7 +484,7 @@ private struct HomeMetricCard: View {
                         endPoint: .bottomTrailing
                     )
                 )
-                .frame(width: 50, height: 50)
+                .frame(width: 58, height: 58)
                 .background(
                     LinearGradient(
                         colors: [tint.opacity(0.24), tint.opacity(0.07)],
@@ -435,22 +494,18 @@ private struct HomeMetricCard: View {
                     in: Circle()
                 )
                 .overlay(Circle().stroke(tint.opacity(0.18), lineWidth: 1))
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.title3.weight(.medium))
+                    .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(RekonTheme.secondaryText)
                 Text(value, format: .number)
-                    .font(.system(size: 38, weight: .bold, design: .rounded))
+                    .font(.system(size: 42, weight: .bold, design: .rounded))
                     .foregroundStyle(tint)
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(tint)
-                .accessibilityHidden(true)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 104, alignment: .leading)
+        .padding(18)
+        .frame(maxWidth: .infinity, minHeight: 116, alignment: .leading)
         .background(RekonTheme.backgroundRaised, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(tint.opacity(0.65), lineWidth: 1))
         .accessibilityElement(children: .combine)
@@ -531,7 +586,7 @@ private struct HomeEmptyUpcomingCard: View {
     var body: some View {
         VStack(spacing: 9) {
             Image(systemName: "sparkles")
-                .font(.system(size: 30, weight: .medium))
+                .font(.system(size: 34, weight: .medium))
                 .foregroundStyle(
                     LinearGradient(
                         colors: [RekonTheme.violet, RekonTheme.accent],
@@ -540,10 +595,10 @@ private struct HomeEmptyUpcomingCard: View {
                     )
                 )
             Text("Nothing scheduled this week")
-                .font(.headline.weight(.semibold))
+                .font(.system(size: 19, weight: .semibold))
                 .foregroundStyle(RekonTheme.primaryText)
             Text("Upcoming meetings and next actions will appear here.")
-                .font(.subheadline)
+                .font(.system(size: 16))
                 .foregroundStyle(RekonTheme.secondaryText)
         }
         .multilineTextAlignment(.center)
@@ -554,27 +609,27 @@ private struct HomeEmptyUpcomingCard: View {
 }
 
 private struct HomeEmptyAttentionCard: View {
-    let addOpportunity: () -> Void
-
     var body: some View {
-        HStack(spacing: 16) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 30))
-                .foregroundStyle(RekonTheme.success)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("You’re all caught up")
-                    .font(.headline)
-                    .foregroundStyle(RekonTheme.primaryText)
-                Text("Add an opportunity when you’re ready to track one.")
-                    .font(.subheadline)
-                    .foregroundStyle(RekonTheme.secondaryText)
-            }
-            Spacer()
-            Button("Add opportunity", action: addOpportunity)
-                .buttonStyle(RekonSecondaryButtonStyle())
+        VStack(spacing: 9) {
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: 34, weight: .medium))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [RekonTheme.success, RekonTheme.accent],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Text("You’re all caught up")
+                .font(.system(size: 19, weight: .semibold))
+                .foregroundStyle(RekonTheme.primaryText)
+            Text("Nothing needs your attention right now.")
+                .font(.system(size: 16))
+                .foregroundStyle(RekonTheme.secondaryText)
         }
-        .padding(18)
-        .background(RekonTheme.surfaceGradient, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(RekonTheme.border.opacity(0.9), lineWidth: 1))
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity, minHeight: 150)
+        .padding(.vertical, 12)
+        .accessibilityIdentifier("home-empty-attention")
     }
 }

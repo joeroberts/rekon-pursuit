@@ -15,10 +15,10 @@ nonisolated enum RekonVisualThemeContract {
     static let minimumWindowWidth: CGFloat = 860
     static let minimumWindowHeight: CGFloat = 600
     static let homeFocusAccessibilityIdentifier = "sidebar-home"
-    static let brandEmblemTargetSize: CGFloat = 64
-    static let brandLockupTextSize: CGFloat = 22
-    static let railDestinationMinimumHeight: CGFloat = 52
-    static let railIconSize: CGFloat = 22
+    static let brandEmblemTargetSize: CGFloat = 68
+    static let brandLockupTextSize: CGFloat = 24
+    static let railDestinationMinimumHeight: CGFloat = 56
+    static let railIconSize: CGFloat = 24
     static let railSelectedIndicatorWidth: CGFloat = 3
 
     static func decorativeBackgroundOpacity(reduceMotion: Bool) -> Double {
@@ -335,7 +335,7 @@ enum RekonTheme {
         static let brandTopInset: CGFloat = 16
         static let brandSpacing: CGFloat = 12
         static let destinationRowGap: CGFloat = 12
-        static let destinationLabelGap: CGFloat = 14
+        static let destinationLabelGap: CGFloat = 17
         static let selectedIndicatorWidth = RekonVisualThemeContract.railSelectedIndicatorWidth
     }
 
@@ -410,6 +410,62 @@ struct RekonSecondaryButtonStyle: ButtonStyle {
             .contentShape(RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
             .focused($isFocused)
             .opacity(RekonVisualThemeContract.controlOpacity(isEnabled: isEnabled))
+    }
+}
+
+/// A shared quiet-surface action with a persistent accent outline. Screens use
+/// it where an action needs the same visual weight as the reference's "Open"
+/// controls without looking like a filled primary button.
+struct RekonAccentOutlineButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @FocusState private var isFocused: Bool
+    private let labelFont: Font
+
+    init(labelFont: Font = .body.weight(.medium)) {
+        self.labelFont = labelFont
+    }
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(labelFont)
+            .foregroundStyle(RekonTheme.accent)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .background(RekonTheme.surface.opacity(configuration.isPressed ? 0.62 : 0.9), in: RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
+            .overlay(
+                RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
+                    .stroke(
+                        RekonTheme.accent.opacity(configuration.isPressed ? 0.7 : 0.96),
+                        lineWidth: RekonVisualThemeContract.buttonFocusBorderWidth(isFocused: isFocused)
+                    )
+            )
+            .shadow(color: RekonTheme.accent.opacity(RekonVisualThemeContract.buttonFocusGlowOpacity(isFocused: isFocused)), radius: 6)
+            .contentShape(RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
+            .focused($isFocused)
+            .opacity(RekonVisualThemeContract.controlOpacity(isEnabled: isEnabled))
+    }
+}
+
+private struct RekonActionSummarySurface: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(RekonTheme.backgroundRaised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(RekonTheme.border.opacity(0.85), lineWidth: 1))
+    }
+}
+
+extension View {
+    func rekonActionSummarySurface() -> some View {
+        modifier(RekonActionSummarySurface())
+    }
+
+    func rekonFloatingMenuSurface() -> some View {
+        background(RekonTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(RekonTheme.border.opacity(0.92), lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(0.32), radius: 18, y: 8)
     }
 }
 

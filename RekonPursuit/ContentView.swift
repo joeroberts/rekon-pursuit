@@ -448,7 +448,7 @@ struct ContentView: View {
     }
 
     private var detailTitle: String {
-        guard let opportunityRoute else { return AppDestination(navigation.route).rawValue }
+        guard let opportunityRoute else { return AppDestination(navigation.route).displayTitle }
         switch opportunityRoute {
         case .overview: return "Opportunity"
         case .history: return "Activity & history"

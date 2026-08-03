@@ -32,17 +32,20 @@ final class WorkspaceViewModelTests: XCTestCase {
 
     func testHomeDashboardSnapshotOrdersAttentionAndDoesNotFabricateEmptyState() {
         let now = Date(timeIntervalSince1970: 1_746_576_000)
+        let opportunities = [
+            Opportunity(id: "one", title: "Undated role", company: "Rekon Labs", createdAt: now, nextAction: "Follow up")
+        ]
         let tasks = [
             TaskReminder(id: "undated", opportunityID: "one", title: "Undated", dueAt: nil, isComplete: false),
             TaskReminder(id: "later", opportunityID: "one", title: "Later", dueAt: now.addingTimeInterval(3_600), isComplete: false),
             TaskReminder(id: "earlier", opportunityID: "one", title: "Earlier", dueAt: now.addingTimeInterval(-3_600), isComplete: false),
             TaskReminder(id: "complete", opportunityID: "one", title: "Complete", dueAt: now, isComplete: true)
         ]
-        let snapshot = HomeDashboardSnapshot(opportunities: [], attentionTasks: tasks, now: now, calendar: .current)
+        let snapshot = HomeDashboardSnapshot(opportunities: opportunities, attentionTasks: tasks, now: now, calendar: .current)
 
-        XCTAssertEqual(snapshot.attentionTasks.map(\.id), ["earlier", "undated"])
-        XCTAssertTrue(snapshot.upcomingOpportunities.isEmpty)
-        XCTAssertEqual(snapshot.activeOpportunityCount, 0)
+        XCTAssertEqual(snapshot.attentionTasks.map(\.id), ["earlier"])
+        XCTAssertEqual(snapshot.upcomingOpportunities.map(\.id), ["one"])
+        XCTAssertEqual(snapshot.activeOpportunityCount, 1)
         XCTAssertEqual(snapshot.appliedThisWeekCount, 0)
         XCTAssertEqual(snapshot.interviewCount, 0)
     }
