@@ -256,9 +256,11 @@ class DashboardContractTests(unittest.TestCase):
         for task_id in ("UX-D10", "UX-D11"):
             self.assertEqual(task_by_id[task_id]["status"], "accepted")
             self.assertFalse(task_by_id[task_id]["needsUserAction"])
-        self.assertEqual(task_by_id["VD2-09"]["status"], "in_progress")
+        self.assertEqual(task_by_id["VD2-09"]["status"], "accepted")
         self.assertFalse(task_by_id["VD2-09"]["needsUserAction"])
-        for task_id in ("DESIGN-V2", "VD2-10", "VD2-11", "VD2-12",
+        self.assertEqual(task_by_id["VD2-10"]["status"], "next_up")
+        self.assertFalse(task_by_id["VD2-10"]["needsUserAction"])
+        for task_id in ("DESIGN-V2", "VD2-11", "VD2-12",
                         "VD2-13", "VD2-08a", "OPS-CI-01", "P2A-1", "P2B-1",
                         "P2C-1", "P3-1"):
             self.assertEqual(task_by_id[task_id]["status"], "backlog")

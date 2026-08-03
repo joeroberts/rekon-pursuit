@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "activePhaseId": "post_mvp_refinement",
-  "activeTaskId": "VD2-09",
-  "nextEligibleTaskId": null,
+  "activeTaskId": null,
+  "nextEligibleTaskId": "VD2-10",
   "phases": [
     {
       "id": "remediation_r1",
@@ -605,9 +605,9 @@
       "phaseId": "post_mvp_refinement",
       "title": "Home visual parity",
       "workType": "Visual remediation",
-      "status": "in_progress",
-      "releaseCondition": "Requires a reference-faithful Home implementation covering heading hierarchy, Needs attention, Pipeline snapshot, Next up, action sizing, and data-driven behavior preservation.",
-      "latestTransition": "Released to implementation on 2026-08-03 after independent Planning, Architecture, TPM, QA, and Delivery review. Scope is HomeView-only visual parity; live data, callbacks, and persistence remain unchanged.",
+      "status": "accepted",
+      "releaseCondition": "Accepted after a reference-faithful Home implementation covered Needs attention, Opportunities snapshot, Next up, responsive sizing, and data-driven behavior preservation without changing persistence contracts.",
+      "latestTransition": "Product owner accepted the final Home visual pass on 2026-08-03. Merged to main through PR #22 after independent Architecture, code-review, and QA approval; the targeted regression tests and macOS build passed.",
       "dependsOnTaskIds": [
         "VD2-03"
       ],
@@ -618,9 +618,9 @@
       "phaseId": "post_mvp_refinement",
       "title": "Pipeline visual parity — controls, Table, and Board",
       "workType": "Visual remediation",
-      "status": "backlog",
+      "status": "next_up",
       "releaseCondition": "Requires a reference-faithful Pipeline implementation that retains Include closed, corrects controls and Table/Board presentation, and preserves pipeline behavior.",
-      "latestTransition": "GitHub issue #16 recorded on 2026-08-03; no implementation is released.",
+      "latestTransition": "GitHub issue #16 recorded on 2026-08-03. Dependencies are accepted; this is the next dependency-safe visual-remediation task.",
       "dependsOnTaskIds": [
         "VD2-04",
         "VD2-05"
