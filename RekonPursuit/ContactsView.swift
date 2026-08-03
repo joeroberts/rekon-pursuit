@@ -58,6 +58,7 @@ struct ContactsView: View {
     @FocusState private var focusedKeyboardControl: KeyboardFocusControl?
     @FocusState private var contactSearchIsFocused: Bool
     @FocusState private var editorNameIsFocused: Bool
+    @FocusState private var focusedEditorNote: EditorNote?
 
     private enum EditorMode {
         case new
@@ -68,6 +69,11 @@ struct ContactsView: View {
         case row(String)
         case relatedDisclosure
         case manageRelated
+    }
+
+    private enum EditorNote: Hashable {
+        case relationshipContext
+        case notes
     }
 
     var body: some View {
@@ -525,53 +531,65 @@ struct ContactsView: View {
     }
 
     private func contactEditor(isCompact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: RekonTheme.Spacing.section) {
+        VStack(alignment: .leading, spacing: RekonTheme.Spacing.standard) {
             Text(editorMode == .new ? "New contact" : "Edit contact")
-                .font(.title.bold())
-            Form {
-                TextField("Name", text: $model.contactName)
-                    .focused($editorNameIsFocused)
-                    .accessibilityIdentifier("contact-name")
-                employerEditor
-                TextField("Title (optional)", text: $model.contactTitle)
-                Section("Contact information") {
-                    TextField("Work email", text: $model.contactWorkEmail)
-                        .accessibilityIdentifier("contact-work-email")
-                    if let warning = model.contactWorkEmailWarning {
-                        validationMessage(warning)
-                    }
-                    TextField("Personal email", text: $model.contactPersonalEmail)
-                        .accessibilityIdentifier("contact-personal-email")
-                    if let warning = model.contactPersonalEmailWarning {
-                        validationMessage(warning)
-                    }
-                    TextField("Mobile phone", text: $model.contactMobilePhone)
-                        .accessibilityIdentifier("contact-mobile-phone")
-                    TextField("Office phone", text: $model.contactOfficePhone)
-                        .accessibilityIdentifier("contact-office-phone")
-                    TextField("LinkedIn", text: $model.contactLinkedInURL)
-                        .accessibilityIdentifier("contact-linkedin")
-                    if let warning = model.contactLinkedInURLWarning {
-                        validationMessage(warning)
-                    }
-                    TextField("Instagram", text: $model.contactInstagramURL)
-                        .accessibilityIdentifier("contact-instagram")
-                    if let warning = model.contactInstagramURLWarning {
-                        validationMessage(warning)
-                    }
-                    TextField("Facebook", text: $model.contactFacebookURL)
-                        .accessibilityIdentifier("contact-facebook")
-                    if let warning = model.contactFacebookURLWarning {
-                        validationMessage(warning)
-                    }
+                .font(.title2.bold())
+
+            VStack(alignment: .leading, spacing: RekonTheme.Spacing.tight) {
+                VStack(alignment: .leading, spacing: RekonTheme.Spacing.micro) {
+                    Text("Name")
+                        .font(.caption)
+                        .foregroundStyle(RekonTheme.secondaryText)
+                    TextField("Name", text: $model.contactName)
+                        .textFieldStyle(RekonQuietTextFieldStyle())
+                        .focused($editorNameIsFocused)
+                        .accessibilityIdentifier("contact-name")
                 }
+
+                employerEditor
+                contactTextField("Title (optional)", text: $model.contactTitle)
+            }
+
+            contactSection("Contact information") {
+                contactTextField("Work email", text: $model.contactWorkEmail, accessibilityIdentifier: "contact-work-email")
+                if let warning = model.contactWorkEmailWarning {
+                    validationMessage(warning)
+                }
+                contactTextField("Personal email", text: $model.contactPersonalEmail, accessibilityIdentifier: "contact-personal-email")
+                if let warning = model.contactPersonalEmailWarning {
+                    validationMessage(warning)
+                }
+                contactTextField("Mobile phone", text: $model.contactMobilePhone, accessibilityIdentifier: "contact-mobile-phone")
+                contactTextField("Office phone", text: $model.contactOfficePhone, accessibilityIdentifier: "contact-office-phone")
+                contactTextField("LinkedIn", text: $model.contactLinkedInURL, accessibilityIdentifier: "contact-linkedin")
+                if let warning = model.contactLinkedInURLWarning {
+                    validationMessage(warning)
+                }
+                contactTextField("Instagram", text: $model.contactInstagramURL, accessibilityIdentifier: "contact-instagram")
+                if let warning = model.contactInstagramURLWarning {
+                    validationMessage(warning)
+                }
+                contactTextField("Facebook", text: $model.contactFacebookURL, accessibilityIdentifier: "contact-facebook")
+                if let warning = model.contactFacebookURLWarning {
+                    validationMessage(warning)
+                }
+            }
+
+            contactSection("Relationship notes") {
                 editorExpandableText(
                     title: "Relationship context (optional)",
                     text: $model.contactRelationshipContext,
-                    expanded: $showsRelationshipContext
+                    expanded: $showsRelationshipContext,
+                    focus: .relationshipContext
                 )
-                editorExpandableText(title: "Notes (optional)", text: $model.contactNotes, expanded: $showsNotes)
+                editorExpandableText(
+                    title: "Notes (optional)",
+                    text: $model.contactNotes,
+                    expanded: $showsNotes,
+                    focus: .notes
+                )
             }
+
             HStack {
                 Button("Cancel") { cancelEditing(isCompact: isCompact) }
                     .keyboardShortcut(.cancelAction)
@@ -596,11 +614,10 @@ struct ContactsView: View {
 
     @ViewBuilder private var employerEditor: some View {
         if model.isAddingNewContactEmployer {
-            TextField("New employer (optional)", text: $model.contactEmployer)
+            contactTextField("New employer (optional)", text: $model.contactEmployer)
             Button("Choose tracked employer") { model.chooseTrackedContactEmployer() }
         } else {
-            TextField("Search tracked employers", text: $model.contactEmployerSearch)
-                .accessibilityIdentifier("contact-employer-search")
+            contactTextField("Search tracked employers", text: $model.contactEmployerSearch, accessibilityIdentifier: "contact-employer-search")
             if !model.contactEmployer.isEmpty {
                 HStack {
                     Text("Employer: \(model.contactEmployer)").foregroundStyle(RekonTheme.secondaryText)
@@ -629,10 +646,47 @@ struct ContactsView: View {
             .foregroundStyle(RekonTheme.warning)
     }
 
+    @ViewBuilder private func contactTextField(
+        _ title: String,
+        text: Binding<String>,
+        accessibilityIdentifier: String? = nil
+    ) -> some View {
+        VStack(alignment: .leading, spacing: RekonTheme.Spacing.micro) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(RekonTheme.secondaryText)
+            if let accessibilityIdentifier {
+                TextField(title, text: text)
+                    .textFieldStyle(RekonQuietTextFieldStyle())
+                    .accessibilityIdentifier(accessibilityIdentifier)
+            } else {
+                TextField(title, text: text)
+                    .textFieldStyle(RekonQuietTextFieldStyle())
+            }
+        }
+    }
+
+    private func contactSection<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: RekonTheme.Spacing.tight) {
+            HStack(spacing: RekonTheme.Spacing.tight) {
+                Text(title)
+                    .font(.headline)
+                Rectangle()
+                    .fill(RekonTheme.borderSubtle)
+                    .frame(height: 1)
+            }
+            content()
+        }
+    }
+
     private func editorExpandableText(
         title: String,
         text: Binding<String>,
-        expanded: Binding<Bool>
+        expanded: Binding<Bool>,
+        focus: EditorNote
     ) -> some View {
         VStack(alignment: .leading, spacing: RekonTheme.Spacing.micro) {
             HStack {
@@ -645,7 +699,9 @@ struct ContactsView: View {
                 .accessibilityValue(expanded.wrappedValue ? "Expanded" : "Collapsed")
             }
             TextEditor(text: text)
-                .frame(minHeight: expanded.wrappedValue ? 120 : 48, maxHeight: expanded.wrappedValue ? 180 : 48)
+                .focused($focusedEditorNote, equals: focus)
+                .frame(minHeight: expanded.wrappedValue ? 132 : 64, maxHeight: expanded.wrappedValue ? 176 : 64)
+                .rekonQuietTextEditorSurface(isFocused: focusedEditorNote == focus)
         }
     }
 

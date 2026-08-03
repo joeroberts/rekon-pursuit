@@ -1165,6 +1165,60 @@ struct RekonTextFieldStyle: TextFieldStyle {
     }
 }
 
+/// A compact, application-owned field treatment for forms that use explicit
+/// labels.  The native text field is the sole visual and input surface: this
+/// style removes AppKit's default bezel before painting one quiet navy surface
+/// and one border.  It deliberately does not add an enclosing wrapper.
+struct RekonQuietTextFieldStyle: TextFieldStyle {
+    @FocusState private var isFocused: Bool
+
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 34)
+            .background(RekonTheme.backgroundRaised, in: RoundedRectangle(cornerRadius: 7))
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(
+                        isFocused ? RekonTheme.accent : RekonTheme.border.opacity(0.72),
+                        lineWidth: isFocused ? 1.5 : 1
+                    )
+                    .allowsHitTesting(false)
+            )
+            .focused($isFocused)
+    }
+}
+
+/// Paint-only counterpart for a native `TextEditor`.  The caller supplies its
+/// real focus state; no overlay is interactive and no extra focus target is
+/// introduced.
+private struct RekonQuietTextEditorSurface: ViewModifier {
+    let isFocused: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .scrollContentBackground(.hidden)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(RekonTheme.backgroundRaised, in: RoundedRectangle(cornerRadius: 7))
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(
+                        isFocused ? RekonTheme.accent : RekonTheme.border.opacity(0.72),
+                        lineWidth: isFocused ? 1.5 : 1
+                    )
+                    .allowsHitTesting(false)
+            )
+    }
+}
+
+extension View {
+    func rekonQuietTextEditorSurface(isFocused: Bool) -> some View {
+        modifier(RekonQuietTextEditorSurface(isFocused: isFocused))
+    }
+}
+
 struct RekonCard<Content: View>: View {
     @ViewBuilder let content: Content
 
