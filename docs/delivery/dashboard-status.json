@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "activePhaseId": "post_mvp_refinement",
-  "activeTaskId": "VD2-07d",
+  "activeTaskId": "VD2-08",
   "nextEligibleTaskId": null,
   "phases": [
     {
@@ -403,9 +403,9 @@
       "phaseId": "post_mvp_refinement",
       "title": "Precise local activity search and date filtering",
       "workType": "Activity & AI UX",
-      "status": "in_progress",
+      "status": "accepted",
       "releaseCondition": "Requires a separately approved local-only release that preserves the retained activity ledger and current general multi-word fallback, adds quoted text for an exact event phrase, a visible exact-label/identifier filter, and a non-persistent date menu: All dates, Today, Last 7 days, Last 30 days, and Custom range. Event-type chips and an activity-detail inspector are not included without separate approval.",
-      "latestTransition": "Released after VD2-07c merged on 2026-08-03. Implementation is starting from updated main and remains limited to quoted search, exact-label/identifier filtering, and the local non-persistent date menu.",
+      "latestTransition": "Merged to main through PR #9 on 2026-08-03. The release adds only quoted search, exact-label/identifier filtering, and non-persistent local date filtering to the retained activity ledger.",
       "dependsOnTaskIds": [
         "VD2-07c"
       ],
@@ -575,9 +575,9 @@
       "phaseId": "post_mvp_refinement",
       "title": "Visual QA and accessibility acceptance",
       "workType": "Acceptance",
-      "status": "backlog",
+      "status": "in_progress",
       "releaseCondition": "Requires VD2-03 through VD2-07 accepted; it must close the carried Settings compact-keyboard and AI text-semantic accessibility debts, the owner-approved VD2-06 Contacts accessibility/recovery automation debts, and the VD2-05 Board card-anchor accessibility-semantic debt. It also requires a new whole-app visual and accessibility acceptance pass that verifies visual language, persistence, failure states, and product-owner workflow acceptance.",
-      "latestTransition": "Product owner confirmed on 2026-08-02 that VD2-08 owns both the documented accessibility-debt closure and a whole-app visual/accessibility acceptance pass.",
+      "latestTransition": "Released after VD2-07d merged on 2026-08-03. Final whole-app visual and accessibility acceptance is in progress.",
       "evidence": {
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
