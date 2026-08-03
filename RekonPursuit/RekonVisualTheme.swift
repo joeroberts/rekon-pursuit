@@ -1076,92 +1076,57 @@ private struct PipelineSecondaryButtonBody<Label: View>: View {
     }
 }
 
-private struct RekonControlSurface: ViewModifier {
-    let isKeyboardFocused: Bool
-    @State private var isPointerHovering = false
-
-    private var outline: RekonControlSurfaceOutline {
-        RekonControlSurfacePresentation.outline(
-            isPointerHovering: isPointerHovering,
-            isKeyboardFocused: isKeyboardFocused
-        )
-    }
-
-    func body(content: Content) -> some View {
-        content
-            .background(
-                isPointerHovering ? RekonTheme.elevatedSurface : RekonTheme.surface,
-                in: RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
-                    .stroke(
-                        outlineColor,
-                        lineWidth: RekonControlSurfacePresentation.borderWidth(for: outline)
-                    )
-            )
-            .onHover { isPointerHovering = $0 }
-    }
-
-    private var outlineColor: Color {
-        switch outline {
-        case .idle:
-            RekonTheme.border
-        case .pointerHover:
-            RekonTheme.accent
-        case .keyboardFocus:
-            RekonTheme.violet
-        }
-    }
-}
-
-/// The surface is visual-only: native controls own focus, activation, and
-/// accessibility. Callers bind `isKeyboardFocused` directly on those controls
-/// and pass the state here so the surrounding group can render a focus ring.
-nonisolated enum RekonControlSurfaceOutline: Equatable {
-    case idle
-    case pointerHover
-    case keyboardFocus
-}
-
-nonisolated enum RekonControlSurfacePresentation {
-    static func outline(
-        isPointerHovering: Bool,
-        isKeyboardFocused: Bool
-    ) -> RekonControlSurfaceOutline {
-        if isPointerHovering {
-            return .pointerHover
-        }
-        return isKeyboardFocused ? .keyboardFocus : .idle
-    }
-
-    static func borderWidth(for outline: RekonControlSurfaceOutline) -> CGFloat {
-        RekonVisualThemeContract.controlBorderWidth(isFocused: outline == .keyboardFocus)
-    }
-}
-
-extension View {
-    func reconControlSurface(isKeyboardFocused: Bool) -> some View {
-        modifier(RekonControlSurface(isKeyboardFocused: isKeyboardFocused))
-    }
-}
-
-struct RekonTextFieldStyle: TextFieldStyle {
+/// A compact, application-owned field treatment for forms that use explicit
+/// labels.  The native text field is the sole visual and input surface: this
+/// style removes AppKit's default bezel before painting one quiet navy surface
+/// and one border.  It deliberately does not add an enclosing wrapper.
+struct RekonQuietTextFieldStyle: TextFieldStyle {
     @FocusState private var isFocused: Bool
 
     func _body(configuration: TextField<Self._Label>) -> some View {
         configuration
-            .focused($isFocused)
-            .padding(.horizontal, RekonTheme.Spacing.compact)
-            .padding(.vertical, RekonTheme.Spacing.tight)
-            .background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 34)
+            .background(RekonTheme.backgroundRaised, in: RoundedRectangle(cornerRadius: 7))
             .overlay(
-                RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
+                RoundedRectangle(cornerRadius: 7)
                     .stroke(
-                        isFocused ? RekonTheme.accent : RekonTheme.border,
-                        lineWidth: RekonVisualThemeContract.controlBorderWidth(isFocused: isFocused)
+                        isFocused ? RekonTheme.accent : RekonTheme.border.opacity(0.72),
+                        lineWidth: isFocused ? 1.5 : 1
                     )
+                    .allowsHitTesting(false)
             )
+            .focused($isFocused)
+    }
+}
+
+/// Paint-only counterpart for a native `TextEditor`.  The caller supplies its
+/// real focus state; no overlay is interactive and no extra focus target is
+/// introduced.
+private struct RekonQuietTextEditorSurface: ViewModifier {
+    let isFocused: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .scrollContentBackground(.hidden)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(RekonTheme.backgroundRaised, in: RoundedRectangle(cornerRadius: 7))
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(
+                        isFocused ? RekonTheme.accent : RekonTheme.border.opacity(0.72),
+                        lineWidth: isFocused ? 1.5 : 1
+                    )
+                    .allowsHitTesting(false)
+            )
+    }
+}
+
+extension View {
+    func rekonQuietTextEditorSurface(isFocused: Bool) -> some View {
+        modifier(RekonQuietTextEditorSurface(isFocused: isFocused))
     }
 }
 

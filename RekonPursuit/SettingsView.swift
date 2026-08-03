@@ -1013,7 +1013,7 @@ struct SettingsProtectedExportDialog: View {
             }
 
             TextField("Recovery key", text: $recoveryKey)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(RekonQuietTextFieldStyle())
 
             VStack(alignment: .leading, spacing: RekonTheme.Spacing.tight) {
                 Button("Cancel", role: .cancel, action: cancel)

@@ -489,34 +489,6 @@ final class RekonPursuitTests: XCTestCase {
         )
     }
 
-    func testControlSurfaceMakesNativeChildFocusVisuallyDistinctFromHover() {
-        XCTAssertEqual(
-            RekonControlSurfacePresentation.outline(
-                isPointerHovering: false,
-                isKeyboardFocused: false
-            ),
-            .idle
-        )
-        XCTAssertEqual(
-            RekonControlSurfacePresentation.outline(
-                isPointerHovering: true,
-                isKeyboardFocused: false
-            ),
-            .pointerHover
-        )
-        XCTAssertEqual(
-            RekonControlSurfacePresentation.outline(
-                isPointerHovering: false,
-                isKeyboardFocused: true
-            ),
-            .keyboardFocus
-        )
-        XCTAssertEqual(
-            RekonControlSurfacePresentation.borderWidth(for: .keyboardFocus),
-            RekonVisualThemeContract.controlBorderWidth(isFocused: true)
-        )
-    }
-
     func testVD204PipelineNavySurfacePresentationContract() {
         let expected: [(PipelineNavySurfaceInteractionState, PipelineNavySurfaceToken, PipelineNavySurfaceToken, CGFloat, Double)] = [
             (.idle, .surface, .border, 1, 1),
