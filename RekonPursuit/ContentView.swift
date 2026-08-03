@@ -1181,102 +1181,190 @@ private struct CSVImportCompletionView: View {
 
 private struct GlobalActivityView: View {
     @ObservedObject var model: WorkspaceViewModel
-    @State private var aiLedgerFilter = AIUsageLedgerFilter()
+    @State private var selectedSection: Section = .ledger
+
+    private enum Section: Hashable {
+        case ledger
+        case assistant
+    }
+
+    private var visibleEvents: [ActivityEvent] { model.filteredActivityEvents }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Activity & AI")
-                    .font(.largeTitle.bold())
+        VStack(alignment: .leading, spacing: RekonTheme.Spacing.section) {
+            Text("Activity & AI")
+                .font(.system(size: 34, weight: .bold))
 
-                GroupBox("Local activity ledger") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        TextField("Search activity", text: $model.activitySearch)
-                            .accessibilityIdentifier("activity-search")
-                        if model.filteredActivityEvents.isEmpty {
-                            Text(model.activityEvents.isEmpty ? "No local activity yet." : "No activity matches that search.")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(model.filteredActivityEvents, id: \.id) { event in
-                                Text("\(event.kind.replacingOccurrences(of: "_", with: " ").capitalized) · \(event.occurredAt.formatted(date: .abbreviated, time: .shortened))")
-                            }
-                        }
-                    }
-                }
+            activitySectionNavigation
 
-                GroupBox("AI usage ledger") {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("No AI requests have run. Local and cloud AI execution, model activity, and cost calculation are unavailable in this MVP.")
-                            .foregroundStyle(.secondary)
-                            .accessibilityIdentifier("ai-ledger-empty-state")
-
-                        Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
-                            GridRow {
-                                Picker("Time", selection: $aiLedgerFilter.time) {
-                                    ForEach(AIUsageLedgerFilter.Time.allCases, id: \.self) { time in
-                                        Text(time.label).tag(time)
-                                    }
-                                }
-                                .accessibilityIdentifier("ai-ledger-time-filter")
-
-                                TextField("Feature", text: $aiLedgerFilter.featureQuery)
-                                    .accessibilityIdentifier("ai-ledger-feature-filter")
-                            }
-                            GridRow {
-                                Picker("Opportunity", selection: $aiLedgerFilter.opportunityID) {
-                                    Text("All opportunities").tag(nil as String?)
-                                    ForEach(model.opportunities, id: \.id) { opportunity in
-                                        Text("\(opportunity.title) · \(opportunity.company)").tag(Optional(opportunity.id))
-                                    }
-                                }
-                                .accessibilityIdentifier("ai-ledger-opportunity-filter")
-
-                                Picker("Route", selection: $aiLedgerFilter.route) {
-                                    ForEach(AIUsageLedgerFilter.Route.allCases, id: \.self) { route in
-                                        Text(route.label).tag(route)
-                                    }
-                                }
-                                .accessibilityIdentifier("ai-ledger-route-filter")
-                            }
-                            GridRow {
-                                TextField("Model", text: $aiLedgerFilter.modelQuery)
-                                    .accessibilityIdentifier("ai-ledger-model-filter")
-
-                                Picker("Completion", selection: $aiLedgerFilter.completion) {
-                                    ForEach(AIUsageLedgerFilter.Completion.allCases, id: \.self) { completion in
-                                        Text(completion.label).tag(completion)
-                                    }
-                                }
-                                .accessibilityIdentifier("ai-ledger-completion-filter")
-                            }
-                            GridRow {
-                                TextField("Minimum cost (USD)", text: $aiLedgerFilter.minimumCostUSD)
-                                    .accessibilityIdentifier("ai-ledger-min-cost-filter")
-                                TextField("Maximum cost (USD)", text: $aiLedgerFilter.maximumCostUSD)
-                                    .accessibilityIdentifier("ai-ledger-max-cost-filter")
-                            }
-                        }
-
-                        if let validationMessage = aiLedgerFilter.costRangeValidationMessage {
-                            Text(validationMessage)
-                                .foregroundStyle(.red)
-                        } else if !aiLedgerFilter.isDefault {
-                            Text("Zero entries match the current filters.")
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Button("Clear filters") {
-                            aiLedgerFilter.reset()
-                        }
-                        .disabled(aiLedgerFilter.isDefault)
-                        .accessibilityIdentifier("ai-ledger-clear-filters")
-                    }
-                    .frame(maxWidth: 760, alignment: .leading)
-                }
+            if selectedSection == .ledger {
+                activityLedger
+            } else {
+                assistantPlaceholder
             }
-            .padding(28)
-            .frame(maxWidth: 920, alignment: .leading)
+        }
+        .padding(.horizontal, 36)
+        .padding(.vertical, 30)
+        .frame(maxWidth: 1_240, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var activitySectionNavigation: some View {
+        HStack(spacing: 38) {
+            sectionButton("Activity ledger", symbol: "document.text", section: .ledger)
+            sectionButton("AI assistant", symbol: "sparkles", section: .assistant)
+            Spacer(minLength: 0)
+        }
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(RekonTheme.borderSubtle)
+                .frame(height: 1)
         }
     }
 
+    private func sectionButton(_ title: String, symbol: String, section: Section) -> some View {
+        let isSelected = selectedSection == section
+        return Button {
+            selectedSection = section
+        } label: {
+            Label(title, systemImage: symbol)
+                .font(.body.weight(.medium))
+                .foregroundStyle(isSelected ? RekonTheme.accent : RekonTheme.secondaryText)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 14)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(isSelected ? RekonTheme.accent : .clear)
+                        .frame(height: 3)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(section == .ledger ? "activity-ledger-tab" : "ai-assistant-tab")
+    }
+
+    private var activityLedger: some View {
+        RekonCard {
+            VStack(alignment: .leading, spacing: RekonTheme.Spacing.compact) {
+                Text("Local activity ledger")
+                    .font(.headline)
+
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(RekonTheme.secondaryText)
+                    TextField("Search activity", text: $model.activitySearch)
+                        .textFieldStyle(.plain)
+                        .accessibilityIdentifier("activity-search")
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 52)
+                .background(RekonTheme.backgroundRaised, in: RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
+                .overlay(
+                    RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
+                        .stroke(RekonTheme.border.opacity(0.82), lineWidth: 1)
+                )
+
+                if visibleEvents.isEmpty {
+                    Text(model.activityEvents.isEmpty ? "No local activity yet." : "No activity matches that search.")
+                        .foregroundStyle(RekonTheme.secondaryText)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(visibleEvents, id: \.id) { event in
+                                ActivityLedgerRow(event: event)
+                                if event.id != visibleEvents.last?.id {
+                                    Divider().overlay(RekonTheme.borderSubtle)
+                                }
+                            }
+                        }
+                    }
+                    .frame(minHeight: 260, maxHeight: 650)
+                }
+            }
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+    private var assistantPlaceholder: some View {
+        RekonCard {
+            VStack(spacing: 22) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 54, weight: .light))
+                    .foregroundStyle(RekonTheme.violet)
+
+                VStack(spacing: 12) {
+                    Text("AI assistant coming soon")
+                        .font(.title.bold())
+                    Text("AI-powered workspace assistance will be available here in a future update.")
+                        .foregroundStyle(RekonTheme.secondaryText)
+                        .multilineTextAlignment(.center)
+                    Label("Your workspace remains local and private.", systemImage: "shield")
+                        .foregroundStyle(RekonTheme.secondaryText)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.vertical, 70)
+            .accessibilityIdentifier("ai-ledger-empty-state")
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+}
+
+private struct ActivityLedgerRow: View {
+    let event: ActivityEvent
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: symbolName)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(iconColor)
+                .frame(width: 34, height: 34)
+                .overlay(Circle().stroke(iconColor.opacity(0.72), lineWidth: 1))
+
+            Text(displayName)
+                .font(.body.weight(.medium))
+                .foregroundStyle(RekonTheme.primaryText)
+
+            Spacer(minLength: 16)
+
+            Text(event.occurredAt.formatted(date: .abbreviated, time: .shortened))
+                .font(.body)
+                .foregroundStyle(RekonTheme.secondaryText)
+                .multilineTextAlignment(.trailing)
+        }
+        .padding(.vertical, 13)
+        .padding(.horizontal, 4)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var displayName: String {
+        event.kind
+            .split(separator: "_")
+            .map { $0.capitalized }
+            .joined(separator: " ")
+    }
+
+    private var symbolName: String {
+        switch event.kind {
+        case "opportunity_created": "plus"
+        case "opportunity_updated", "opportunity_stage_changed": "arrow.triangle.2.circlepath"
+        case "opportunity_deleted": "trash"
+        case "task_opened": "checkmark.square"
+        case "task_completed": "checkmark"
+        case "task_rescheduled", "task_snoozed": "clock.arrow.circlepath"
+        case "csv_import_row_created", "csv_import_row_updated": "doc.text"
+        case "contact_linked", "contact_unlinked": "person.2"
+        case "document_reference_linked", "document_reference_relinked": "doc.badge.plus"
+        default: "circle"
+        }
+    }
+
+    private var iconColor: Color {
+        switch event.kind {
+        case "opportunity_created", "task_completed": RekonTheme.success
+        case "task_opened", "csv_import_row_created", "csv_import_row_updated": RekonTheme.violet
+        case "opportunity_updated", "opportunity_stage_changed", "task_rescheduled", "task_snoozed": RekonTheme.accent
+        default: RekonTheme.secondaryText
+        }
+    }
 }
