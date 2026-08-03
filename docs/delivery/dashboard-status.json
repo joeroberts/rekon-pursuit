@@ -1,10 +1,50 @@
 {
   "schemaVersion": 1,
-  "activeTaskId": null,
+  "activePhaseId": "post_mvp_refinement",
+  "activeTaskId": "VD2-07",
   "nextEligibleTaskId": null,
+  "phases": [
+    {
+      "id": "remediation_r1",
+      "label": "Remediation R1",
+      "lifecycle": "historical",
+      "dependsOnPhaseIds": []
+    },
+    {
+      "id": "post_mvp_refinement",
+      "label": "Post-MVP refinement",
+      "lifecycle": "active",
+      "dependsOnPhaseIds": ["remediation_r1"]
+    },
+    {
+      "id": "phase_2a",
+      "label": "Phase 2a — Privacy and AI foundation",
+      "lifecycle": "planned",
+      "dependsOnPhaseIds": ["post_mvp_refinement"]
+    },
+    {
+      "id": "phase_2b",
+      "label": "Phase 2b — Connected workflow",
+      "lifecycle": "planned",
+      "dependsOnPhaseIds": ["phase_2a"]
+    },
+    {
+      "id": "phase_2c",
+      "label": "Phase 2c — Intelligence and documents",
+      "lifecycle": "planned",
+      "dependsOnPhaseIds": ["phase_2b"]
+    },
+    {
+      "id": "phase_3",
+      "label": "Phase 3 — Decision support",
+      "lifecycle": "planned",
+      "dependsOnPhaseIds": ["phase_2c"]
+    }
+  ],
   "tasks": [
     {
       "id": "RP-R0",
+      "phaseId": "remediation_r1",
       "title": "Evidence-only remediation baseline",
       "workType": "Foundation",
       "status": "accepted",
@@ -18,6 +58,7 @@
     },
     {
       "id": "RP-R1a",
+      "phaseId": "remediation_r1",
       "title": "Workspace initialization and recovery",
       "workType": "Workflow",
       "status": "accepted",
@@ -31,6 +72,7 @@
     },
     {
       "id": "RP-R1b",
+      "phaseId": "remediation_r1",
       "title": "Reactive application shell",
       "workType": "UX",
       "status": "accepted",
@@ -44,6 +86,7 @@
     },
     {
       "id": "RP-R2",
+      "phaseId": "remediation_r1",
       "title": "Opportunity fields and safe migration",
       "workType": "Data",
       "status": "accepted",
@@ -57,6 +100,7 @@
     },
     {
       "id": "RP-R3",
+      "phaseId": "remediation_r1",
       "title": "CSV mapping and atomic import",
       "workType": "Workflow",
       "status": "accepted",
@@ -70,6 +114,7 @@
     },
     {
       "id": "RP-R4",
+      "phaseId": "remediation_r1",
       "title": "Reconciliation contract and local states",
       "workType": "Workflow",
       "status": "accepted",
@@ -83,6 +128,7 @@
     },
     {
       "id": "RP-R5",
+      "phaseId": "remediation_r1",
       "title": "User-initiated public URL check",
       "workType": "Security",
       "status": "accepted",
@@ -96,6 +142,7 @@
     },
     {
       "id": "UX-R1",
+      "phaseId": "remediation_r1",
       "title": "Shell and opportunity navigation",
       "workType": "UX",
       "status": "accepted",
@@ -109,6 +156,7 @@
     },
     {
       "id": "UX-R2",
+      "phaseId": "remediation_r1",
       "title": "Core workflow forms",
       "workType": "UX",
       "status": "accepted",
@@ -122,6 +170,7 @@
     },
     {
       "id": "UX-R2-A",
+      "phaseId": "remediation_r1",
       "title": "Opportunity forms and compatibility data",
       "workType": "Workflow",
       "status": "accepted",
@@ -135,6 +184,7 @@
     },
     {
       "id": "UX-R2-B",
+      "phaseId": "remediation_r1",
       "title": "Contacts and employer relationship flow",
       "workType": "Workflow",
       "status": "accepted",
@@ -148,6 +198,7 @@
     },
     {
       "id": "UX-R2-C",
+      "phaseId": "remediation_r1",
       "title": "CSV completion and report redesign",
       "workType": "Workflow",
       "status": "accepted",
@@ -161,6 +212,7 @@
     },
     {
       "id": "RP-R6",
+      "phaseId": "remediation_r1",
       "title": "Durable document references",
       "workType": "Data",
       "status": "accepted",
@@ -174,6 +226,7 @@
     },
     {
       "id": "RP-R7a-1",
+      "phaseId": "remediation_r1",
       "title": "Recovery setup and legacy-flow containment",
       "workType": "Security & workflow",
       "status": "accepted",
@@ -187,6 +240,7 @@
     },
     {
       "id": "RP-R7a-2",
+      "phaseId": "remediation_r1",
       "title": "Portable archive snapshot and authenticated package",
       "workType": "Data lifecycle",
       "status": "accepted",
@@ -200,6 +254,7 @@
     },
     {
       "id": "RP-R7a-3",
+      "phaseId": "remediation_r1",
       "title": "Restore authenticated archive as new workspace",
       "workType": "Data lifecycle",
       "status": "accepted",
@@ -213,6 +268,7 @@
     },
     {
       "id": "RP-R7a-3a",
+      "phaseId": "remediation_r1",
       "title": "Restore worker foundation",
       "workType": "Data lifecycle",
       "status": "accepted",
@@ -226,6 +282,7 @@
     },
     {
       "id": "RP-R7a-3b",
+      "phaseId": "remediation_r1",
       "title": "Restore UI and owner smoke",
       "workType": "Workflow",
       "status": "accepted",
@@ -239,6 +296,7 @@
     },
     {
       "id": "RP-R7a-4",
+      "phaseId": "remediation_r1",
       "title": "Encrypted-default logical export",
       "workType": "Data lifecycle",
       "status": "accepted",
@@ -252,6 +310,7 @@
     },
     {
       "id": "RP-R7b",
+      "phaseId": "remediation_r1",
       "title": "Automatic portable archive expiry (R7b-1)",
       "workType": "Data lifecycle",
       "status": "accepted",
@@ -265,6 +324,7 @@
     },
     {
       "id": "RP-R7b-2",
+      "phaseId": "remediation_r1",
       "title": "Purge deleted data from retained backups",
       "workType": "Data lifecycle",
       "status": "accepted",
@@ -278,6 +338,7 @@
     },
     {
       "id": "RP-R8",
+      "phaseId": "remediation_r1",
       "title": "Searchable local AI ledger",
       "workType": "Observability",
       "status": "accepted",
@@ -291,6 +352,7 @@
     },
     {
       "id": "RP-R9",
+      "phaseId": "remediation_r1",
       "title": "Lifecycle-aware settings",
       "workType": "Settings",
       "status": "accepted",
@@ -304,6 +366,7 @@
     },
     {
       "id": "RP-R10",
+      "phaseId": "remediation_r1",
       "title": "Clean-state remediation acceptance",
       "workType": "Acceptance",
       "status": "accepted",
@@ -313,6 +376,228 @@
         "label": "Remediation ledger",
         "href": "../remediation-ledger.md"
       },
+      "needsUserAction": false
+    },
+    {
+      "id": "UX-D10",
+      "phaseId": "post_mvp_refinement",
+      "title": "Protected-export success confirmation polish",
+      "workType": "UX refinement",
+      "status": "backlog",
+      "releaseCondition": "Requires a separately approved UX polish brief after the accepted protected-export reliability work.",
+      "latestTransition": "Planned refinement recorded in the unified delivery dashboard; no implementation is released.",
+      "needsUserAction": false
+    },
+    {
+      "id": "UX-D11",
+      "phaseId": "post_mvp_refinement",
+      "title": "Logs and AI Ledger tabs",
+      "workType": "UX refinement",
+      "status": "backlog",
+      "releaseCondition": "Requires separate planning and release; no AI execution, network capability, or new ledger data is included.",
+      "latestTransition": "Planned refinement recorded in the unified delivery dashboard; no implementation is released.",
+      "needsUserAction": false
+    },
+    {
+      "id": "UX-D12",
+      "phaseId": "post_mvp_refinement",
+      "title": "Refine local log-search semantics",
+      "workType": "UX refinement",
+      "status": "backlog",
+      "releaseCondition": "Requires defined ranking, matching, empty-state behavior, separate planning, and release.",
+      "latestTransition": "Planned refinement recorded in the unified delivery dashboard; no implementation is released.",
+      "needsUserAction": false
+    },
+    {
+      "id": "DESIGN-V2",
+      "phaseId": "post_mvp_refinement",
+      "title": "Visual Design v2 program",
+      "workType": "Program",
+      "status": "backlog",
+      "releaseCondition": "Accepted only after VD2-01 through VD2-08 are individually accepted and final product-owner visual/workflow verification completes.",
+      "latestTransition": "Independent Planning, Architect, TPM, QA, and Delivery gates approved the governed Visual Design v2 plan; child delivery is dependency-ordered.",
+      "evidence": {
+        "label": "Visual Design v2 plan",
+        "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
+      },
+      "needsUserAction": false
+    },
+    {
+      "id": "VD2-01",
+      "phaseId": "post_mvp_refinement",
+      "title": "Visual foundation and tokens",
+      "workType": "Visual foundation",
+      "status": "accepted",
+      "releaseCondition": "Corrective pass must restore a legible existing Rekon logo/lockup, appearance-stable semantic foreground colors, and native chrome without gray resize/full-screen regressions; then require fresh independent review, QA, security/privacy verification, and product-owner acceptance.",
+      "latestTransition": "Product owner accepted the corrected visual foundation after hands-on verification.",
+      "evidence": {
+        "label": "VD2-01 task brief",
+        "href": "../task-briefs/VD2-01-visual-foundation-and-tokens.md"
+      },
+      "needsUserAction": false
+    },
+    {
+      "id": "VD2-02",
+      "phaseId": "post_mvp_refinement",
+      "title": "App shell and navigation",
+      "workType": "App shell",
+      "status": "accepted",
+      "releaseCondition": "Accepted after independent Architecture, code-review, QA, and security/privacy verification plus product-owner hands-on navigation verification.",
+      "latestTransition": "Product owner accepted the corrected full-row navigation interaction after hands-on verification.",
+      "evidence": {
+        "label": "VD2-02 task brief",
+        "href": "../task-briefs/VD2-02-app-shell-and-navigation.md"
+      },
+      "dependsOnTaskIds": [
+        "VD2-01"
+      ],
+      "needsUserAction": false
+    },
+    {
+      "id": "VD2-03",
+      "phaseId": "post_mvp_refinement",
+      "title": "Home redesign",
+      "workType": "Home UX",
+      "status": "accepted",
+      "releaseCondition": "Requires VD2-02 accepted; released next in the serial Visual Design v2 sequence.",
+      "latestTransition": "Accepted after explicit product-owner acceptance, independent code/architecture/security gates, 6 focused model tests, 21 fixture-host tests, and 12 Home UI tests passed.",
+      "evidence": {
+        "label": "Visual Design v2 plan",
+        "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
+      },
+      "dependsOnTaskIds": [
+        "VD2-02"
+      ],
+      "needsUserAction": false
+    },
+    {
+      "id": "VD2-04",
+      "phaseId": "post_mvp_refinement",
+      "title": "Pipeline table and inspector",
+      "workType": "Pipeline UX",
+      "status": "accepted",
+      "releaseCondition": "Accepted after fresh independent Table/Board, architecture, TPM, and security/privacy gates plus explicit product-owner visual/workflow acceptance of the signed Debug product.",
+      "latestTransition": "Product owner explicitly accepted the completed fidelity-rebuild Pipeline surface as good enough for now; later visual refinements require a separately released correction rather than reopening this accepted card.",
+      "evidence": {
+        "label": "VD2-04 final fidelity owner handoff",
+        "href": "../evidence/visual-design-v2/VD2-04-owner-handoff-2026-07-30.md"
+      },
+      "dependsOnTaskIds": [
+    "VD2-02",
+    "VD2-03"
+      ],
+      "needsUserAction": false
+    },
+    {
+      "id": "VD2-05",
+      "phaseId": "post_mvp_refinement",
+      "title": "Pipeline board and persisted stage movement",
+      "workType": "Pipeline workflow",
+      "status": "accepted",
+      "releaseCondition": "Accepted with documented, non-blocking macOS XCTest submenu-oracle debt; no successor is released.",
+      "latestTransition": "Product owner accepted the signed VD2-05 Board preview on 2026-07-31 after final independent gates accepted. GitHub issue #1 remains open approved test debt; no production defect is known.",
+      "evidence": {
+        "label": "VD2-05 owner acceptance and closeout",
+        "href": "../evidence/visual-design-v2/VD2-05-owner-handoff-2026-07-31.md"
+      },
+      "dependsOnTaskIds": [
+        "VD2-04"
+      ],
+      "needsUserAction": false
+    },
+    {
+      "id": "VD2-06",
+      "phaseId": "post_mvp_refinement",
+      "title": "Contacts master/detail redesign",
+      "workType": "Contacts UX",
+      "status": "accepted",
+      "releaseCondition": "Accepted after the explicit product-owner decision on the signed Debug build/manual path; the three owner-approved VD2-08 accessibility/recovery automation debts remain open.",
+      "latestTransition": "Product owner explicitly accepted VD2-06 on 2026-08-01 (`approved`) after the independent technical gates. VD2-07 is eligible only for a separate TPM dependency-safe release.",
+      "evidence": {
+        "label": "VD2-06 owner handoff / TPM readiness",
+        "href": "../evidence/visual-design-v2/VD2-06-owner-handoff-2026-08-01.md"
+      },
+      "dependsOnTaskIds": [
+        "VD2-02"
+      ],
+      "needsUserAction": false
+    },
+    {
+      "id": "VD2-07",
+      "phaseId": "post_mvp_refinement",
+      "title": "Settings information architecture",
+      "workType": "Settings UX",
+      "status": "in_progress",
+      "releaseCondition": "Reference-faithful Settings implementation is in progress. V2-07x preserves the real protected-export success boundary, May 6 fixture truth, global rail, privacy, and no-control constraints; the recorded Settings keyboard-focus and AI semantic accessibility regressions are assigned to VD2-08.",
+      "latestTransition": "Moved Next up → In progress after the approved Settings design, task brief, and independent preimplementation releases. VD2-08 owns the explicitly deferred Settings accessibility regression closure.",
+      "evidence": {
+        "label": "VD2-07x reference-faithful Settings task brief",
+        "href": "../task-briefs/VD2-07x-reference-faithful-settings.md"
+      },
+      "dependsOnTaskIds": [
+        "VD2-02"
+      ],
+      "needsUserAction": false
+    },
+    {
+      "id": "VD2-08",
+      "phaseId": "post_mvp_refinement",
+      "title": "Visual QA and accessibility acceptance",
+      "workType": "Acceptance",
+      "status": "backlog",
+      "releaseCondition": "Requires VD2-03 through VD2-07 accepted; it also carries the three owner-approved VD2-06 accessibility/recovery automation debts and the approved VD2-05 Board card-anchor accessibility-semantic debt.",
+      "latestTransition": "Backlog and blocked from release pending accepted VD2-06 and VD2-07; no broad visual/accessibility campaign is represented as passed.",
+      "evidence": {
+        "label": "Visual Design v2 plan",
+        "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
+      },
+      "dependsOnTaskIds": [
+        "VD2-03",
+        "VD2-04",
+        "VD2-05",
+        "VD2-06",
+        "VD2-07"
+      ],
+      "needsUserAction": false
+    },
+    {
+      "id": "P2A-1",
+      "phaseId": "phase_2a",
+      "title": "Privacy and AI foundation",
+      "workType": "Privacy & AI foundation",
+      "status": "backlog",
+      "releaseCondition": "Follows accepted Post-MVP refinement and requires approved privacy, routing, consent, and ledger contracts.",
+      "latestTransition": "Future phase recorded as Backlog; no Phase 2a work is released.",
+      "needsUserAction": false
+    },
+    {
+      "id": "P2B-1",
+      "phaseId": "phase_2b",
+      "title": "Connected Gmail and Calendar workflow",
+      "workType": "Connected workflow",
+      "status": "backlog",
+      "releaseCondition": "Follows accepted Phase 2a and requires separately approved Gmail and Calendar scope, OAuth configuration, and privacy/security review.",
+      "latestTransition": "Future phase recorded as Backlog; no Phase 2b work is released.",
+      "needsUserAction": false
+    },
+    {
+      "id": "P2C-1",
+      "phaseId": "phase_2c",
+      "title": "Intelligence and documents",
+      "workType": "Intelligence & documents",
+      "status": "backlog",
+      "releaseCondition": "Follows accepted Phase 2b and requires approved provider/license and source-policy decisions.",
+      "latestTransition": "Future phase recorded as Backlog; no Phase 2c work is released.",
+      "needsUserAction": false
+    },
+    {
+      "id": "P3-1",
+      "phaseId": "phase_3",
+      "title": "Decision support",
+      "workType": "Decision support",
+      "status": "backlog",
+      "releaseCondition": "Follows accepted Phase 2c and requires product-owner scoring, consent, and retention decisions.",
+      "latestTransition": "Future phase recorded as Backlog; no Phase 3 work is released.",
       "needsUserAction": false
     }
   ]

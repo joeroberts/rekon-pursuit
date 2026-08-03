@@ -70,6 +70,7 @@ final class WorkspaceSession {
     private let newKey: @MainActor () throws -> Data
     private let clock: () -> Date
     private let creationFault: WorkspaceCreationFault?
+    private let archiveSigningKeyStore: any ArchiveSigningKeyStoring
 
     init(
         root: URL,
@@ -77,13 +78,15 @@ final class WorkspaceSession {
         newKey: @MainActor @escaping () throws -> Data = WorkspaceSession.generateKey,
         now: Date? = nil,
         clock: @escaping () -> Date = { .now },
-        creationFault: WorkspaceCreationFault? = nil
+        creationFault: WorkspaceCreationFault? = nil,
+        archiveSigningKeyStore: any ArchiveSigningKeyStoring = ArchiveSigningKeyStore()
     ) {
         self.root = root
         self.keyStore = keyStore
         self.newKey = newKey
         self.clock = now.map { fixedNow in { fixedNow } } ?? clock
         self.creationFault = creationFault
+        self.archiveSigningKeyStore = archiveSigningKeyStore
     }
 
     func create() throws -> WorkspaceStore {
@@ -267,7 +270,13 @@ final class WorkspaceSession {
             try? database.close()
             throw WorkspaceCreationFault.finalReopen
         }
-        return try WorkspaceStore(database: database, clock: clock, actorID: "local-user", correlationID: UUID().uuidString)
+        return try WorkspaceStore(
+            database: database,
+            clock: clock,
+            actorID: "local-user",
+            correlationID: UUID().uuidString,
+            archiveSigningKeyStore: archiveSigningKeyStore
+        )
     }
 
     private static func generateKey() throws -> Data {

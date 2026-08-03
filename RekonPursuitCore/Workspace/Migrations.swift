@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 nonisolated enum WorkspaceMigrations {
-    static let currentVersion = 33
+    static let currentVersion = 34
     static let baselineChecksum = checksum(for: "rekon-pursuit:migrations:v1-v4")
     static let versionFiveChecksum = checksum(for: "5|ALTER TABLE opportunities ADD COLUMN deleted_at REAL")
     static let versionSixChecksum = checksum(for: "6|workspace_metadata|deletion_tombstones")
@@ -33,6 +33,7 @@ nonisolated enum WorkspaceMigrations {
     static let versionThirtyOneChecksum = checksum(for: "31|retained_data_purge_jobs.scope.archive_phases.operation_leases.v1")
     static let versionThirtyTwoChecksum = checksum(for: "32|retained_data_purge_scope.predecessor_identity.v1")
     static let versionThirtyThreeChecksum = checksum(for: "33|retained_data_purge_archive_phases.replacement_identity.v1")
+    static let versionThirtyFourChecksum = checksum(for: "34|contacts.personal_email.mobile_phone.office_phone.instagram_url.facebook_url.v1")
 
     static func apply(to database: EncryptedDatabase, failVersionFive: Bool = false, failVersionSix: Bool = false, failVersionSixteen: Bool = false, failVersionSeventeen: Bool = false, failVersionNineteen: Bool = false, failVersionTwenty: Bool = false) throws {
         try database.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER NOT NULL)")
@@ -561,6 +562,35 @@ nonisolated enum WorkspaceMigrations {
                     }
                     try database.execute("INSERT OR IGNORE INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(33), .text(versionThirtyThreeChecksum)])
                     try database.execute("UPDATE schema_migrations SET version = 33")
+                }
+                database.removeMigrationSnapshot()
+            } catch { throw error }
+        }
+        if version < 34 {
+            try database.createVerifiedSnapshot()
+            do {
+                try database.transaction {
+                    let existingColumns = try database.rows("PRAGMA table_info(contacts)").compactMap { values -> String? in
+                        guard values.count > 1, case let .text(name) = values[1] else { return nil }
+                        return name
+                    }
+                    if !existingColumns.contains("personal_email") {
+                        try database.execute("ALTER TABLE contacts ADD COLUMN personal_email TEXT NOT NULL DEFAULT ''")
+                    }
+                    if !existingColumns.contains("mobile_phone") {
+                        try database.execute("ALTER TABLE contacts ADD COLUMN mobile_phone TEXT NOT NULL DEFAULT ''")
+                    }
+                    if !existingColumns.contains("office_phone") {
+                        try database.execute("ALTER TABLE contacts ADD COLUMN office_phone TEXT NOT NULL DEFAULT ''")
+                    }
+                    if !existingColumns.contains("instagram_url") {
+                        try database.execute("ALTER TABLE contacts ADD COLUMN instagram_url TEXT NOT NULL DEFAULT ''")
+                    }
+                    if !existingColumns.contains("facebook_url") {
+                        try database.execute("ALTER TABLE contacts ADD COLUMN facebook_url TEXT NOT NULL DEFAULT ''")
+                    }
+                    try database.execute("INSERT OR IGNORE INTO migration_history (version, checksum) VALUES (?, ?)", values: [.integer(34), .text(versionThirtyFourChecksum)])
+                    try database.execute("UPDATE schema_migrations SET version = 34")
                 }
                 database.removeMigrationSnapshot()
             } catch { throw error }

@@ -52,6 +52,17 @@
                ReferencedContainer = "container:RekonPursuit.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "500000000000000000000005"
+               BuildableName = "RekonPursuitUITestHostTests.xctest"
+               BlueprintName = "RekonPursuitUITestHostTests"
+               ReferencedContainer = "container:RekonPursuit.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

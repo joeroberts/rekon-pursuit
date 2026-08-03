@@ -27,6 +27,7 @@
 		100000000000000000000018 /* WorkspaceViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000023 /* WorkspaceViewModel.swift */; };
 		100000000000000000000019 /* CSVOpportunityImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000024 /* CSVOpportunityImporter.swift */; };
 		100000000000000000000020 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000025 /* AppShellView.swift */; };
+		100000000000000000000044 /* RekonVisualTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000044 /* RekonVisualTheme.swift */; };
 		100000000000000000000043 /* AIUsageLedgerFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000043 /* AIUsageLedgerFilter.swift */; };
 		100000000000000000000021 /* PublicURLChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000026 /* PublicURLChecker.swift */; };
 		100000000000000000000024 /* WorkspaceLocationBookmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000029 /* WorkspaceLocationBookmark.swift */; };
@@ -43,6 +44,43 @@
 		100000000000000000000035 /* ProtectedExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000040 /* ProtectedExportService.swift */; };
 		100000000000000000000036 /* ProtectedExportWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000041 /* ProtectedExportWorker.swift */; };
 		100000000000000000000037 /* PortableArchiveExpiryWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000042 /* PortableArchiveExpiryWorker.swift */; };
+		100000000000000000000045 /* BootstrapApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000045 /* BootstrapApp.swift */; };
+		100000000000000000000046 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000002 /* ContentView.swift */; };
+		100000000000000000000047 /* EncryptedDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000012 /* EncryptedDatabase.swift */; };
+		100000000000000000000048 /* WorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* WorkspaceStore.swift */; };
+		100000000000000000000049 /* WorkspaceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* WorkspaceModels.swift */; };
+		100000000000000000000050 /* Migrations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000018 /* Migrations.swift */; };
+		100000000000000000000051 /* WorkspaceKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000020 /* WorkspaceKeyStore.swift */; };
+		100000000000000000000052 /* WorkspaceOpenState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000021 /* WorkspaceOpenState.swift */; };
+		100000000000000000000053 /* WorkspaceViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000023 /* WorkspaceViewModel.swift */; };
+		100000000000000000000054 /* CSVOpportunityImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000024 /* CSVOpportunityImporter.swift */; };
+		100000000000000000000055 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000025 /* AppShellView.swift */; };
+		100000000000000000000056 /* RekonVisualTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000044 /* RekonVisualTheme.swift */; };
+		100000000000000000000057 /* AIUsageLedgerFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000043 /* AIUsageLedgerFilter.swift */; };
+		100000000000000000000058 /* PublicURLChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000026 /* PublicURLChecker.swift */; };
+		100000000000000000000059 /* WorkspaceLocationBookmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000029 /* WorkspaceLocationBookmark.swift */; };
+		100000000000000000000060 /* ReadOnlySQLCipherVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000032 /* ReadOnlySQLCipherVerifier.swift */; };
+		100000000000000000000061 /* LegacyWorkspaceKeyMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000033 /* LegacyWorkspaceKeyMigration.swift */; };
+		100000000000000000000062 /* PortableArchiveService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000034 /* PortableArchiveService.swift */; };
+		100000000000000000000063 /* ArchiveSigningKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000035 /* ArchiveSigningKeyStore.swift */; };
+		100000000000000000000064 /* PortableArchiveWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000037 /* PortableArchiveWorker.swift */; };
+		100000000000000000000065 /* PortableArchiveRestore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000038 /* PortableArchiveRestore.swift */; };
+		100000000000000000000066 /* ProtectedExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000040 /* ProtectedExportService.swift */; };
+		100000000000000000000067 /* ProtectedExportWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000041 /* ProtectedExportWorker.swift */; };
+		100000000000000000000068 /* PortableArchiveExpiryWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000042 /* PortableArchiveExpiryWorker.swift */; };
+		100000000000000000000069 /* libsqlcipher.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 200000000000000000000013 /* libsqlcipher.a */; };
+		100000000000000000000070 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000028 /* Assets.xcassets */; };
+		100000000000000000000071 /* RekonPursuitUITestHostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000047 /* RekonPursuitUITestHostTests.swift */; };
+		100000000000000000000072 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000074 /* HomeView.swift */; };
+		100000000000000000000073 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000074 /* HomeView.swift */; };
+		100000000000000000000074 /* PipelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000075 /* PipelineView.swift */; };
+		100000000000000000000075 /* PipelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000075 /* PipelineView.swift */; };
+		100000000000000000000076 /* PipelineBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000076 /* PipelineBoardView.swift */; };
+		100000000000000000000077 /* PipelineBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000076 /* PipelineBoardView.swift */; };
+		100000000000000000000078 /* ContactsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000077 /* ContactsView.swift */; };
+		100000000000000000000079 /* ContactsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000077 /* ContactsView.swift */; };
+		100000000000000000000080 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000078 /* SettingsView.swift */; };
+		100000000000000000000081 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000078 /* SettingsView.swift */; };
 			100000000000000000000022 /* PublicURLCheckTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000027 /* PublicURLCheckTests.swift */; };
 			100000000000000000000023 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000028 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -59,14 +97,26 @@
 			isa = PBXContainerItemProxy;
 			containerPortal = 400000000000000000000001 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 500000000000000000000001;
-			remoteInfo = RekonPursuit;
+			remoteGlobalIDString = 500000000000000000000004;
+			remoteInfo = RekonPursuitUITestHost;
+		};
+		300000000000000000000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 400000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 500000000000000000000004;
+			remoteInfo = RekonPursuitUITestHost;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		200000000000000000000001 /* BootstrapApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BootstrapApp.swift; sourceTree = "<group>"; };
 		200000000000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		200000000000000000000074 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		200000000000000000000075 /* PipelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineView.swift; sourceTree = "<group>"; };
+		200000000000000000000076 /* PipelineBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineBoardView.swift; sourceTree = "<group>"; };
+		200000000000000000000077 /* ContactsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsView.swift; sourceTree = "<group>"; };
+		200000000000000000000078 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		200000000000000000000003 /* RekonPursuit.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RekonPursuit.entitlements; sourceTree = "<group>"; };
 		200000000000000000000004 /* RekonPursuitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitTests.swift; sourceTree = "<group>"; };
 		200000000000000000000005 /* RekonPursuitUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitUITests.swift; sourceTree = "<group>"; };
@@ -90,6 +140,7 @@
 		200000000000000000000023 /* WorkspaceViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceViewModel.swift; sourceTree = "<group>"; };
 		200000000000000000000024 /* CSVOpportunityImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Import/CSVOpportunityImporter.swift; sourceTree = "<group>"; };
 		200000000000000000000025 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
+		200000000000000000000044 /* RekonVisualTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonVisualTheme.swift; sourceTree = "<group>"; };
 		200000000000000000000043 /* AIUsageLedgerFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIUsageLedgerFilter.swift; sourceTree = "<group>"; };
 			200000000000000000000026 /* PublicURLChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Reconciliation/PublicURLChecker.swift; sourceTree = "<group>"; };
 			200000000000000000000029 /* WorkspaceLocationBookmark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/WorkspaceLocationBookmark.swift; sourceTree = "<group>"; };
@@ -106,6 +157,10 @@
 		200000000000000000000040 /* ProtectedExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/ProtectedExportService.swift; sourceTree = "<group>"; };
 		200000000000000000000041 /* ProtectedExportWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/ProtectedExportWorker.swift; sourceTree = "<group>"; };
 		200000000000000000000042 /* PortableArchiveExpiryWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitCore/Workspace/PortableArchiveExpiryWorker.swift; sourceTree = "<group>"; };
+		200000000000000000000045 /* BootstrapApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BootstrapApp.swift; sourceTree = "<group>"; };
+		200000000000000000000046 /* RekonPursuitUITestHost.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RekonPursuitUITestHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		200000000000000000000047 /* RekonPursuitUITestHostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RekonPursuitUITestHostTests.swift; sourceTree = "<group>"; };
+		200000000000000000000048 /* RekonPursuitUITestHostTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RekonPursuitUITestHostTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 			200000000000000000000027 /* PublicURLCheckTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicURLCheckTests.swift; sourceTree = "<group>"; };
 			200000000000000000000028 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -133,6 +188,21 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		600000000000000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000069 /* libsqlcipher.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		600000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -143,6 +213,8 @@
 				700000000000000000000003 /* RekonPursuitTests */,
 				700000000000000000000006 /* RekonPursuitCoreTests */,
 				700000000000000000000004 /* RekonPursuitUITests */,
+				700000000000000000000009 /* RekonPursuitUITestHost */,
+				700000000000000000000010 /* RekonPursuitUITestHostTests */,
 				700000000000000000000007 /* RekonPursuitCore */,
 				700000000000000000000008 /* SQLCipher */,
 				200000000000000000000016 /* WorkspaceStore.swift */,
@@ -172,8 +244,14 @@
 			children = (
 				200000000000000000000001 /* BootstrapApp.swift */,
 				200000000000000000000025 /* AppShellView.swift */,
+				200000000000000000000044 /* RekonVisualTheme.swift */,
 				200000000000000000000043 /* AIUsageLedgerFilter.swift */,
 				200000000000000000000002 /* ContentView.swift */,
+				200000000000000000000074 /* HomeView.swift */,
+				200000000000000000000075 /* PipelineView.swift */,
+				200000000000000000000076 /* PipelineBoardView.swift */,
+				200000000000000000000077 /* ContactsView.swift */,
+				200000000000000000000078 /* SettingsView.swift */,
 				200000000000000000000003 /* RekonPursuit.entitlements */,
 					200000000000000000000023 /* WorkspaceViewModel.swift */,
 					200000000000000000000028 /* Assets.xcassets */,
@@ -237,8 +315,26 @@
 				200000000000000000000006 /* RekonPursuit.app */,
 				200000000000000000000007 /* RekonPursuitTests.xctest */,
 				200000000000000000000008 /* RekonPursuitUITests.xctest */,
+				200000000000000000000046 /* RekonPursuitUITestHost.app */,
+				200000000000000000000048 /* RekonPursuitUITestHostTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		700000000000000000000009 /* RekonPursuitUITestHost */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000045 /* BootstrapApp.swift */,
+			);
+			path = RekonPursuitUITestHost;
+			sourceTree = "<group>";
+		};
+		700000000000000000000010 /* RekonPursuitUITestHostTests */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000047 /* RekonPursuitUITestHostTests.swift */,
+			);
+			path = RekonPursuitUITestHostTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -303,6 +399,45 @@
 			productReference = 200000000000000000000008 /* RekonPursuitUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		500000000000000000000004 /* RekonPursuitUITestHost */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 800000000000000000000005 /* Build configuration list for PBXNativeTarget "RekonPursuitUITestHost" */;
+			buildPhases = (
+				900000000000000000000007 /* Sources */,
+				600000000000000000000004 /* Frameworks */,
+				900000000000000000000008 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RekonPursuitUITestHost;
+			packageProductDependencies = (
+			);
+			productName = RekonPursuitUITestHost;
+			productReference = 200000000000000000000046 /* RekonPursuitUITestHost.app */;
+			productType = "com.apple.product-type.application";
+		};
+		500000000000000000000005 /* RekonPursuitUITestHostTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 800000000000000000000006 /* Build configuration list for PBXNativeTarget "RekonPursuitUITestHostTests" */;
+			buildPhases = (
+				900000000000000000000009 /* Sources */,
+				600000000000000000000005 /* Frameworks */,
+				900000000000000000000010 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A00000000000000000000003 /* PBXTargetDependency */,
+			);
+			name = RekonPursuitUITestHostTests;
+			packageProductDependencies = (
+			);
+			productName = RekonPursuitUITestHostTests;
+			productReference = 200000000000000000000048 /* RekonPursuitUITestHostTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -322,7 +457,14 @@
 					};
 					500000000000000000000003 = {
 						CreatedOnToolsVersion = 26.0;
-						TestTargetID = 500000000000000000000001;
+						TestTargetID = 500000000000000000000004;
+					};
+					500000000000000000000004 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					500000000000000000000005 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = 500000000000000000000004;
 					};
 				};
 			};
@@ -343,6 +485,8 @@
 				500000000000000000000001 /* RekonPursuit */,
 				500000000000000000000002 /* RekonPursuitTests */,
 				500000000000000000000003 /* RekonPursuitUITests */,
+				500000000000000000000004 /* RekonPursuitUITestHost */,
+				500000000000000000000005 /* RekonPursuitUITestHostTests */,
 			);
 		};
 /* End PBXProject section */
@@ -371,6 +515,21 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		900000000000000000000008 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000070 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		900000000000000000000010 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -380,6 +539,11 @@
 			files = (
 				100000000000000000000001 /* BootstrapApp.swift in Sources */,
 				100000000000000000000002 /* ContentView.swift in Sources */,
+				100000000000000000000072 /* HomeView.swift in Sources */,
+				100000000000000000000074 /* PipelineView.swift in Sources */,
+				100000000000000000000076 /* PipelineBoardView.swift in Sources */,
+				100000000000000000000078 /* ContactsView.swift in Sources */,
+				100000000000000000000080 /* SettingsView.swift in Sources */,
 				100000000000000000000008 /* EncryptedDatabase.swift in Sources */,
 				100000000000000000000011 /* WorkspaceStore.swift in Sources */,
 				100000000000000000000012 /* WorkspaceModels.swift in Sources */,
@@ -389,6 +553,7 @@
 				100000000000000000000018 /* WorkspaceViewModel.swift in Sources */,
 				100000000000000000000019 /* CSVOpportunityImporter.swift in Sources */,
 				100000000000000000000020 /* AppShellView.swift in Sources */,
+				100000000000000000000044 /* RekonVisualTheme.swift in Sources */,
 				100000000000000000000043 /* AIUsageLedgerFilter.swift in Sources */,
 				100000000000000000000021 /* PublicURLChecker.swift in Sources */,
 				100000000000000000000024 /* WorkspaceLocationBookmark.swift in Sources */,
@@ -430,6 +595,50 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		900000000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000045 /* BootstrapApp.swift in Sources */,
+				100000000000000000000046 /* ContentView.swift in Sources */,
+				100000000000000000000073 /* HomeView.swift in Sources */,
+				100000000000000000000075 /* PipelineView.swift in Sources */,
+				100000000000000000000077 /* PipelineBoardView.swift in Sources */,
+				100000000000000000000079 /* ContactsView.swift in Sources */,
+				100000000000000000000081 /* SettingsView.swift in Sources */,
+				100000000000000000000047 /* EncryptedDatabase.swift in Sources */,
+				100000000000000000000048 /* WorkspaceStore.swift in Sources */,
+				100000000000000000000049 /* WorkspaceModels.swift in Sources */,
+				100000000000000000000050 /* Migrations.swift in Sources */,
+				100000000000000000000051 /* WorkspaceKeyStore.swift in Sources */,
+				100000000000000000000052 /* WorkspaceOpenState.swift in Sources */,
+				100000000000000000000053 /* WorkspaceViewModel.swift in Sources */,
+				100000000000000000000054 /* CSVOpportunityImporter.swift in Sources */,
+				100000000000000000000055 /* AppShellView.swift in Sources */,
+				100000000000000000000056 /* RekonVisualTheme.swift in Sources */,
+				100000000000000000000057 /* AIUsageLedgerFilter.swift in Sources */,
+				100000000000000000000058 /* PublicURLChecker.swift in Sources */,
+				100000000000000000000059 /* WorkspaceLocationBookmark.swift in Sources */,
+				100000000000000000000060 /* ReadOnlySQLCipherVerifier.swift in Sources */,
+				100000000000000000000061 /* LegacyWorkspaceKeyMigration.swift in Sources */,
+				100000000000000000000062 /* PortableArchiveService.swift in Sources */,
+				100000000000000000000063 /* ArchiveSigningKeyStore.swift in Sources */,
+				100000000000000000000064 /* PortableArchiveWorker.swift in Sources */,
+				100000000000000000000065 /* PortableArchiveRestore.swift in Sources */,
+				100000000000000000000066 /* ProtectedExportService.swift in Sources */,
+				100000000000000000000067 /* ProtectedExportWorker.swift in Sources */,
+				100000000000000000000068 /* PortableArchiveExpiryWorker.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		900000000000000000000009 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000071 /* RekonPursuitUITestHostTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -440,8 +649,13 @@
 		};
 		A00000000000000000000002 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 500000000000000000000001 /* RekonPursuit */;
+			target = 500000000000000000000004 /* RekonPursuitUITestHost */;
 			targetProxy = 300000000000000000000002 /* PBXContainerItemProxy */;
+		};
+		A00000000000000000000003 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 500000000000000000000004 /* RekonPursuitUITestHost */;
+			targetProxy = 300000000000000000000003 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -573,7 +787,7 @@
 			};
 			name = Release;
 		};
-			B00000000000000000000003 /* Debug */ = {
+		B00000000000000000000003 /* Debug */ = {
 				isa = XCBuildConfiguration;
 				buildSettings = {
 					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -606,7 +820,7 @@
 			};
 			name = Debug;
 		};
-			B00000000000000000000004 /* Release */ = {
+		B00000000000000000000004 /* Release */ = {
 				isa = XCBuildConfiguration;
 				buildSettings = {
 					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -684,6 +898,7 @@
 			buildSettings = {
 				ARCHS = "arm64 x86_64";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2UA854NLX4;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				ONLY_ACTIVE_ARCH = NO;
@@ -693,7 +908,7 @@
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
-				TEST_TARGET_NAME = RekonPursuit;
+				TEST_TARGET_NAME = RekonPursuitUITestHost;
 			};
 			name = Debug;
 		};
@@ -702,6 +917,7 @@
 			buildSettings = {
 				ARCHS = "arm64 x86_64";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2UA854NLX4;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				ONLY_ACTIVE_ARCH = NO;
@@ -711,7 +927,107 @@
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
-				TEST_TARGET_NAME = RekonPursuit;
+				TEST_TARGET_NAME = RekonPursuitUITestHost;
+			};
+			name = Release;
+		};
+		B00000000000000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ARCHS = "arm64 x86_64";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2UA854NLX4;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Rekon Pursuit UI Test Host";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rekonlabs.RekonPursuitUITestHost;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "REKON_UI_TEST_HOST $(inherited)";
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		B00000000000000000000010 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ARCHS = "arm64 x86_64";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2UA854NLX4;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Rekon Pursuit UI Test Host";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rekonlabs.RekonPursuitUITestHost;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "REKON_UI_TEST_HOST $(inherited)";
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		B00000000000000000000011 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "arm64 x86_64";
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2UA854NLX4;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rekonlabs.RekonPursuitUITestHostTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RekonPursuitUITestHost.app/Contents/MacOS/RekonPursuitUITestHost";
+				TEST_TARGET_NAME = RekonPursuitUITestHost;
+			};
+			name = Debug;
+		};
+		B00000000000000000000012 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "arm64 x86_64";
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2UA854NLX4;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = com.rekonlabs.RekonPursuitUITestHostTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RekonPursuitUITestHost.app/Contents/MacOS/RekonPursuitUITestHost";
+				TEST_TARGET_NAME = RekonPursuitUITestHost;
 			};
 			name = Release;
 		};
@@ -750,6 +1066,24 @@
 			buildConfigurations = (
 				B00000000000000000000007 /* Debug */,
 				B00000000000000000000008 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		800000000000000000000005 /* Build configuration list for PBXNativeTarget "RekonPursuitUITestHost" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B00000000000000000000009 /* Debug */,
+				B00000000000000000000010 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		800000000000000000000006 /* Build configuration list for PBXNativeTarget "RekonPursuitUITestHostTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B00000000000000000000011 /* Debug */,
+				B00000000000000000000012 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -19,11 +19,18 @@ struct CSVExportDocument: FileDocument {
 }
 
 struct ContentView: View {
-    @StateObject private var model = WorkspaceViewModel()
+    @StateObject private var model: WorkspaceViewModel
+    private let homeDashboardNow: Date
+    private let homeDashboardCalendar: Calendar
     @State private var navigation = DailyNavigationState()
     @State private var opportunityRoute: OpportunityRoute?
+    @State private var pipelineQuery = ""
+    @State private var pipelineStageFilter = "All stages"
+    @State private var pipelineIncludesClosed = false
     @State private var showsPipelineBoard = false
     @State private var pipelineAnchorID: String?
+    @State private var pipelineHorizontalLane: PipelineBoardLane?
+    @State private var addOpportunityOrigin: AddOpportunityOrigin?
     @State private var pendingDeletion: Opportunity?
     @State private var pendingContactDeletion: Contact?
     @State private var taskToReschedule: TaskReminder?
@@ -31,6 +38,26 @@ struct ContentView: View {
     @State private var showsDocumentReferenceImporter = false
     @State private var documentReferenceToRelink: DocumentReference?
     @State private var closureConfirmationID: String?
+    @State private var generatedRecoveryKey: RecoveryKey?
+    @State private var reentry = ""
+    @State private var recoveryKeyCopied = false
+    @State private var archiveRecoveryReentry = ""
+    @State private var isPresentingArchiveCreation = false
+    @State private var protectedExportReentry = ""
+    @State private var isPresentingProtectedExport = false
+    @State private var retainedDataPurgeReentry = ""
+    @State private var isPresentingRetainedDataPurge = false
+    @State private var portableArchiveRestoreKey = ""
+
+    init(
+        model: WorkspaceViewModel,
+        homeDashboardNow: Date = .now,
+        homeDashboardCalendar: Calendar = .current
+    ) {
+        _model = StateObject(wrappedValue: model)
+        self.homeDashboardNow = homeDashboardNow
+        self.homeDashboardCalendar = homeDashboardCalendar
+    }
 
     var body: some View {
         AppShellView(
@@ -51,6 +78,53 @@ struct ContentView: View {
         }
         .onAppear { model.start() }
         .onDisappear { model.teardown() }
+        .onChange(of: model.protectedExportSuccess) { _, success in
+            guard success != nil else { return }
+            isPresentingProtectedExport = false
+            protectedExportReentry = ""
+        }
+        .onChange(of: model.protectedExportReview) { _, review in
+            if review != nil { protectedExportReentry = "" }
+        }
+        .overlay {
+            if isPresentingProtectedExport {
+                ZStack {
+                    Color.black.opacity(0.52)
+                        .ignoresSafeArea()
+                    SettingsProtectedExportDialog(
+                        mode: model.protectedExportReview.map {
+                            .confirmation(displayFilename: $0.displayFilename)
+                        } ?? .entry,
+                        recoveryKey: $protectedExportReentry,
+                        errorMessage: settingsRootModalPresentation.protectedExportErrorMessage,
+                        isBusy: model.isCreatingProtectedExport,
+                        cancel: {
+                            model.cancelProtectedExport()
+                            isPresentingProtectedExport = false
+                            protectedExportReentry = ""
+                        },
+                        primaryAction: {
+                            if model.protectedExportReview != nil {
+                                model.confirmProtectedExport(reentry: protectedExportReentry)
+                                protectedExportReentry = ""
+                            } else {
+                                model.reviewProtectedExport(reentry: protectedExportReentry)
+                            }
+                        }
+                    )
+                }
+            } else if settingsRootModalPresentation.isProtectedExportSuccessPresented,
+               let displayFilename = settingsRootModalPresentation.protectedExportSuccessDisplayFilename {
+                ZStack {
+                    Color.black.opacity(0.52)
+                        .ignoresSafeArea()
+                    SettingsProtectedExportSuccessDialog(
+                        displayFilename: displayFilename,
+                        dismiss: dismissProtectedExportSuccess
+                    )
+                }
+            }
+        }
         .sheet(isPresented: Binding(
             get: { closureConfirmationID != nil },
             set: { if !$0 { closureConfirmationID = nil } }
@@ -89,6 +163,8 @@ struct ContentView: View {
                     Text("Reschedule action").font(.title2.bold())
                     Text(task.title).foregroundStyle(.secondary)
                     DatePicker("New due date", selection: $rescheduledDueAt, displayedComponents: [.date, .hourAndMinute])
+                        .accessibilityLabel("New due date")
+                        .accessibilityIdentifier("home-reschedule-due-date")
                     HStack {
                         Button("Cancel") { taskToReschedule = nil }.keyboardShortcut(.cancelAction)
                         Spacer()
@@ -110,17 +186,196 @@ struct ContentView: View {
             }
             if case .failure = result { documentReferenceToRelink = nil }
         }
+        .sheet(isPresented: Binding(get: { generatedRecoveryKey != nil }, set: { if !$0 { generatedRecoveryKey = nil; reentry = ""; recoveryKeyCopied = false } })) {
+            if let generatedRecoveryKey {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Record your recovery key").font(.title2.bold())
+                    Text("Rekon Pursuit cannot reset or recover this key. Record it outside the app; it will not be shown again.").foregroundStyle(.secondary)
+                    Text(generatedRecoveryKey.displayValue).font(.system(.body, design: .monospaced)).textSelection(.disabled)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Button("Copy recovery key") {
+                            let pasteboard = NSPasteboard.general
+                            pasteboard.clearContents()
+                            recoveryKeyCopied = pasteboard.setString(generatedRecoveryKey.displayValue, forType: .string)
+                        }
+                        .accessibilityIdentifier("copy-recovery-key")
+                        Text("Clipboard history and other apps may retain this recovery key.").font(.footnote).foregroundStyle(.secondary)
+                        if recoveryKeyCopied {
+                            Text("Recovery key copied to the clipboard.").font(.footnote).foregroundStyle(.secondary)
+                                .accessibilityIdentifier("recovery-key-copied-confirmation")
+                        }
+                    }
+                    TextField("Re-enter the complete recovery key", text: $reentry).textFieldStyle(.roundedBorder)
+                    HStack {
+                        Button("Cancel", role: .cancel) { self.generatedRecoveryKey = nil; reentry = ""; recoveryKeyCopied = false }
+                        Spacer()
+                        Button("Confirm setup") {
+                            if model.enrollRecoveryKey(reentry: reentry, expected: generatedRecoveryKey) { self.generatedRecoveryKey = nil; reentry = ""; recoveryKeyCopied = false }
+                        }.keyboardShortcut(.defaultAction)
+                    }
+                }.padding(24).frame(width: 520)
+            }
+        }
+        .sheet(isPresented: $isPresentingArchiveCreation) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Create portable recovery archive").font(.title2.bold())
+                Text("Re-enter your recovery key. The archive will be encrypted, verified, and retained in this workspace for its 30-day recovery window.").foregroundStyle(.secondary)
+                TextField("Re-enter the complete recovery key", text: $archiveRecoveryReentry).textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("Cancel", role: .cancel) { isPresentingArchiveCreation = false; archiveRecoveryReentry = "" }
+                    Spacer()
+                    Button("Create recovery archive") { model.createPortableArchive(reentry: archiveRecoveryReentry); isPresentingArchiveCreation = false; archiveRecoveryReentry = "" }
+                        .disabled(model.isCreatingPortableArchive)
+                        .keyboardShortcut(.defaultAction)
+                }
+            }.padding(24).frame(width: 520)
+        }
+        .sheet(isPresented: $isPresentingRetainedDataPurge) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Purge deleted data from retained archives").font(.title2.bold())
+                Text("This permanently removes data that you already deleted from eligible, verified Rekon Pursuit recovery archives. It cannot be undone. External archives and expired archives are not changed.")
+                    .foregroundStyle(.secondary)
+                Text("Re-enter your recovery key to confirm. Rekon Pursuit creates and verifies a replacement before it removes an eligible predecessor archive.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                TextField("Recovery key", text: $retainedDataPurgeReentry)
+                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("Cancel", role: .cancel) {
+                        retainedDataPurgeReentry = ""
+                        isPresentingRetainedDataPurge = false
+                    }
+                    Spacer()
+                    Button("Purge retained archive data", role: .destructive) {
+                        model.purgeRetainedArchiveData(reentry: retainedDataPurgeReentry)
+                        retainedDataPurgeReentry = ""
+                        isPresentingRetainedDataPurge = false
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(24)
+            .frame(width: 560)
+        }
+        .sheet(isPresented: portableArchiveRestoreSheetBinding) {
+            VStack(alignment: .leading, spacing: 16) {
+                switch model.portableArchiveRestoreState {
+                case .awaitingRecoveryKey:
+                    Text("Restore portable archive").font(.title2.bold())
+                    Text("Enter the recovery key to verify the archive. The key is used only for this restore attempt.")
+                        .foregroundStyle(.secondary)
+                    TextField("Recovery key", text: $portableArchiveRestoreKey)
+                        .textFieldStyle(.roundedBorder)
+                    HStack {
+                        Button("Cancel", role: .cancel) {
+                            SettingsRootModalBindings.dismissPortableArchiveRestore(
+                                clearRestoreEntry: { portableArchiveRestoreKey = "" },
+                                cancelPortableArchiveRestore: { model.cancelPortableArchiveRestore() }
+                            )
+                        }
+                        Spacer()
+                        Button("Verify archive") {
+                            model.verifyPortableArchiveForRestore(portableArchiveRestoreKey)
+                            portableArchiveRestoreKey = ""
+                        }
+                        .keyboardShortcut(.defaultAction)
+                    }
+                case .verifying:
+                    ProgressView("Verifying portable archive…")
+                    Button("Cancel", role: .cancel) {
+                        SettingsRootModalBindings.dismissPortableArchiveRestore(
+                            clearRestoreEntry: { portableArchiveRestoreKey = "" },
+                            cancelPortableArchiveRestore: { model.cancelPortableArchiveRestore() }
+                        )
+                    }
+                case let .awaitingConfirmation(archive):
+                    Text("Confirm restore").font(.title2.bold())
+                    Text("The archive has been verified. Review its identity before creating an inactive restored workspace.")
+                        .foregroundStyle(.secondary)
+                    Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
+                        GridRow { Text("Archive ID").foregroundStyle(.secondary); Text(archive.archiveID.uuidString) }
+                        GridRow { Text("Created").foregroundStyle(.secondary); Text(archive.createdAt.formatted(date: .abbreviated, time: .shortened)) }
+                        GridRow { Text("Signing fingerprint").foregroundStyle(.secondary); Text(archive.signingKeyFingerprint.map { String(format: "%02x", $0) }.joined()) }
+                    }.font(.footnote.monospaced())
+                    HStack {
+                        Button("Cancel", role: .cancel) {
+                            SettingsRootModalBindings.dismissPortableArchiveRestore(
+                                clearRestoreEntry: { portableArchiveRestoreKey = "" },
+                                cancelPortableArchiveRestore: { model.cancelPortableArchiveRestore() }
+                            )
+                        }
+                        Spacer()
+                        Button("Confirm restore") { model.confirmPortableArchiveRestore() }
+                            .keyboardShortcut(.defaultAction)
+                    }
+                case .restoring:
+                    ProgressView("Creating inactive restored workspace…")
+                case .idle, .ready, .failed:
+                    EmptyView()
+                }
+            }
+            .padding(24)
+            .frame(width: 560)
+        }
+        .alert("Portable archive restore", isPresented: portableArchiveRestoreFailureAlertBinding) {
+            Button("Choose another archive") {
+                model.dismissPortableArchiveRestoreFailure()
+                model.choosePortableArchiveForRestore()
+            }
+            Button("Dismiss", role: .cancel) {
+                SettingsRootModalBindings.dismissPortableArchiveRestoreFailure(
+                    dismissPortableArchiveRestoreFailure: { model.dismissPortableArchiveRestoreFailure() }
+                )
+            }
+        } message: {
+            if let message = settingsRootModalPresentation.portableArchiveRestoreFailureMessage {
+                Text(message)
+            }
+        }
     }
 
     @ViewBuilder private var dailyDestination: some View {
-        switch navigation.route {
-        case .home: HomeView(model: model, open: openAttentionTask, addOpportunity: { navigation.handle(.homeEmptyStateAdd) }, reschedule: { task in taskToReschedule = task; rescheduledDueAt = task.dueAt ?? .now })
-        case .pipeline: PipelineView(model: model, showsBoard: $showsPipelineBoard, anchorID: $pipelineAnchorID, open: openOpportunity, delete: { pendingDeletion = $0 }, addOpportunity: { navigation.handle(.pipelineAdd) }, importCSV: { navigation.handle(.pipelineImport) })
-        case .addOpportunity: AddOpportunityView(model: model)
-        case .importCSV: CSVImportView(model: model, chooseFile: chooseCSVFile, open: openOpportunity, finish: { navigation.select(.pipeline) })
-        case .contacts: ContactsView(model: model, open: openOpportunity, delete: { pendingContactDeletion = $0 })
-        case .activityAI: GlobalActivityView(model: model)
-        case .settings: SettingsView(model: model)
+        Group {
+            switch navigation.route {
+            case .home: HomeView(model: model, open: openAttentionTask, addOpportunity: { beginAddOpportunity(origin: .home) }, reschedule: { task in taskToReschedule = task; rescheduledDueAt = task.dueAt ?? .now }, now: homeDashboardNow, calendar: homeDashboardCalendar)
+            case .pipeline:
+                PipelineView(
+                    model: model,
+                    query: $pipelineQuery,
+                    stage: $pipelineStageFilter,
+                    includesClosed: $pipelineIncludesClosed,
+                    showsBoard: $showsPipelineBoard,
+                    anchorID: $pipelineAnchorID,
+                    horizontalLane: $pipelineHorizontalLane,
+                    open: openOpportunity,
+                    delete: { pendingDeletion = $0 },
+                    addOpportunity: beginPipelineAddOpportunity,
+                    importCSV: {
+                        addOpportunityOrigin = nil
+                        navigation.handle(.pipelineImport)
+                    }
+                )
+            case .addOpportunity: AddOpportunityView(model: model, cancel: cancelAddOpportunity)
+            case .importCSV: CSVImportView(model: model, chooseFile: chooseCSVFile, open: openOpportunity, finish: { addOpportunityOrigin = nil; navigation.select(.pipeline) })
+            case .contacts: ContactsView(model: model, open: openOpportunity, delete: { pendingContactDeletion = $0 })
+            case .activityAI: GlobalActivityView(model: model)
+            case .settings:
+                SettingsView(
+                    usingSeparateLocalWorkspace: model.usingSeparateLocalWorkspace,
+                    recovery: settingsRecoveryPresentation,
+                    documentReferenceSummary: model.documentReferenceSummary,
+                    returnToPreservedWorkspaceRecovery: { model.returnToPreservedWorkspaceRecovery() },
+                    beginRecoveryKeyEnrollment: {
+                        generatedRecoveryKey = try? RecoveryKey.generate()
+                        recoveryKeyCopied = false
+                    },
+                    presentArchiveCreation: { isPresentingArchiveCreation = true },
+                    presentProtectedExport: { isPresentingProtectedExport = true },
+                    presentRetainedDataPurge: { isPresentingRetainedDataPurge = true },
+                    cancelRetainedDataPurge: { model.cancelRetainedDataPurge() },
+                    choosePortableArchiveForRestore: { model.choosePortableArchiveForRestore() }
+                )
+            }
         }
     }
 
@@ -136,6 +391,7 @@ struct ContentView: View {
     }
 
     private func openOpportunity(_ opportunity: Opportunity) {
+        addOpportunityOrigin = nil
         pipelineAnchorID = opportunity.id
         openRoute(.overview(opportunity.id))
     }
@@ -143,14 +399,52 @@ struct ContentView: View {
     private func openAttentionTask(_ task: TaskReminder) {
         guard model.navigateToRouteOpportunity(id: task.opportunityID) else { return }
         guard model.open(task) else { return }
+        addOpportunityOrigin = nil
         pipelineAnchorID = task.opportunityID
-        opportunityRoute = .overview(task.opportunityID)
+        opportunityRoute = task.requiresClosureConfirmation ? .reconcile(task.opportunityID) : .overview(task.opportunityID)
         navigation.select(.pipeline)
     }
 
     private func openRoute(_ route: OpportunityRoute) {
         guard model.navigateToRouteOpportunity(id: route.opportunityID) else { return }
+        addOpportunityOrigin = nil
         opportunityRoute = route
+    }
+
+    private func beginPipelineAddOpportunity() {
+        if showsPipelineBoard {
+            let context = PipelineBoardReturnContext(
+                query: pipelineQuery,
+                stageFilter: pipelineStageFilter,
+                includesClosed: pipelineIncludesClosed,
+                selectedOrAnchoredOpportunityID: pipelineAnchorID,
+                horizontalScrollLane: pipelineHorizontalLane
+            )
+            beginAddOpportunity(origin: .pipelineBoard(context))
+        } else {
+            beginAddOpportunity(origin: .pipelineTable)
+        }
+    }
+
+    private func beginAddOpportunity(origin: AddOpportunityOrigin) {
+        addOpportunityOrigin = AddOpportunityOrigin.replacing(addOpportunityOrigin, with: origin)
+        navigation.select(.addOpportunity)
+    }
+
+    private func cancelAddOpportunity() {
+        let origin = addOpportunityOrigin
+        let destination = origin?.cancelDestination ?? AddOpportunityOrigin.home.cancelDestination
+        model.discardNewOpportunityDraft()
+        showsPipelineBoard = destination.showsBoard
+        if let context = destination.boardContext {
+            pipelineQuery = context.query
+            pipelineStageFilter = context.stageFilter
+            pipelineIncludesClosed = context.includesClosed
+            pipelineAnchorID = context.selectedOrAnchoredOpportunityID
+            pipelineHorizontalLane = context.horizontalScrollLane
+        }
+        navigation.select(destination.route)
+        addOpportunityOrigin = nil
     }
 
     private var detailTitle: String {
@@ -164,17 +458,20 @@ struct ContentView: View {
 
     private func selectDestination(_ destination: DailyRoute) {
         guard opportunityRoute != nil else {
+            addOpportunityOrigin = nil
             navigation.select(destination)
             return
         }
         guard model.canLeaveOpportunityRoute() else { return }
         opportunityRoute = nil
+        addOpportunityOrigin = nil
         navigation.select(destination)
     }
 
     private func returnToPipeline() {
         guard model.canLeaveOpportunityRoute() else { return }
         opportunityRoute = nil
+        addOpportunityOrigin = nil
         navigation.select(.pipeline)
     }
 
@@ -196,6 +493,91 @@ struct ContentView: View {
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [.commaSeparatedText, .plainText]
         panel.begin { response in if response == .OK, let url = panel.url { model.previewCSV(at: url) } }
+    }
+
+    private var settingsRecoveryPresentation: SettingsRecoveryPresentation {
+        let restoreProgressText: String?
+        switch model.portableArchiveRestoreState {
+        case .verifying:
+            restoreProgressText = "Verifying portable archive…"
+        case .restoring:
+            restoreProgressText = "Restore in progress…"
+        case .idle, .awaitingRecoveryKey, .awaitingConfirmation, .ready, .failed:
+            restoreProgressText = nil
+        }
+
+        let restoreReady: Bool
+        if case .ready = model.portableArchiveRestoreState {
+            restoreReady = true
+        } else {
+            restoreReady = false
+        }
+
+        return SettingsRecoveryPresentation(
+            recoveryEnrollmentEnabled: model.recoveryEnrollmentEnabled,
+            archiveSummaries: model.portableArchiveCatalogue.map(SettingsArchiveSummary.init(archive:)),
+            isCreatingPortableArchive: model.isCreatingPortableArchive,
+            isCreatingProtectedExport: model.isCreatingProtectedExport,
+            isPurgingRetainedArchiveData: model.isPurgingRetainedArchiveData,
+            isRestoringPortableArchive: model.isRestoringPortableArchive,
+            restoreProgressText: restoreProgressText,
+            retainedDataPurgeStatusText: model.retainedDataPurgeStatus.map(retainedDataPurgeStatusText),
+            restoreReady: restoreReady
+        )
+    }
+
+    private var settingsRootModalPresentation: SettingsRootModalPresentation {
+        SettingsRootModalPresentation(
+            portableArchiveRestoreState: model.portableArchiveRestoreState,
+            protectedExportErrorMessage: model.protectedExportErrorMessage,
+            protectedExportSuccess: model.protectedExportSuccess
+        )
+    }
+
+    private func dismissProtectedExportSuccess() {
+        SettingsRootModalBindings.dismissProtectedExportSuccess(
+            dismissProtectedExportSuccess: { model.dismissProtectedExportSuccess() }
+        )
+    }
+
+    private var portableArchiveRestoreSheetBinding: Binding<Bool> {
+        Binding(
+            get: { settingsRootModalPresentation.isPortableArchiveRestoreSheetPresented },
+            set: { isPresented in
+                if !isPresented {
+                    SettingsRootModalBindings.dismissPortableArchiveRestore(
+                        clearRestoreEntry: { portableArchiveRestoreKey = "" },
+                        cancelPortableArchiveRestore: { model.cancelPortableArchiveRestore() }
+                    )
+                }
+            }
+        )
+    }
+
+    private var portableArchiveRestoreFailureAlertBinding: Binding<Bool> {
+        Binding(
+            get: { settingsRootModalPresentation.isPortableArchiveRestoreFailureAlertPresented },
+            set: { isPresented in
+                if !isPresented {
+                    SettingsRootModalBindings.dismissPortableArchiveRestoreFailure(
+                        dismissPortableArchiveRestoreFailure: { model.dismissPortableArchiveRestoreFailure() }
+                    )
+                }
+            }
+        )
+    }
+
+    private func retainedDataPurgeStatusText(_ status: RetainedDataPurgeStatus) -> String {
+        switch status.state {
+        case .complete:
+            return "Deleted retained data purge completed \(status.finishedAt?.formatted(date: .abbreviated, time: .shortened) ?? "")."
+        case .cancelled:
+            return "The last retained-data purge was cancelled; any unfinished source archives were preserved."
+        case .incomplete, .blocked:
+            return "The last retained-data purge was incomplete. Review retained archives before retrying."
+        case .running:
+            return "A prior retained-data purge was interrupted and marked incomplete. It did not resume automatically."
+        }
     }
 
 }
@@ -222,6 +604,10 @@ private struct WorkspaceOnboardingView: View {
                             .accessibilityIdentifier("create-local-workspace")
                     } else if model.workspaceRequiresRecovery {
                         Text("Recovery is required before this workspace can be opened. Rekon Pursuit kept existing local material unchanged and will not create over it.").foregroundStyle(.secondary)
+                        Text("Only recovery actions are available until you choose or create a safe local workspace.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("recovery-only-workspace-gate")
                         Button("Recheck local workspace") { model.retryWorkspaceOpen() }.accessibilityIdentifier("recheck-local-workspace")
                         Button("Choose existing workspace folder…", action: chooseExistingWorkspaceFolder)
                             .accessibilityIdentifier("choose-existing-workspace-folder")
@@ -252,116 +638,6 @@ private struct WorkspaceOnboardingView: View {
         panel.canCreateDirectories = false
         let selectedURL = panel.runModal() == .OK ? panel.url : nil
         model.chooseExistingWorkspaceFolder(selectedURL)
-    }
-}
-
-private struct PipelineView: View {
-    @ObservedObject var model: WorkspaceViewModel
-    @Binding var showsBoard: Bool
-    @Binding var anchorID: String?
-    let open: (Opportunity) -> Void
-    let delete: (Opportunity) -> Void
-    let addOpportunity: () -> Void
-    let importCSV: () -> Void
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Pipeline").font(.largeTitle.bold())
-                Spacer()
-                Button("Import CSV", action: importCSV)
-                    .buttonStyle(RekonSecondaryButtonStyle())
-                    .accessibilityIdentifier("pipeline-import-csv")
-                Button("Add opportunity", action: addOpportunity)
-                    .buttonStyle(RekonPrimaryButtonStyle())
-                    .accessibilityIdentifier("pipeline-add-opportunity")
-            }
-            HStack {
-                TextField("Search opportunities", text: $model.opportunitySearch).accessibilityIdentifier("opportunity-search")
-                Picker("Stage", selection: $model.stageFilter) {
-                    Text("All stages").tag("All stages")
-                    ForEach(PipelineStage.allCases, id: \.self) { Text($0.rawValue).tag($0.rawValue) }
-                }
-                .frame(width: 170)
-                Picker("View", selection: $showsBoard) { Text("Table").tag(false); Text("Board").tag(true) }.pickerStyle(.segmented).frame(width: 145)
-            }
-            if model.filteredOpportunities.isEmpty {
-                FlexibleCenteredContent {
-                    ContentUnavailableView("No opportunities match", systemImage: "briefcase", description: Text("Try another search or add an opportunity."))
-                    Button("Add opportunity", action: addOpportunity)
-                        .buttonStyle(RekonPrimaryButtonStyle())
-                }
-            } else if showsBoard {
-                ScrollViewReader { proxy in
-                    ScrollView(.horizontal) {
-                        HStack(alignment: .top, spacing: 14) {
-                            ForEach(PipelineStage.allCases, id: \.self) { stage in
-                                ScrollViewReader { laneProxy in
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text(stage.rawValue).font(.headline)
-                                        ScrollView {
-                                            ForEach(model.filteredOpportunities.filter { $0.stage == stage }, id: \.id) { opportunity in
-                                                OpportunityCard(opportunity: opportunity) { anchorID = opportunity.id; open(opportunity) }
-                                                    .id(opportunity.id)
-                                            }
-                                        }
-                                    }
-                                    .onAppear {
-                                        guard let anchorID, let opportunity = model.opportunity(id: anchorID), opportunity.stage == stage else { return }
-                                        laneProxy.scrollTo(anchorID, anchor: .center)
-                                    }
-                                    .onChange(of: anchorID) { _, id in
-                                        guard let id, let opportunity = model.opportunity(id: id), opportunity.stage == stage else { return }
-                                        laneProxy.scrollTo(id, anchor: .center)
-                                    }
-                                }
-                                .id(stage)
-                                .frame(width: 210, alignment: .leading)
-                            }
-                        }.padding(.bottom, 4)
-                    }
-                    .onAppear {
-                        guard let anchorID, let opportunity = model.opportunity(id: anchorID) else { return }
-                        proxy.scrollTo(opportunity.stage, anchor: .center)
-                    }
-                }
-            } else {
-                ScrollViewReader { proxy in
-                    List {
-                        ForEach(model.filteredOpportunities, id: \.id) { opportunity in
-                            HStack {
-                                Button { anchorID = opportunity.id; open(opportunity) } label: { OpportunityRow(opportunity: opportunity) }
-                                    .buttonStyle(.plain)
-                                Spacer()
-                                Button("Delete", role: .destructive) { delete(opportunity) }
-                            }
-                            .id(opportunity.id)
-                        }
-                    }
-                    .listStyle(.inset)
-                    .onAppear { if let anchorID { proxy.scrollTo(anchorID, anchor: .center) } }
-                }
-            }
-        }
-        .padding(28).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-}
-
-private struct OpportunityRow: View {
-    let opportunity: Opportunity
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(opportunity.title).font(.headline)
-            Text("\(opportunity.company) · \(opportunity.stage.rawValue)").font(.caption).foregroundStyle(RekonTheme.secondaryText)
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 3)
-    }
-}
-
-private struct OpportunityCard: View {
-    let opportunity: Opportunity
-    let open: () -> Void
-    var body: some View {
-        Button(action: open) { OpportunityRow(opportunity: opportunity).padding(10).background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: 10)).overlay(RoundedRectangle(cornerRadius: 10).stroke(RekonTheme.border, lineWidth: 1)) }
-            .buttonStyle(.plain)
     }
 }
 
@@ -504,7 +780,25 @@ private struct ReconcilePostingView: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("A check never follows redirects, signs in, retries automatically, or changes the opportunity stage.").font(.caption).foregroundStyle(.secondary)
                                 if let url = URL(string: model.selectedJobURL), !model.selectedJobURL.isEmpty {
-                                    HStack { Link("Open job posting", destination: url); Spacer(); if model.isCheckingSelectedPublicURL { ProgressView(); Button("Cancel") { _ = model.selectRouteOpportunity(id: opportunityID); model.cancelSelectedPublicURLCheck() } } else { Button("Check public URL") { _ = model.selectRouteOpportunity(id: opportunityID); model.checkSelectedPublicURL() }.disabled(!model.canCheckSelectedPublicURL).accessibilityIdentifier("check-public-url") } }
+                                    HStack {
+                                        Link("Open job posting", destination: url)
+                                        Spacer()
+                                        if model.isCheckingSelectedPublicURL {
+                                            ProgressView()
+                                            Button("Cancel") {
+                                                _ = model.selectRouteOpportunity(id: opportunityID)
+                                                model.cancelSelectedPublicURLCheck()
+                                            }
+                                            .accessibilityIdentifier("cancel-public-url-check")
+                                        } else {
+                                            Button("Check public URL") {
+                                                _ = model.selectRouteOpportunity(id: opportunityID)
+                                                model.checkSelectedPublicURL()
+                                            }
+                                            .disabled(!model.canCheckSelectedPublicURL)
+                                            .accessibilityIdentifier("check-public-url")
+                                        }
+                                    }
                                 } else { Text("Add a job URL to review this opening.").foregroundStyle(.secondary) }
                             }
                         }
@@ -551,49 +845,7 @@ private struct ClosureConfirmationView: View {
 
 private struct MissingOpportunityView: View { let back: () -> Void; var body: some View { ContentUnavailableView("Opportunity unavailable", systemImage: "exclamationmark.triangle", description: Text("It may have been deleted while this screen was open.")); Button("Return to Pipeline", action: back) } }
 
-private struct HomeView: View {
-    @ObservedObject var model: WorkspaceViewModel; let open: (TaskReminder) -> Void; let addOpportunity: () -> Void; let reschedule: (TaskReminder) -> Void
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Home").font(.largeTitle.bold()).accessibilityIdentifier("home-content")
-            Text("Needs Attention").font(.title2.bold())
-            if model.needsAttention.isEmpty {
-                FlexibleCenteredContent {
-                    ContentUnavailableView("No next actions", systemImage: "checkmark.circle", description: Text("Add an opportunity when you are ready."))
-                    Button("Add an opportunity", action: addOpportunity)
-                        .buttonStyle(RekonPrimaryButtonStyle())
-                        .accessibilityIdentifier("show-add-opportunity")
-                }
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(model.needsAttention, id: \.id) { task in
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(task.title).font(.headline)
-                                    Text(task.dueAt?.formatted(date: .abbreviated, time: .shortened) ?? "No due date")
-                                        .foregroundStyle(RekonTheme.secondaryText)
-                                }
-                                Spacer()
-                                Button("Open") { open(task) }
-                                Button("Snooze 1 day") { model.snoozeOneDay(task) }
-                                Button("Reschedule…") { reschedule(task) }
-                                Button("Complete") { model.complete(task) }
-                            }
-                            .padding()
-                            .background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: 10))
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(RekonTheme.border, lineWidth: 1))
-                        }
-                    }
-                }
-            }
-        }
-        .padding(28)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-}
-
-private struct FlexibleCenteredContent<Content: View>: View {
+struct FlexibleCenteredContent<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -611,6 +863,7 @@ private struct FlexibleCenteredContent<Content: View>: View {
 
 private struct AddOpportunityView: View {
     @ObservedObject var model: WorkspaceViewModel
+    let cancel: () -> Void
 
     var body: some View {
         ScrollView {
@@ -620,7 +873,7 @@ private struct AddOpportunityView: View {
                     TextField("Job title", text: $model.title).accessibilityIdentifier("opportunity-title")
                     TextField("Company", text: $model.company).accessibilityIdentifier("opportunity-company")
                     TextField("Job URL (optional)", text: $model.jobURL)
-                    if let warning = model.jobURLWarning { Text(warning).font(.caption).foregroundStyle(.orange) }
+                    if let warning = model.jobURLWarning { Text(warning).font(.caption).foregroundStyle(.orange).accessibilityIdentifier("add-opportunity-url-warning") }
                     Text("Job description").font(.caption).foregroundStyle(.secondary)
                     TextEditor(text: $model.jobDescription).frame(minHeight: 110)
                     Text("Notes").font(.caption).foregroundStyle(.secondary)
@@ -645,6 +898,9 @@ private struct AddOpportunityView: View {
                             .accessibilityIdentifier("save-opportunity")
                             .keyboardShortcut(.defaultAction)
                             .disabled(model.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.company.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        Button("Cancel", action: cancel)
+                            .accessibilityIdentifier("cancel-add-opportunity")
+                            .keyboardShortcut(.cancelAction)
                         if let error = model.addOpportunitySaveError {
                             Text(error)
                                 .font(.caption)
@@ -786,185 +1042,6 @@ private struct CSVImportCompletionView: View {
     }
 }
 
-private struct ContactsView: View {
-    @ObservedObject var model: WorkspaceViewModel; let open: (Opportunity) -> Void; let delete: (Contact) -> Void
-    @State private var relationshipContextExpanded = false
-    @State private var notesExpanded = false
-    @State private var showsOpportunityRelationships = false
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Contacts").font(.largeTitle.bold())
-                GroupBox("Contacts") {
-                    VStack(alignment: .leading) {
-                        HStack {
-                            TextField("Search contacts", text: $model.contactSearch).accessibilityIdentifier("contact-search")
-                            Picker("Employer", selection: $model.contactEmployerFilter) {
-                                Text("All employers").tag("All employers")
-                                ForEach(model.contactEmployers, id: \.self) { Text($0).tag($0) }
-                            }
-                        }
-                        ForEach(model.filteredContacts, id: \.id) { contact in
-                            HStack {
-                                Button { model.selectContact(contact) } label: {
-                                    VStack(alignment: .leading) {
-                                        Text(contact.name)
-                                        Text([contact.title, contact.employer].filter { !$0.isEmpty }.joined(separator: " · "))
-                                            .font(.caption).foregroundStyle(.secondary)
-                                    }
-                                }.buttonStyle(.plain)
-                                Spacer()
-                                Button("Delete", role: .destructive) { delete(contact) }
-                            }
-                        }
-                    }
-                }
-                GroupBox(model.selectedContact == nil ? "New contact" : "Contact record") {
-                    Form {
-                        TextField("Name", text: $model.contactName).accessibilityIdentifier("contact-name")
-                        if model.isAddingNewContactEmployer {
-                            TextField("New employer (optional)", text: $model.contactEmployer)
-                            Button("Choose tracked employer") { model.chooseTrackedContactEmployer() }
-                        } else {
-                            TextField("Search tracked employers", text: $model.contactEmployerSearch)
-                                .accessibilityIdentifier("contact-employer-search")
-                            if !model.contactEmployer.isEmpty {
-                                HStack {
-                                    Text("Employer: \(model.contactEmployer)").foregroundStyle(.secondary)
-                                    Button("Clear") { model.chooseTrackedContactEmployer() }
-                                }
-                            }
-                            if !model.contactEmployerSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                VStack(alignment: .leading, spacing: 0) {
-                                    ForEach(model.filteredContactEmployerSuggestions, id: \.self) { employer in
-                                        Button {
-                                            model.selectContactEmployer(employer)
-                                        } label: {
-                                            Text(employer)
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                                .padding(.vertical, 6)
-                                                .padding(.horizontal, 8)
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                    if let candidate = model.contactEmployerAddCandidate {
-                                        if !model.filteredContactEmployerSuggestions.isEmpty { Divider() }
-                                        Button {
-                                            model.beginNewContactEmployer(named: candidate)
-                                        } label: {
-                                            Text("Add \(candidate) as new employer")
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                                .padding(.vertical, 6)
-                                                .padding(.horizontal, 8)
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                                .background(Color.primary.opacity(0.05))
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                            }
-                        }
-                        TextField("Title (optional)", text: $model.contactTitle)
-                        TextField("Email (optional)", text: $model.contactEmail)
-                        if let warning = model.contactEmailWarning { Text(warning).font(.caption).foregroundStyle(.orange) }
-                        TextField("Profile URL (optional)", text: $model.contactProfileURL)
-                        if let warning = model.contactProfileURLWarning { Text(warning).font(.caption).foregroundStyle(.orange) }
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text("Relationship context (optional)").font(.caption).foregroundStyle(.secondary)
-                                Spacer()
-                                Button(relationshipContextExpanded ? "Collapse" : "Expand") { relationshipContextExpanded.toggle() }
-                            }
-                            TextEditor(text: $model.contactRelationshipContext)
-                                .frame(minHeight: relationshipContextExpanded ? 120 : 48, maxHeight: relationshipContextExpanded ? 180 : 48)
-                        }
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text("Notes (optional)").font(.caption).foregroundStyle(.secondary)
-                                Spacer()
-                                Button(notesExpanded ? "Collapse" : "Expand") { notesExpanded.toggle() }
-                            }
-                            TextEditor(text: $model.contactNotes)
-                                .frame(minHeight: notesExpanded ? 120 : 48, maxHeight: notesExpanded ? 180 : 48)
-                        }
-                        HStack {
-                            Button("New contact") { model.beginNewContact() }
-                            Spacer()
-                            Button(model.selectedContact == nil ? "Save contact locally" : "Save changes locally") {
-                                if model.selectedContact == nil { model.createContact() } else { model.saveSelectedContact() }
-                            }
-                            .disabled(model.contactName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            .accessibilityIdentifier("save-contact")
-                            if let error = model.contactSaveError {
-                                Text(error)
-                                    .font(.caption)
-                                    .foregroundStyle(.red)
-                                    .accessibilityIdentifier("contact-save-error")
-                            }
-                        }
-                    }
-                }
-                if model.selectedContact != nil {
-                    Button("Manage linked opportunities (\(model.selectedContactOpportunities.count))") {
-                        showsOpportunityRelationships = true
-                    }
-                    .accessibilityIdentifier("manage-contact-opportunities")
-                }
-            }
-            .padding(28).frame(maxWidth: 920, alignment: .leading)
-        }
-        .sheet(isPresented: $showsOpportunityRelationships) {
-            ContactOpportunityManagementSheet(model: model, open: open)
-        }
-    }
-}
-
-private struct ContactOpportunityManagementSheet: View {
-    @ObservedObject var model: WorkspaceViewModel
-    let open: (Opportunity) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Linked opportunities").font(.title2.bold())
-            if model.selectedContactOpportunities.isEmpty {
-                Text("This contact is not linked to an opportunity yet.").foregroundStyle(.secondary)
-            } else {
-                ForEach(model.selectedContactOpportunities, id: \.id) { opportunity in
-                    HStack {
-                        Button("\(opportunity.title) · \(opportunity.company)") { open(opportunity) }
-                        Spacer()
-                        Button("Unlink") { model.unlinkSelectedContact(from: opportunity) }
-                    }
-                }
-            }
-
-            if !model.contactEmployer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               !model.selectedContactUnlinkedEmployerOpportunities.isEmpty {
-                Divider()
-                Text("Other opportunities at \(model.contactEmployer)").font(.headline)
-                Text("Link only the opportunities this person is connected to.")
-                    .font(.caption).foregroundStyle(.secondary)
-                ForEach(model.selectedContactUnlinkedEmployerOpportunities, id: \.id) { opportunity in
-                    HStack {
-                        Button("\(opportunity.title) · \(opportunity.company)") { open(opportunity) }
-                        Spacer()
-                        Button("Link") { model.linkSelectedContact(to: opportunity) }
-                    }
-                }
-            }
-
-            HStack {
-                Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(24)
-        .frame(width: 560)
-    }
-}
-
 private struct GlobalActivityView: View {
     @ObservedObject var model: WorkspaceViewModel
     @State private var aiLedgerFilter = AIUsageLedgerFilter()
@@ -1064,333 +1141,5 @@ private struct GlobalActivityView: View {
             .frame(maxWidth: 920, alignment: .leading)
         }
     }
-}
 
-private struct SettingsView: View {
-    @ObservedObject var model: WorkspaceViewModel
-    @State private var generatedRecoveryKey: RecoveryKey?
-    @State private var reentry = ""
-    @State private var recoveryKeyCopied = false
-    @State private var archiveRecoveryReentry = ""
-    @State private var isPresentingArchiveCreation = false
-    @State private var protectedExportReentry = ""
-    @State private var isPresentingProtectedExport = false
-    @State private var retainedDataPurgeReentry = ""
-    @State private var isPresentingRetainedDataPurge = false
-    @State private var portableArchiveRestoreKey = ""
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Settings").font(.largeTitle.bold())
-                GroupBox("Workspace") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Workspace data stays on this Mac and is retained until you delete it. Deleted records leave the active workspace immediately; earlier encrypted archives may retain them until their displayed expiry.")
-                            .foregroundStyle(.secondary)
-                        Toggle("Show closed opportunities in the pipeline", isOn: $model.showClosedOpportunities).accessibilityIdentifier("show-closed-opportunities")
-                        if model.usingSeparateLocalWorkspace {
-                            Text("You are using a separate local workspace. Your preserved workspace remains unchanged.").foregroundStyle(.secondary)
-                            Button("Return to preserved workspace recovery") { model.returnToPreservedWorkspaceRecovery() }.accessibilityIdentifier("return-to-preserved-workspace-recovery")
-                        }
-                    }
-                }
-                GroupBox("Recovery & archives") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(model.recoveryEnrollmentEnabled ? (model.portableArchiveCatalogue.isEmpty ? "Portable recovery is set up. No portable archive exists yet." : "Portable recovery is set up. Archive expiry is checked when this workspace opens or becomes active; it is not a background service.") : "Portable recovery is not set up. No portable archive exists.")
-                            .foregroundStyle(.secondary)
-                        if !model.recoveryEnrollmentEnabled {
-                            Button("Set up recovery key") {
-                                generatedRecoveryKey = try? RecoveryKey.generate()
-                                recoveryKeyCopied = false
-                            }
-                                .accessibilityIdentifier("set-up-recovery-key")
-                        } else {
-                            Button("Create recovery archive") { isPresentingArchiveCreation = true }
-                                .accessibilityIdentifier("create-portable-archive")
-                                .disabled(model.isCreatingPortableArchive || model.isRestoringPortableArchive)
-                            Button("Export protected copy") { isPresentingProtectedExport = true }
-                                .accessibilityIdentifier("create-protected-export")
-                                .disabled(model.isCreatingProtectedExport || model.isCreatingPortableArchive || model.isRestoringPortableArchive)
-                            Button("Purge deleted data from retained archives") { isPresentingRetainedDataPurge = true }
-                                .buttonStyle(RekonSecondaryButtonStyle())
-                                .accessibilityIdentifier("purge-retained-archive-data")
-                                .disabled(model.portableArchiveCatalogue.isEmpty || model.isPurgingRetainedArchiveData || model.isCreatingPortableArchive || model.isRestoringPortableArchive)
-                            if model.isPurgingRetainedArchiveData {
-                                ProgressView("Purging retained archive data…")
-                                    .controlSize(.small)
-                                Button("Cancel purge") { model.cancelRetainedDataPurge() }
-                                    .buttonStyle(RekonSecondaryButtonStyle())
-                            }
-                            if let status = model.retainedDataPurgeStatus {
-                                Text(retainedDataPurgeStatusText(status))
-                                    .font(.footnote)
-                                    .foregroundStyle(status.state == .complete ? Color.secondary : Color.orange)
-                            }
-                            if model.isCreatingProtectedExport {
-                                ProgressView("Preparing protected export…").controlSize(.small)
-                            }
-                            if model.isCreatingPortableArchive {
-                                ProgressView("Creating and verifying archive…")
-                                    .controlSize(.small)
-                                    .accessibilityIdentifier("portable-archive-progress")
-                            }
-                            if model.portableArchiveCatalogue.isEmpty {
-                                Text("No portable archive exists yet.").font(.footnote).foregroundStyle(.secondary)
-                            } else {
-                                ForEach(model.portableArchiveCatalogue, id: \.archiveID) { archive in
-                                    Text(archiveSummary(archive))
-                                        .font(.footnote).foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        Divider()
-                        Text("Restore a portable archive creates an inactive local candidate. It does not replace or open your current workspace.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                        Button("Restore portable archive") { model.choosePortableArchiveForRestore() }
-                            .buttonStyle(RekonSecondaryButtonStyle())
-                            .accessibilityIdentifier("restore-portable-archive")
-                            .disabled(model.isCreatingPortableArchive || model.isRestoringPortableArchive)
-                        if model.isRestoringPortableArchive {
-                            ProgressView(model.portableArchiveRestoreState == .verifying ? "Verifying portable archive…" : "Restore in progress…")
-                                .controlSize(.small)
-                        }
-                        if case .ready = model.portableArchiveRestoreState {
-                            Text("Restored workspace ready. It remains inactive; a future workspace-open action is required.")
-                                .font(.footnote).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                GroupBox("Document references") {
-                    Text(documentReferenceSummaryText)
-                        .foregroundStyle(.secondary)
-                }
-                GroupBox("AI and connections") {
-                    Text("The local Activity & AI ledger is read-only and empty in this MVP. No AI requests, costs, model runtime, cloud connection, Gmail, or Calendar integration is configured.")
-                        .foregroundStyle(.secondary)
-                }
-            }.padding(28).frame(maxWidth: 920, alignment: .leading)
-        }
-        .sheet(isPresented: Binding(get: { generatedRecoveryKey != nil }, set: { if !$0 { generatedRecoveryKey = nil; reentry = ""; recoveryKeyCopied = false } })) {
-            if let generatedRecoveryKey {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Record your recovery key").font(.title2.bold())
-                    Text("Rekon Pursuit cannot reset or recover this key. Record it outside the app; it will not be shown again.").foregroundStyle(.secondary)
-                    Text(generatedRecoveryKey.displayValue).font(.system(.body, design: .monospaced)).textSelection(.disabled)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Button("Copy recovery key") {
-                            let pasteboard = NSPasteboard.general
-                            pasteboard.clearContents()
-                            recoveryKeyCopied = pasteboard.setString(generatedRecoveryKey.displayValue, forType: .string)
-                        }
-                        .accessibilityIdentifier("copy-recovery-key")
-                        Text("Clipboard history and other apps may retain this recovery key.").font(.footnote).foregroundStyle(.secondary)
-                        if recoveryKeyCopied {
-                            Text("Recovery key copied to the clipboard.").font(.footnote).foregroundStyle(.secondary)
-                                .accessibilityIdentifier("recovery-key-copied-confirmation")
-                        }
-                    }
-                    TextField("Re-enter the complete recovery key", text: $reentry).textFieldStyle(.roundedBorder)
-                    HStack {
-                        Button("Cancel", role: .cancel) { self.generatedRecoveryKey = nil; reentry = ""; recoveryKeyCopied = false }
-                        Spacer()
-                        Button("Confirm setup") {
-                            if model.enrollRecoveryKey(reentry: reentry, expected: generatedRecoveryKey) { self.generatedRecoveryKey = nil; reentry = ""; recoveryKeyCopied = false }
-                        }.keyboardShortcut(.defaultAction)
-                    }
-                }.padding(24).frame(width: 520)
-            }
-        }
-        .sheet(isPresented: $isPresentingArchiveCreation) {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Create portable recovery archive").font(.title2.bold())
-                Text("Re-enter your recovery key. The archive will be encrypted, verified, and retained in this workspace for its 30-day recovery window.").foregroundStyle(.secondary)
-                TextField("Re-enter the complete recovery key", text: $archiveRecoveryReentry).textFieldStyle(.roundedBorder)
-                HStack {
-                    Button("Cancel", role: .cancel) { isPresentingArchiveCreation = false; archiveRecoveryReentry = "" }
-                    Spacer()
-                    Button("Create recovery archive") { model.createPortableArchive(reentry: archiveRecoveryReentry); isPresentingArchiveCreation = false; archiveRecoveryReentry = "" }
-                        .disabled(model.isCreatingPortableArchive)
-                        .keyboardShortcut(.defaultAction)
-                }
-            }.padding(24).frame(width: 520)
-        }
-        .sheet(isPresented: $isPresentingProtectedExport) {
-            VStack(alignment: .leading, spacing: 16) {
-                if let message = model.protectedExportErrorMessage {
-                    Text(message)
-                        .foregroundStyle(.red)
-                        .accessibilityIdentifier("protected-export-error")
-                }
-                if let review = model.protectedExportReview {
-                    Text("Confirm protected export").font(.title2.bold())
-                    Text("A new encrypted .rekonexport file will be created. It contains your active tracker data only; document file access is excluded and requires relinking.").foregroundStyle(.secondary)
-                    LabeledContent("Filename", value: review.displayFilename)
-                    LabeledContent("Destination", value: "Selected local folder")
-                    LabeledContent("Data", value: "Active tracker workspace data")
-                    Text("Re-enter the recovery key to confirm.").font(.footnote).foregroundStyle(.secondary)
-                    TextField("Recovery key", text: $protectedExportReentry).textFieldStyle(.roundedBorder)
-                    HStack {
-                        Button("Cancel", role: .cancel) { model.cancelProtectedExport(); isPresentingProtectedExport = false; protectedExportReentry = "" }
-                        Spacer()
-                        Button("Confirm and export") { model.confirmProtectedExport(reentry: protectedExportReentry); protectedExportReentry = "" }
-                            .disabled(model.isCreatingProtectedExport)
-                            .keyboardShortcut(.defaultAction)
-                    }
-                } else {
-                    Text("Export protected copy").font(.title2.bold())
-                    Text("Choose a destination, then review the encrypted export before it is written. Your recovery key is used only for this action.").foregroundStyle(.secondary)
-                    TextField("Recovery key", text: $protectedExportReentry).textFieldStyle(.roundedBorder)
-                    HStack {
-                        Button("Cancel", role: .cancel) { model.cancelProtectedExport(); isPresentingProtectedExport = false; protectedExportReentry = "" }
-                        Spacer()
-                        Button("Choose destination and review") { model.reviewProtectedExport(reentry: protectedExportReentry) }
-                            .disabled(model.isCreatingProtectedExport)
-                            .keyboardShortcut(.defaultAction)
-                    }
-                }
-            }.padding(24).frame(width: 540)
-                .onChange(of: model.protectedExportReview) { _, review in
-                    if review != nil { protectedExportReentry = "" }
-                }
-        }
-        .sheet(isPresented: $isPresentingRetainedDataPurge) {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Purge deleted data from retained archives").font(.title2.bold())
-                Text("This permanently removes data that you already deleted from eligible, verified Rekon Pursuit recovery archives. It cannot be undone. External archives and expired archives are not changed.")
-                    .foregroundStyle(.secondary)
-                Text("Re-enter your recovery key to confirm. Rekon Pursuit creates and verifies a replacement before it removes an eligible predecessor archive.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                TextField("Recovery key", text: $retainedDataPurgeReentry)
-                    .textFieldStyle(.roundedBorder)
-                HStack {
-                    Button("Cancel", role: .cancel) {
-                        retainedDataPurgeReentry = ""
-                        isPresentingRetainedDataPurge = false
-                    }
-                    Spacer()
-                    Button("Purge retained archive data", role: .destructive) {
-                        model.purgeRetainedArchiveData(reentry: retainedDataPurgeReentry)
-                        retainedDataPurgeReentry = ""
-                        isPresentingRetainedDataPurge = false
-                    }
-                    .keyboardShortcut(.defaultAction)
-                }
-            }
-            .padding(24)
-            .frame(width: 560)
-        }
-        .sheet(isPresented: Binding(
-            get: {
-                switch model.portableArchiveRestoreState {
-                case .awaitingRecoveryKey, .verifying, .awaitingConfirmation, .restoring: true
-                case .idle, .ready, .failed: false
-                }
-            },
-            set: { if !$0 { portableArchiveRestoreKey = ""; model.cancelPortableArchiveRestore() } }
-        )) {
-            VStack(alignment: .leading, spacing: 16) {
-                switch model.portableArchiveRestoreState {
-                case .awaitingRecoveryKey:
-                    Text("Restore portable archive").font(.title2.bold())
-                    Text("Enter the recovery key to verify the archive. The key is used only for this restore attempt.")
-                        .foregroundStyle(.secondary)
-                    TextField("Recovery key", text: $portableArchiveRestoreKey)
-                        .textFieldStyle(.roundedBorder)
-                    HStack {
-                        Button("Cancel", role: .cancel) { portableArchiveRestoreKey = ""; model.cancelPortableArchiveRestore() }
-                        Spacer()
-                        Button("Verify archive") {
-                            model.verifyPortableArchiveForRestore(portableArchiveRestoreKey)
-                            portableArchiveRestoreKey = ""
-                        }
-                        .keyboardShortcut(.defaultAction)
-                    }
-                case .verifying:
-                    ProgressView("Verifying portable archive…")
-                    Button("Cancel", role: .cancel) { model.cancelPortableArchiveRestore() }
-                case let .awaitingConfirmation(archive):
-                    Text("Confirm restore").font(.title2.bold())
-                    Text("The archive has been verified. Review its identity before creating an inactive restored workspace.")
-                        .foregroundStyle(.secondary)
-                    Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
-                        GridRow { Text("Archive ID").foregroundStyle(.secondary); Text(archive.archiveID.uuidString) }
-                        GridRow { Text("Created").foregroundStyle(.secondary); Text(archive.createdAt.formatted(date: .abbreviated, time: .shortened)) }
-                        GridRow { Text("Signing fingerprint").foregroundStyle(.secondary); Text(archive.signingKeyFingerprint.map { String(format: "%02x", $0) }.joined()) }
-                    }.font(.footnote.monospaced())
-                    HStack {
-                        Button("Cancel", role: .cancel) { model.cancelPortableArchiveRestore() }
-                        Spacer()
-                        Button("Confirm restore") { model.confirmPortableArchiveRestore() }
-                            .keyboardShortcut(.defaultAction)
-                    }
-                case .restoring:
-                    ProgressView("Creating inactive restored workspace…")
-                case .idle, .ready, .failed:
-                    EmptyView()
-                }
-            }
-            .padding(24)
-            .frame(width: 560)
-        }
-        .alert("Portable archive restore", isPresented: Binding(
-            get: {
-                if case .failed = model.portableArchiveRestoreState { return true }
-                return false
-            },
-            set: { if !$0 { model.dismissPortableArchiveRestoreFailure() } }
-        )) {
-            Button("Choose another archive") {
-                model.dismissPortableArchiveRestoreFailure()
-                model.choosePortableArchiveForRestore()
-            }
-            Button("Dismiss", role: .cancel) { model.dismissPortableArchiveRestoreFailure() }
-        } message: {
-            if case let .failed(failure) = model.portableArchiveRestoreState {
-                Text(failure.message)
-            }
-        }
-    }
-
-    private var documentReferenceSummaryText: String {
-        let summary = model.documentReferenceSummary
-        if summary.availableCount == 0, summary.relinkRequiredCount == 0 {
-            return "No document references are attached to active opportunities."
-        }
-        return "\(summary.availableCount) available · \(summary.relinkRequiredCount) require relinking"
-    }
-
-    private func retainedDataPurgeStatusText(_ status: RetainedDataPurgeStatus) -> String {
-        switch status.state {
-        case .complete:
-            return "Deleted retained data purge completed \(status.finishedAt?.formatted(date: .abbreviated, time: .shortened) ?? "")."
-        case .cancelled:
-            return "The last retained-data purge was cancelled; any unfinished source archives were preserved."
-        case .incomplete, .blocked:
-            return "The last retained-data purge was incomplete. Review retained archives before retrying."
-        case .running:
-            return "A prior retained-data purge was interrupted and marked incomplete. It did not resume automatically."
-        }
-    }
-
-    private func archiveSummary(_ archive: PortableArchiveCatalogueRow) -> String {
-        let lifecycle: String
-        switch archive.lifecycleState {
-        case .verified:
-            lifecycle = archive.verificationState
-        case .expiredPendingRemoval, .expiredPrepared:
-            lifecycle = "Expired — removal pending"
-        case .expiredRetryable:
-            lifecycle = "Expired — retry pending"
-        case .expiredBlocked:
-            lifecycle = "Expired — removal blocked"
-        case .expiredMissing:
-            lifecycle = "Expired — file unavailable"
-        case .expiredManualRemovalRequired:
-            lifecycle = "Expired — manual removal required"
-        case .expiredQuarantined:
-            lifecycle = "Expired — quarantined"
-        }
-        return "\(archive.displayFilename) · created \(archive.createdAt.formatted(date: .abbreviated, time: .shortened)) · expires \(archive.expiresAt.formatted(date: .abbreviated, time: .omitted)) · \(lifecycle)"
-    }
 }

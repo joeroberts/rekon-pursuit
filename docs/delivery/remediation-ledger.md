@@ -49,6 +49,19 @@ ordinary sequencing.
 | Product owner | **Corrected operational state** | The initial dashboard seed incorrectly retriggered R2 verification despite accepted evidence. R2 remains Accepted; R3 is Next up; the attention queue is empty. |
 | Product owner | **Released R3** | R3 moved from Next up to In progress. Scope is limited to the approved core CSV mapping/import workflow; no successor is released. |
 
+## Unified delivery Kanban expansion
+
+**Date:** 2026-07-28
+
+**Decision:** The dashboard now displays all delivery phases in one filterable Kanban view. Remediation R1 remains accepted historical evidence; Post-MVP refinement is the active phase; future remediation cycles receive their own phases.
+
+**Boundary:** This records planned work only. UX-D10/D11/D12, DESIGN-V2, and Phases 2a–3 remain Backlog and are not released, active, blocked, or awaiting owner action.
+
+The JSON phase catalog is the dashboard-model record for this expansion. This
+ledger retains accepted R1 evidence, while the roadmap retains the serial
+product sequencing and release prerequisites. Creating these Backlog cards does
+not amend an accepted R1 record or release any implementation.
+
 ## Verified gaps
 
 | Requirement | Current verified state | Remediation task |

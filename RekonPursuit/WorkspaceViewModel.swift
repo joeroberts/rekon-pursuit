@@ -62,6 +62,14 @@ nonisolated enum PortableArchiveRestoreFailure: Equatable {
     }
 }
 
+nonisolated enum StageMoveResult: Equatable {
+    case persisted(opportunityID: String, from: PipelineStage, to: PipelineStage)
+    case noOp(opportunityID: String, stage: PipelineStage)
+    case reconciliationBlocked(opportunityID: String, target: PipelineStage)
+    case unavailable(opportunityID: String)
+    case failed(opportunityID: String)
+}
+
 /// The only UI-facing boundary for a portable archive. The selected URL stays
 /// in memory for one restore attempt and is passed directly to the restore
 /// worker; it is never staged, bookmarked, or persisted.
@@ -147,6 +155,14 @@ struct SeparateLocalWorkspaceDependencies {
     }
 }
 
+struct ProtectedExportSuccess: Equatable {
+    let displayFilename: String
+}
+
+private struct ProtectedExportOperationToken: Equatable {
+    let value = UUID()
+}
+
 @MainActor
 final class WorkspaceViewModel: ObservableObject {
     @Published var title = ""
@@ -162,9 +178,6 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var opportunities: [Opportunity] = []
     @Published private(set) var activityEvents: [ActivityEvent] = []
     @Published var activitySearch = ""
-    @Published var showClosedOpportunities = UserDefaults.standard.object(forKey: "showClosedOpportunities") as? Bool ?? true {
-        didSet { UserDefaults.standard.set(showClosedOpportunities, forKey: "showClosedOpportunities") }
-    }
     @Published private(set) var selectedStageHistory: [StageHistoryEntry] = []
     @Published private(set) var selectedResponseHistory: [ResponseHistoryEntry] = []
     @Published private(set) var selectedTask: TaskReminder?
@@ -225,8 +238,13 @@ final class WorkspaceViewModel: ObservableObject {
     @Published var contactEmployerSearch = ""
     @Published var isAddingNewContactEmployer = false
     @Published var contactTitle = ""
-    @Published var contactEmail = ""
-    @Published var contactProfileURL = ""
+    @Published var contactWorkEmail = ""
+    @Published var contactPersonalEmail = ""
+    @Published var contactMobilePhone = ""
+    @Published var contactOfficePhone = ""
+    @Published var contactLinkedInURL = ""
+    @Published var contactInstagramURL = ""
+    @Published var contactFacebookURL = ""
     @Published var contactRelationshipContext = ""
     @Published var contactNotes = ""
     @Published var contactSearch = ""
@@ -280,6 +298,7 @@ final class WorkspaceViewModel: ObservableObject {
     @Published private(set) var isCreatingPortableArchive = false
     @Published private(set) var protectedExportReview: ProtectedExportReview?
     @Published private(set) var protectedExportErrorMessage: String?
+    @Published private(set) var protectedExportSuccess: ProtectedExportSuccess?
     @Published private(set) var isCreatingProtectedExport = false
     @Published private(set) var isRestoringPortableArchive = false
     @Published private(set) var portableArchiveRestoreState: PortableArchiveRestoreState = .idle
@@ -296,6 +315,7 @@ final class WorkspaceViewModel: ObservableObject {
     private let openDocumentURL: (URL) -> Bool
     private let portableArchiveDestination: () -> URL?
     private let protectedExportDestination: () -> URL?
+    private let protectedExportCreate: (WorkspaceStore, ProtectedExportReview, RecoveryKey) async throws -> ProtectedExportReceipt
     private let portableArchiveRestore: PortableArchiveRestoreDependencies
     private let separateLocalWorkspace: SeparateLocalWorkspaceDependencies
     private let publicURLChecker: PublicURLChecking
@@ -310,6 +330,7 @@ final class WorkspaceViewModel: ObservableObject {
     private var retainedDataPurgeTask: Task<Void, Never>?
     private var publicURLCheckTasks: [String: Task<Void, Never>] = [:]
     private var isLoadingSelectedOpportunity = false
+    private var protectedExportOperationToken = ProtectedExportOperationToken()
 
     init(
         openWorkspace: @escaping () throws -> WorkspaceOpenState,
@@ -332,6 +353,9 @@ final class WorkspaceViewModel: ObservableObject {
             panel.canCreateDirectories = true
             return panel.runModal() == .OK ? panel.url : nil
         },
+        protectedExportCreate: @escaping (WorkspaceStore, ProtectedExportReview, RecoveryKey) async throws -> ProtectedExportReceipt = { store, review, recoveryKey in
+            try await store.createProtectedExport(review: review, recoveryKey: recoveryKey)
+        },
         portableArchiveRestore: PortableArchiveRestoreDependencies = .live(),
         openExternalWorkspace: @escaping (URL) throws -> WorkspaceOpenState = { _ in .recoveryRequired },
         closeWorkspaceStore: @escaping (WorkspaceStore) throws -> Void = { try $0.close() },
@@ -348,6 +372,7 @@ final class WorkspaceViewModel: ObservableObject {
         self.openDocumentURL = openDocumentURL
         self.portableArchiveDestination = portableArchiveDestination
         self.protectedExportDestination = protectedExportDestination
+        self.protectedExportCreate = protectedExportCreate
         self.portableArchiveRestore = portableArchiveRestore
         self.publicURLChecker = publicURLChecker
         self.separateLocalWorkspace = separateLocalWorkspace
@@ -571,6 +596,33 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
+    func discardNewOpportunityDraft() {
+        let now = Date.now
+        title = ""
+        company = ""
+        stage = .saved
+        nextAction = ""
+        dueAt = now
+        hasDueDate = false
+        jobURL = ""
+        jobDescription = ""
+        notes = ""
+        compensation = ""
+        compensationMinimum = ""
+        compensationMaximum = ""
+        compensationPayPeriod = .year
+        location = ""
+        workArrangement = .notSpecified
+        applicationDate = now
+        hasApplicationDate = false
+        responseState = .noResponseRecorded
+        responseEffectiveDate = now
+        stageChangedAt = now
+        actionType = .noAction
+        actionCustomText = ""
+        addOpportunitySaveError = nil
+    }
+
     func deleteOpportunity(_ opportunity: Opportunity) {
         guard let store = readyStore() else { return }
         do {
@@ -618,24 +670,62 @@ final class WorkspaceViewModel: ObservableObject {
         }
     }
 
-    func changeStage(_ opportunity: Opportunity, to stage: PipelineStage) {
-        guard let store = readyStore() else { return }
+    @discardableResult
+    func changeStage(_ opportunity: Opportunity, to stage: PipelineStage) -> StageMoveResult {
+        guard let store = readyStore() else {
+            statusMessage = "That opportunity is no longer available locally."
+            return .unavailable(opportunityID: opportunity.id)
+        }
         do {
-            try store.changeStage(opportunityID: opportunity.id, to: stage)
-            refreshCounts()
-            statusMessage = "Stage updated locally."
+            switch try store.moveStage(opportunityID: opportunity.id, to: stage) {
+            case let .persisted(commit):
+                opportunities = commit.projection.opportunities
+                opportunityCount = opportunities.count
+                activityEvents = commit.projection.activityEvents
+                activityCount = activityEvents.count
+                needsAttention = commit.projection.needsAttention
+                needsAttentionCount = needsAttention.count
+                if selectedOpportunityID == commit.opportunityID {
+                    selectedStageHistory = commit.projection.stageHistoryForTransition
+                    if let selected = opportunities.first(where: { $0.id == commit.opportunityID }) {
+                        selectedStage = selected.stage
+                    }
+                }
+                statusMessage = "Stage updated locally."
+                return .persisted(opportunityID: commit.opportunityID, from: commit.from, to: commit.to)
+            case let .noOp(opportunityID, stage):
+                statusMessage = "This opportunity is already in that stage."
+                return .noOp(opportunityID: opportunityID, stage: stage)
+            case let .reconciliationBlocked(opportunityID, target):
+                statusMessage = "Confirm reconciliation before closing this opportunity."
+                return .reconciliationBlocked(opportunityID: opportunityID, target: target)
+            case let .unavailable(opportunityID):
+                statusMessage = "That opportunity is no longer available locally."
+                return .unavailable(opportunityID: opportunityID)
+            }
         } catch {
-            statusMessage = "The stage could not be updated."
+            statusMessage = "The local stage was not changed."
+            return .failed(opportunityID: opportunity.id)
+        }
+    }
+
+    /// A read-only Pipeline projection. Its inputs belong to the Pipeline
+    /// presentation session rather than workspace preferences or persistence.
+    func filteredOpportunities(query: String, stage: String, includesClosed: Bool) -> [Opportunity] {
+        let tokens = query
+            .split(whereSeparator: { $0.isWhitespace })
+            .map { $0.lowercased() }
+
+        return opportunities.filter { opportunity in
+            let matchesStage = stage == "All stages" || opportunity.stage.rawValue == stage
+            let searchSurface = "\(opportunity.title) \(opportunity.company)".lowercased()
+            let matchesSearch = tokens.allSatisfy { searchSurface.contains($0) }
+            return matchesStage && matchesSearch && (includesClosed || opportunity.stage != .closed)
         }
     }
 
     var filteredOpportunities: [Opportunity] {
-        opportunities.filter { opportunity in
-            let matchesStage = stageFilter == "All stages" || opportunity.stage.rawValue == stageFilter
-            let query = opportunitySearch.trimmingCharacters(in: .whitespacesAndNewlines)
-            let matchesSearch = query.isEmpty || opportunity.title.localizedCaseInsensitiveContains(query) || opportunity.company.localizedCaseInsensitiveContains(query)
-            return matchesStage && matchesSearch && (showClosedOpportunities || opportunity.stage != .closed)
-        }
+        filteredOpportunities(query: opportunitySearch, stage: stageFilter, includesClosed: true)
     }
 
     var selectedOpportunity: Opportunity? {
@@ -670,7 +760,7 @@ final class WorkspaceViewModel: ObservableObject {
         let query = contactSearch.trimmingCharacters(in: .whitespacesAndNewlines)
         return contacts.filter { contact in
             let matchesEmployer = contactEmployerFilter == "All employers" || contact.employer == contactEmployerFilter
-            let matchesSearch = query.isEmpty || [contact.name, contact.employer, contact.title, contact.email].contains { $0.localizedCaseInsensitiveContains(query) }
+            let matchesSearch = query.isEmpty || [contact.name, contact.employer, contact.title, contact.workEmail, contact.personalEmail, contact.mobilePhone, contact.officePhone].contains { $0.localizedCaseInsensitiveContains(query) }
             return matchesEmployer && matchesSearch
         }
     }
@@ -710,15 +800,15 @@ final class WorkspaceViewModel: ObservableObject {
         return hasExactMatch ? nil : query
     }
 
-    var contactEmailWarning: String? {
-        let value = contactEmail.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return nil }
-        return value.range(of: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", options: .regularExpression) == nil
-            ? "Enter an email address with a local part, @, and domain."
-            : nil
-    }
+    var contactWorkEmailWarning: String? { contactEmailWarning(for: contactWorkEmail, type: "work") }
 
-    var contactProfileURLWarning: String? { profileURLWarning(for: contactProfileURL) }
+    var contactPersonalEmailWarning: String? { contactEmailWarning(for: contactPersonalEmail, type: "personal") }
+
+    var contactLinkedInURLWarning: String? { profileURLWarning(for: contactLinkedInURL) }
+
+    var contactInstagramURLWarning: String? { profileURLWarning(for: contactInstagramURL) }
+
+    var contactFacebookURLWarning: String? { profileURLWarning(for: contactFacebookURL) }
 
     var selectedContact: Contact? {
         contacts.first { $0.id == selectedContactID }
@@ -887,8 +977,13 @@ final class WorkspaceViewModel: ObservableObject {
             $0.compare(contact.employer, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
         }
         contactTitle = contact.title
-        contactEmail = contact.email
-        contactProfileURL = contact.profileURL
+        contactWorkEmail = contact.workEmail
+        contactPersonalEmail = contact.personalEmail
+        contactMobilePhone = contact.mobilePhone
+        contactOfficePhone = contact.officePhone
+        contactLinkedInURL = contact.linkedInURL
+        contactInstagramURL = contact.instagramURL
+        contactFacebookURL = contact.facebookURL
         contactRelationshipContext = contact.relationshipContext
         contactNotes = contact.notes
         contactSaveError = nil
@@ -1221,6 +1316,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     func reviewProtectedExport(reentry: String) {
+        invalidateProtectedExportOperation()
         protectedExportErrorMessage = nil
         guard let key = RecoveryKey.parse(reentry) else {
             let message = "Enter the complete recovery key, including its checksum."
@@ -1233,18 +1329,25 @@ final class WorkspaceViewModel: ObservableObject {
             return
         }
         guard let store = readyStore() else { return }
+        let operationToken = protectedExportOperationToken
         isCreatingProtectedExport = true
         Task { @MainActor [weak self, store] in
             defer { self?.isCreatingProtectedExport = false }
             do {
                 let review = try await store.reviewProtectedExport(recoveryKey: key, at: url)
-                guard let self, self.store === store else { return }
+                guard let self,
+                      self.protectedExportOperationToken == operationToken,
+                      self.store === store else { return }
                 self.protectedExportReview = review
                 self.statusMessage = "Review the protected export before confirming."
             } catch {
                 let message = Self.protectedExportMessage(for: error, fallback: "The protected export could not be prepared.")
-                self?.statusMessage = message
-                self?.protectedExportErrorMessage = message
+                guard let self,
+                      self.protectedExportOperationToken == operationToken,
+                      self.store === store else { return }
+                self.invalidateProtectedExportOperation()
+                self.statusMessage = message
+                self.protectedExportErrorMessage = message
             }
         }
     }
@@ -1252,31 +1355,51 @@ final class WorkspaceViewModel: ObservableObject {
     func confirmProtectedExport(reentry: String) {
         protectedExportErrorMessage = nil
         guard let review = protectedExportReview, let key = RecoveryKey.parse(reentry), let store = readyStore() else {
+            invalidateProtectedExportOperation()
             let message = "Enter the complete recovery key before confirming."
             statusMessage = message
             protectedExportErrorMessage = message
             return
         }
+        let operationToken = protectedExportOperationToken
+        let protectedExportCreate = self.protectedExportCreate
         isCreatingProtectedExport = true
         Task { @MainActor [weak self, store] in
             defer { self?.isCreatingProtectedExport = false }
             do {
-                _ = try await store.createProtectedExport(review: review, recoveryKey: key)
-                guard let self, self.store === store else { return }
+                _ = try await protectedExportCreate(store, review, key)
+                guard let self,
+                      self.protectedExportOperationToken == operationToken,
+                      self.store === store else { return }
                 self.protectedExportReview = nil
                 self.protectedExportErrorMessage = nil
                 self.statusMessage = "Protected export verified and saved."
+                self.protectedExportSuccess = .init(displayFilename: review.displayFilename)
             } catch {
                 let message = Self.protectedExportMessage(for: error, fallback: "The protected export could not be created.")
-                self?.statusMessage = message
-                self?.protectedExportErrorMessage = message
+                guard let self,
+                      self.protectedExportOperationToken == operationToken,
+                      self.store === store else { return }
+                self.invalidateProtectedExportOperation()
+                self.statusMessage = message
+                self.protectedExportErrorMessage = message
             }
         }
     }
 
     func cancelProtectedExport() {
+        invalidateProtectedExportOperation()
         protectedExportReview = nil
         protectedExportErrorMessage = nil
+    }
+
+    func dismissProtectedExportSuccess() {
+        protectedExportSuccess = nil
+    }
+
+    private func invalidateProtectedExportOperation() {
+        protectedExportOperationToken = ProtectedExportOperationToken()
+        protectedExportSuccess = nil
     }
 
     func purgeRetainedArchiveData(reentry: String) {
@@ -1707,6 +1830,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     private func apply(_ state: WorkspaceOpenState) {
+        invalidateProtectedExportOperation()
         if case .ready = state {
             // A ready state replaces its store below.
         } else {
@@ -1762,6 +1886,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     private func clearWorkspaceDerivedState() {
+        invalidateProtectedExportOperation()
         publicURLCheckTasks.values.forEach { $0.cancel() }
         publicURLCheckTasks = [:]
         checkingPublicURLOpportunityIDs = []
@@ -1912,7 +2037,7 @@ final class WorkspaceViewModel: ObservableObject {
     }
 
     private func contactCommand() -> CreateContact {
-        CreateContact(name: contactName, employer: contactEmployer, title: contactTitle, email: contactEmail, profileURL: contactProfileURL, relationshipContext: contactRelationshipContext, notes: contactNotes)
+        CreateContact(name: contactName, employer: contactEmployer, title: contactTitle, workEmail: contactWorkEmail, personalEmail: contactPersonalEmail, mobilePhone: contactMobilePhone, officePhone: contactOfficePhone, linkedInURL: contactLinkedInURL, instagramURL: contactInstagramURL, facebookURL: contactFacebookURL, relationshipContext: contactRelationshipContext, notes: contactNotes)
     }
 
     private func clearContactDraft() {
@@ -1922,8 +2047,13 @@ final class WorkspaceViewModel: ObservableObject {
         contactEmployerSearch = ""
         isAddingNewContactEmployer = false
         contactTitle = ""
-        contactEmail = ""
-        contactProfileURL = ""
+        contactWorkEmail = ""
+        contactPersonalEmail = ""
+        contactMobilePhone = ""
+        contactOfficePhone = ""
+        contactLinkedInURL = ""
+        contactInstagramURL = ""
+        contactFacebookURL = ""
         contactRelationshipContext = ""
         contactNotes = ""
         contactSaveError = nil
@@ -2078,6 +2208,14 @@ final class WorkspaceViewModel: ObservableObject {
             return "Use an absolute http or https profile URL with a public hostname."
         }
         return scheme == "http" ? "This profile URL uses HTTP rather than HTTPS." : nil
+    }
+
+    private func contactEmailWarning(for value: String, type: String) -> String? {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+        return !ContactEmailValidator.isValid(value)
+            ? "Enter a \(type) email address with a local part, @, and domain."
+            : nil
     }
 
     private func isPublicHostname(_ host: String) -> Bool {

@@ -61,6 +61,12 @@ revision. Any change invalidates review and requires a new confirmation.
 
 ## Frozen v1 implementation contract
 
+> **Amendment (2026-08-01):** `ADR-005-save-panel-leaf-export-authority.md`
+> supersedes only the destination-identity and final-creation paragraph below
+> for outputs selected through the signed macOS `NSSavePanel`. All other v1
+> format, encryption, staging, verification, and evidence requirements remain
+> unchanged.
+
 - Migration 26 adds `tracker_export_revision (id INTEGER PRIMARY KEY CHECK
   (id = 1), revision INTEGER NOT NULL CHECK (revision >= 0))`, seeded with
   `(1, 0)`. SQLite `AFTER INSERT`, `UPDATE`, and `DELETE` triggers increment

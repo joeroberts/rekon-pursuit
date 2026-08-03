@@ -18,7 +18,7 @@ final class PortableArchiveTests: XCTestCase {
         XCTAssertEqual(catalogue.count, 1)
         XCTAssertEqual(catalogue.first?.lifecycleState, .verified)
         XCTAssertEqual(catalogue.first?.lastExpiryOutcome, PortableArchiveExpiryOutcome.none)
-        XCTAssertEqual(try fixture.store.schemaVersion(), 33)
+        XCTAssertEqual(try fixture.store.schemaVersion(), 34)
         let columns = Set(try fixture.database.rows("PRAGMA table_info(portable_archive_catalogue)").compactMap { row -> String? in
             guard row.count > 1, case let .text(name) = row[1] else { return nil }
             return name
@@ -32,7 +32,7 @@ final class PortableArchiveTests: XCTestCase {
                 guard case let .integer(version)? = row.first else { return nil }
                 return Int(version)
             }
-        XCTAssertEqual(migrationVersions, [27, 28, 29, 30, 31, 32, 33])
+        XCTAssertEqual(migrationVersions, [27, 28, 29, 30, 31, 32, 33, 34])
     }
 
     func testPortableArchiveCatalogueRejectsUnknownLifecycleState() throws {

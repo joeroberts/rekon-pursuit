@@ -12,20 +12,18 @@ The delivery principle is **vertical slices over isolated screens**: each slice 
 
 | Release area | Current status |
 | --- | --- |
-| MVP candidate | **Remediation in progress** — an unsigned app candidate contains partial local tracker functionality, but it cannot be represented as a complete MVP. See the remediation ledger for verified gaps and release state. |
-| Package and automation | **Candidate exists** — unsigned `.app` package and build/archive/macOS smoke workflow. Developer ID signing, notarization, and DMG distribution are intentionally deferred. |
-| MVP remediation | **Current work** — the approved sequence is UX-R1 shell/opportunity navigation, then UX-R2 core workflow forms, then durable document references. The detailed, current queue and gates are in the remediation ledger; no UX or R6 implementation is released until its own brief is approved. |
-| Phase 2a — privacy and AI foundation | **Not started** — local-model runtime, cloud routing/sanitization/consent, populated AI ledger, budgets, and costs. |
-| Phase 2b — Gmail and Google Calendar | **Not started** — follows the privacy/AI foundation. |
-| Phase 2c — documents and research | **Not started** — full document processing/versioning and sourced employer research. |
-| Phase 3 — interview and offer support | **Not started** — interview preparation/call review, offers, comparison, and negotiation. |
+| Remediation R1 | **Accepted historical evidence** — the remediation ledger records the accepted R1 sequence and evidence; it is not current implementation work. |
+| Post-MVP refinement | **Active delivery queue** — VD2-01 through VD2-06 are accepted. VD2-07 is **In progress** on the approved reference-faithful Settings implementation. VD2-08 remains Backlog and blocked pending VD2-07 acceptance; it owns the specifically recorded Settings accessibility regression closure. |
+| Phase 2a — privacy and AI foundation | **Not started** — follows accepted Post-MVP refinement; local-model runtime, cloud routing/sanitization/consent, populated AI ledger, budgets, and costs remain Backlog. |
+| Phase 2b — Gmail and Google Calendar | **Not started** — follows accepted Phase 2a. |
+| Phase 2c — documents and research | **Not started** — follows accepted Phase 2b. |
+| Phase 3 — interview and offer support | **Not started** — follows accepted Phase 2c. |
 
 ### Shipped MVP boundaries
 
-- All MVP data remains local by default. CSV export is intentionally unencrypted and warns before export.
-- Backup/restore works only on the same Mac through its Keychain; portable/cross-Mac recovery and purge are deferred.
-- Reconciliation is manual and local: the app records a user-reviewed URL, outcome, and evidence. It never changes the opportunity stage automatically.
-- PDF/DOCX references retain filename, size, hash, and final-sent metadata only; the app does not copy, parse, edit, send, or upload files.
+- All MVP data remains local by default. The accepted R1 lifecycle work adds authenticated portable archive and restore-as-new-workspace recovery, encrypted-default logical export, automatic archive expiry, and verified-replacement retained-data purge; it does not add cloud storage.
+- Reconciliation retains explicit user control: an accepted user-initiated, bounded public-URL check records the outcome and evidence, while a user still confirms any opportunity-stage closure. There is no automatic stage change.
+- PDF/DOCX references support durable attach, open, verification, and moved-file relink while preserving the source file. The app does not copy, parse, edit, send, or upload files.
 - AI execution, Gmail, Calendar, research, document generation/editing, interview tooling, and offer tooling are not part of this release.
 
 ## Architecture that spans every release
@@ -153,13 +151,50 @@ For a small team, one person may hold multiple roles, but the accountability bou
 ### Post-remediation UX refinement queue
 
 These are planned product refinements, not active remediation work. They must not
-change the current delivery dashboard or release order until separately planned
-and released.
+change release order until separately planned and released. They are visible as
+Backlog under the Post-MVP refinement dashboard phase while this roadmap and the
+remediation ledger retain sequencing and evidence authority.
 
 | ID | Refinement | Intended outcome |
 | --- | --- | --- |
 | `UX-D11` | Split the existing **Activity & AI** destination into **Logs** and **AI ledger** tabs while retaining the same sidebar entry. | Each ledger has its own working area; neither search/filter surface is permanently stacked below the other. No AI execution, network capability, or new ledger data is introduced. |
 | `UX-D12` | Refine local log search beyond token-only matching. | Preserve the current safe multi-word fallback, then add predictable phrase/ordered-term behavior and a clear way to target an exact event label or identifier so queries such as `CSV import row 2 created` do not also return rows 20, 21, and 22. Define ranking, matching, and empty-state behavior before implementation. |
+
+### Visual Design v2 program
+
+**Authoritative product-delivery record:** This section, together with
+`docs/delivery/dashboard-status.json` and the local SDD progress ledger, is
+the controlling delivery record for Visual Design v2. It is not remediation
+work and its acceptance evidence must not be recorded in the remediation ledger.
+
+**Design direction:** Recompose the native SwiftUI application around the
+approved Rekon Pursuit visual language: deep layered navy surfaces, restrained
+cyan/violet accents, an accessible left navigation rail, clear type hierarchy,
+truthful cards, correct existing logo treatment, and native reduced-motion
+behavior. Reference mockups are a design-system target, not fake data or a
+pixel-copy mandate.
+
+| ID | Child card | Dependency / current state |
+| --- | --- | --- |
+| `VD2-01` | Visual foundation and tokens | **Accepted.** The product owner accepted the corrected shared foundation after hands-on verification; fresh independent Architecture, Code Review, QA, and Security/Privacy gates remain recorded. |
+| `VD2-02` | App shell and navigation | **Accepted.** Independent Architecture, code-review, QA, and security/privacy verification passed; the product owner accepted the corrected full-row navigation interaction after hands-on verification. |
+| `VD2-03` | Home redesign | **Accepted.** Explicit product-owner acceptance; independent architecture/code/security gates; focused model 6/6, fixture-host 21/21, and Home UI 12/12 verification passed. The same-user fixture path race is documented as a non-shipping test-host limitation. |
+| `VD2-04` | Pipeline table and inspector | **Accepted.** The product owner explicitly accepted the completed fidelity rebuild as good enough for now after fresh signed Table/Board, independent code-review, QA, architecture, TPM, and security/privacy gates. The Board remains presentation-only: four primary lanes, Screening grouped under Applied with its true chip, and a conditional Closed lane. The Table retains five readable desktop columns and the compact in-place right drawer. No drag/drop, persisted stage movement, card relocation, or workflow mutation was released. See the [final fidelity owner handoff](evidence/visual-design-v2/VD2-04-owner-handoff-2026-07-30.md). Later refinement is a new correction, not a reopen of this accepted card. |
+| `VD2-05` | Pipeline board and persisted stage movement | **Accepted with approved, non-blocking macOS XCTest test debt.** The product owner accepted the signed Board preview on 2026-07-31 after final Architecture, QA, Security/Privacy, Code Contract Review, and TPM gates accepted. The manual Board acceptance covered distinct Applied/Screening lanes, the exact actions/submenu, and Cancel/Escape return. [GitHub issue #1](https://github.com/joeroberts/rekon-pursuit/issues/1) remains open for the submenu-oracle evidence limitation; it is not a known production defect and no final UI matrix is represented as passed. No successor is released. See the [owner acceptance record](evidence/visual-design-v2/VD2-05-owner-handoff-2026-07-31.md). |
+| `VD2-06` | Contacts master/detail redesign | **Accepted.** The product owner explicitly accepted the signed Debug handoff on 2026-08-01 (`approved`) after independent Architecture, QA/accessibility, Security/Privacy recheck, Code Review recheck, TPM, and security-delta gates accepted the bounded non-deferred contract. Focused retained evidence is Core 2/2, ViewModel 2/2, signed channel UI 1/1, and security remediation selectors 6/0/0. The three owner-approved VD2-08 accessibility/recovery automation debts remain open. See the [owner acceptance record](evidence/visual-design-v2/VD2-06-owner-handoff-2026-08-01.md) and [TPM readiness record](../../.superpowers/sdd/2026-08-01-vd206-contact-channels/task-4-final-tpm-readiness.md). |
+| `VD2-07` | Settings information architecture | **In progress.** The approved reference-faithful Settings implementation is underway. It must preserve the real protected-export success boundary, May 6 fixture truth, global rail, privacy, and no-control constraints. The recorded Settings keyboard-focus and AI semantic accessibility regressions are assigned to `VD2-08`; they are not represented as closed. See the [V2-07x task brief](task-briefs/VD2-07x-reference-faithful-settings.md). |
+| `VD2-08` | Visual QA and accessibility acceptance | Backlog and blocked from release — requires `VD2-03` through `VD2-07` accepted. It carries the three owner-approved VD2-06 accessibility/recovery automation debts plus the approved VD2-05 [Board card-anchor accessibility-semantic debt](task-briefs/VD2-05-board-anchor-accessibility-deferral-addendum.md); no broad visual/accessibility acceptance is represented as passed or released. |
+
+Every child follows `Backlog → Next up → In progress → independent code
+review / QA / security-privacy verification → product-owner hands-on
+verification → Accepted`. The parent `DESIGN-V2` remains Backlog until all
+eight children, including `VD2-08`, are accepted and the product owner accepts
+the final visual and workflow verification. `needsUserAction` is true only for
+an owner-smoke handoff, never for routine tests or documentation.
+
+**Non-scope:** UX-D10, UX-D11, UX-D12, Phase 2a/2b/2c, Phase 3, AI execution,
+Gmail, Calendar, research, document processing, connected services, browser
+storage, plugins, cloud services, and web implementation remain unreleased.
 
 ### Workstream G — Privacy and AI foundation (Phase 2a)
 
@@ -171,7 +206,7 @@ and released.
 2. Populated local AI ledger with redacted entries, local search, cost/pricing-version records, budgets/alerts, and no raw sensitive prompt content by default.
 3. Fixture-backed consent, no-fallback, routing, ledger, and budget acceptance tests.
 
-**Dependencies:** MVP release acceptance; approved local-runtime policy, sanitization fields, full-cloud disclosure, pricing source, OpenAI processing/deletion terms, and privacy-owner sign-off.
+**Dependencies:** Accepted Post-MVP refinement; approved local-runtime policy, sanitization fields, full-cloud disclosure, pricing source, OpenAI processing/deletion terms, and privacy-owner sign-off.
 
 **Acceptance checkpoint:** Fixture-backed runs prove local, sanitized-cloud, and full-cloud route disclosure; no selected-route failure falls back to cloud; cancellation produces no provider call; ledger entries retain route, completion state, linked record, and pricing version without raw sensitive prompts; and budget handling is deterministic.
 
@@ -215,7 +250,7 @@ and released.
 3. Evidence-backed coaching rubric with visible inputs and `not enough evidence` outcome.
 4. Offer capture, user-controlled weights, transparent comparison, missing-term flags, sensitivity display, and negotiation draft review.
 
-**Dependencies:** Workstream G privacy/AI ledger capabilities; product-owner decisions on scoring weights/rubrics; consent and retention policy for recordings/transcripts.
+**Dependencies:** Accepted Phase 2c, including Workstream G privacy/AI ledger capabilities; product-owner decisions on scoring weights/rubrics; consent and retention policy for recordings/transcripts.
 
 **Acceptance checkpoint:** Change one offer weight and verify recomputation/explanation is predictable. Feed insufficient interview evidence and verify no fabricated score appears. Delete an interview transcript/audio and verify the interview record remains with the expected deletion activity event.
 
@@ -230,7 +265,7 @@ The M0–M5 work below describes how the MVP was planned and built. It is retain
 | M2 — Daily tracker | B | Offline opportunity workspace, pipeline, next actions, and deterministic Needs attention loop work together | Historical — implemented in shipped MVP |
 | M3 — Contacts and interactions | C | Offline contacts, interactions, and opportunity links work together | Historical — implemented in shipped MVP |
 | M4 — Safe bulk capture | D | Import map/validate/duplicate-choice/report flow has no silent overwrite | Historical — implemented subset in shipped MVP |
-| M5 — Reconciliation, MVP hardening, and release readiness | E + F | Evidence-to-decision reconciliation, lifecycle/export boundaries, accessibility, and release readiness satisfy the local MVP criteria | Historical — implemented subset in shipped MVP; stabilization is current |
+| M5 — Reconciliation, MVP hardening, and release readiness | E + F | Evidence-to-decision reconciliation, lifecycle/export boundaries, accessibility, and release readiness satisfy the local MVP criteria | Historical — implemented subset in shipped MVP; Post-MVP refinement is the active planned phase |
 | M6 — Privacy and AI foundation | G | Accepted routing, consent, local ledger, and budget contracts before any AI feature or connected workflow | Future — not started |
 | M7 — Connected workflow | H | Permissioned Gmail/Calendar workflow, confidence/manual-review classification, accepted follow-up tasks, and explicit approvals | Future — not started |
 | M8 — Documents and research | I | Full document versioning and sourced AI/research workflow | Future — not started |
