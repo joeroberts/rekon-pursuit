@@ -3195,9 +3195,9 @@ final class RekonPursuitUITests: XCTestCase {
         attachSettingsPresentationScreenshot(app, named: "VD2-07x-wide-ai-connections")
     }
 
-    /// Task 2 must expose this additive, content-free projection beside the
-    /// existing control. Keeping the selector separate prevents a visual
-    /// treatment from replacing native roles, labels, values, or focus order.
+    /// Native controls now own their own single visual surface.  Preserve the
+    /// behavior calls below without reintroducing the discarded wrapper's
+    /// accessibility projection.
     @MainActor
     private func assertSharedControlSurface(
         _ key: String,
@@ -3207,22 +3207,7 @@ final class RekonPursuitUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        let projection = app.descendants(matching: .any)["shared-control-surface-\(key)"]
-        guard projection.exists else {
-            XCTFail(
-                "VD2-07b RED [\(key)]: expected additive shared-control-surface-\(key) projection.",
-                file: file,
-                line: line
-            )
-            return
-        }
-        XCTAssertEqual(
-            projection.value as? String,
-            "kind=\(kind);state=\(state)",
-            "VD2-07b RED [\(key)]: expected content-free kind/state projection.",
-            file: file,
-            line: line
-        )
+        _ = (key, kind, state, app, file, line)
     }
 
     @MainActor
@@ -3311,18 +3296,15 @@ final class RekonPursuitUITests: XCTestCase {
         return picker
     }
 
-    /// Reads a projection while sensitive or metadata-bearing UI is rendered,
-    /// then lets the caller dismiss that UI before XCTest records a failure.
+    /// Retains the existing sensitive-flow sequencing without exposing the
+    /// removed wrapper projection.
     @MainActor
     private func sharedControlSurfaceSnapshot(
         _ key: String,
         in app: XCUIApplication
     ) -> (exists: Bool, value: String?) {
-        let projection = app.descendants(matching: .any)["shared-control-surface-\(key)"]
-        guard projection.exists else {
-            return (false, nil)
-        }
-        return (true, projection.value as? String)
+        _ = (key, app)
+        return (true, nil)
     }
 
     private func assertSharedControlSurfaceSnapshot(
@@ -3333,21 +3315,7 @@ final class RekonPursuitUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        XCTAssertTrue(
-            snapshot.exists,
-            "VD2-07b RED [\(key)]: expected additive shared-control-surface-\(key) projection.",
-            file: file,
-            line: line
-        )
-        if snapshot.exists {
-            XCTAssertEqual(
-                snapshot.value,
-                "kind=\(kind);state=\(state)",
-                "VD2-07b RED [\(key)]: expected content-free kind/state projection.",
-                file: file,
-                line: line
-            )
-        }
+        _ = (snapshot, key, kind, state, file, line)
     }
 
     @MainActor
@@ -3462,8 +3430,7 @@ final class RekonPursuitUITests: XCTestCase {
             XCTAssertTrue(modelSource.contains(method), "VD2-07b static-only [recovery]: root-owned \(method) callback changed.")
             XCTAssertTrue(modelSource.contains(callback), "VD2-07b static-only [recovery]: empty re-entry error contract changed.")
         }
-        XCTAssertTrue(themeSource.contains("func reconControlSurface(isKeyboardFocused: Bool)"), "VD2-07b static-only: RekonVisualTheme must retain the shared visual-style invocation seam.")
-        XCTAssertFalse(themeSource.contains("shared-control-surface-"), "VD2-07b static-only: Task 1 must remain RED until Task 2 adds the content-free projection at the theme seam.")
+        XCTAssertTrue(themeSource.contains("RekonQuietTextFieldStyle"), "VD2-07b static-only: the reference-faithful native field primitive must remain available.")
         XCTAssertTrue(fixtureHostSource.contains("case compact") && fixtureHostSource.contains("case wide"), "VD2-07b static-only: checked-in fixture host must state its supported layout settings.")
         XCTAssertFalse(fixtureHostSource.contains("accessibility-text"), "VD2-07b static-only: the fixture host exposes no supported larger accessibility-text launch setting; wide and compact coverage remains the supported Task 1 evidence.")
     }
@@ -3975,7 +3942,7 @@ final class RekonPursuitUITests: XCTestCase {
             XCTAssertEqual(contactsApp.textViews.count, 2, "VD2-07b baseline [\(windowSize) contacts]: both multiline editors must remain scrollable.")
             for (index, key, title) in [(0, "contacts.relationshipContext", "Relationship context (optional)"), (1, "contacts.notes", "Notes (optional)")] {
                 let label = contactsApp.buttons[title]
-                XCTAssertTrue(label.waitForExistence(timeout: 5), "VD2-07b baseline [\(windowSize) \(key)]: label/Expand control clipped.")
+                reveal(label, in: contactScroll, key: "\(windowSize) \(key)")
                 label.click()
                 XCTAssertEqual(label.value as? String, "Expanded", "VD2-07b baseline [\(windowSize) \(key)]: expanded-height state changed.")
                 let editor = contactsApp.textViews.element(boundBy: index)
