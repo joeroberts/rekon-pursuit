@@ -577,7 +577,7 @@
       "workType": "Acceptance",
       "status": "in_progress",
       "releaseCondition": "Requires VD2-03 through VD2-07 accepted; it must close the carried Settings compact-keyboard and AI text-semantic accessibility debts, the owner-approved VD2-06 Contacts accessibility/recovery automation debts, and the VD2-05 Board card-anchor accessibility-semantic debt. It also requires a new whole-app visual and accessibility acceptance pass that verifies visual language, persistence, failure states, and product-owner workflow acceptance.",
-      "latestTransition": "Released after VD2-07d merged on 2026-08-03. Final whole-app visual and accessibility acceptance is in progress.",
+      "latestTransition": "VD2-08 accessibility slice merged in PR #11 on 2026-08-03: compact Settings keyboard focus, truthful AI-unavailable semantics, Contacts keyboard/error semantics, and Board card-anchor semantics are complete. Final product-owner whole-app visual/workflow acceptance remains in progress.",
       "evidence": {
         "label": "Visual Design v2 plan",
         "href": "../../superpowers/plans/2026-07-28-visual-design-v2.md"
