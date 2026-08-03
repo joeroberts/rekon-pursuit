@@ -364,3 +364,18 @@
   accessibility/recovery automation debts remain open.
 - VD2-07 is eligible but neither released nor started. VD2-08 remains blocked
   pending VD2-03 through VD2-07 acceptance and retains those three debts.
+
+## VD2-07c backlog correction — 2026-08-02
+
+- The product owner clarified the authoritative `VD2-07c` scope: retain the
+  global Activity & AI sidebar entry; use Settings-style local navigation for
+  Activity ledger (default) and AI assistant; and avoid the generic narrow
+  full-width underline behavior.
+- The Local activity ledger uses a structured icon/label/timestamp row design
+  and an independently scrolling, window-resizing viewport no taller than a
+  50-row equivalent. Every retained entry remains scroll-accessible, and
+  search queries the entire retained ledger.
+- The existing AI filter form is replaced only by the exact approved coming-
+  soon/local-private placeholder. No AI form, configuration, execution,
+  provider, or network behavior is in scope. `VD2-07c` remains Backlog and
+  unreleased; `VD2-08` accessibility ownership is unchanged.

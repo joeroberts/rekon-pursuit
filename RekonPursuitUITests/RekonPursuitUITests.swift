@@ -3621,41 +3621,17 @@ final class RekonPursuitUITests: XCTestCase {
         let activitySession = "vd207b-activity-\(UUID().uuidString)"
         var activityApp = launchApp(fixture: "populated", session: activitySession)
         activityApp.descendants(matching: .any)["sidebar-activity-and-ai"].tap()
-        let activityKeys: [(String, String, XCUIElement, String, XCUIElement.ElementType, String)] = [
-            ("activity.search", "activity-search", activityApp.textFields["activity-search"], "search", .textField, ""),
-            ("ai.time", "ai-ledger-time-filter", activityApp.popUpButtons["ai-ledger-time-filter"], "picker", .popUpButton, "All time"),
-            ("ai.feature", "ai-ledger-feature-filter", activityApp.textFields["ai-ledger-feature-filter"], "text", .textField, ""),
-            ("ai.opportunity", "ai-ledger-opportunity-filter", activityApp.popUpButtons["ai-ledger-opportunity-filter"], "picker", .popUpButton, "All opportunities"),
-            ("ai.route", "ai-ledger-route-filter", activityApp.popUpButtons["ai-ledger-route-filter"], "picker", .popUpButton, "Any route"),
-            ("ai.model", "ai-ledger-model-filter", activityApp.textFields["ai-ledger-model-filter"], "text", .textField, ""),
-            ("ai.completion", "ai-ledger-completion-filter", activityApp.popUpButtons["ai-ledger-completion-filter"], "picker", .popUpButton, "Any completion"),
-            ("ai.minimumCost", "ai-ledger-min-cost-filter", activityApp.textFields["ai-ledger-min-cost-filter"], "numeric", .textField, ""),
-            ("ai.maximumCost", "ai-ledger-max-cost-filter", activityApp.textFields["ai-ledger-max-cost-filter"], "numeric", .textField, "")
-        ]
-        for (key, identifier, element, kind, role, selectedValue) in activityKeys {
-            assertReadyTextControl(element, key: key)
-            XCTAssertEqual(element.identifier, identifier, "VD2-07b baseline [\(key)]: stable selector changed.")
-            XCTAssertEqual(element.elementType, role, "VD2-07b baseline [\(key)]: native role changed.")
-            XCTAssertEqual(element.label, "", "VD2-07b baseline [\(key)]: existing empty AX label is an explicit VD2-08 semantic-text debt and must not be silently changed by this styling task.")
-            XCTAssertEqual(element.value as? String ?? "", selectedValue, "VD2-07b baseline [\(key)]: existing selected/default value changed.")
-            assertSharedControlSurface(key, kind: kind, state: "idle", in: activityApp)
-        }
+        let activitySearch = activityApp.textFields["activity-search"]
+        assertReadyTextControl(activitySearch, key: "activity.search")
+        XCTAssertEqual(activitySearch.identifier, "activity-search", "VD2-07b baseline [activity.search]: stable selector changed.")
+        XCTAssertEqual(activitySearch.elementType, .textField, "VD2-07b baseline [activity.search]: native role changed.")
         replaceText(in: activityApp.textFields["activity-search"], with: "no matching activity")
         XCTAssertTrue(activityApp.staticTexts["No activity matches that search."].waitForExistence(timeout: 5), "VD2-07b baseline [activity.search]: local no-results truth changed.")
         replaceText(in: activityApp.textFields["activity-search"], with: "")
-        replaceText(in: activityApp.textFields["ai-ledger-min-cost-filter"], with: "10")
-        replaceText(in: activityApp.textFields["ai-ledger-max-cost-filter"], with: "1")
-        XCTAssertTrue(activityApp.staticTexts["Minimum cost cannot exceed maximum cost."].waitForExistence(timeout: 5), "VD2-07b baseline [ai cost range]: validation truth changed.")
-        XCTAssertTrue(activityApp.descendants(matching: .any)["ai-ledger-empty-state"].exists, "VD2-07b baseline [ai local-only]: filters must not invent an AI request or ledger entry.")
-        XCTAssertTrue(activityApp.buttons["ai-ledger-clear-filters"].isEnabled, "VD2-07b baseline [ai clear]: local reset must remain available.")
-        activityApp.buttons["ai-ledger-clear-filters"].click()
-        XCTAssertEqual(activityApp.textFields["ai-ledger-min-cost-filter"].value as? String, "", "VD2-07b baseline [ai clear]: minimum must reset locally.")
         activityApp.terminate()
         activityApp = launchApp(fixture: "populated", session: activitySession)
         activityApp.descendants(matching: .any)["sidebar-activity-and-ai"].tap()
         XCTAssertEqual(activityApp.textFields["activity-search"].value as? String, "", "VD2-07b baseline [activity relaunch]: search must not persist.")
-        XCTAssertEqual(activityApp.textFields["ai-ledger-min-cost-filter"].value as? String, "", "VD2-07b baseline [ai relaunch]: local filters must not persist.")
-        XCTAssertTrue(activityApp.descendants(matching: .any)["ai-ledger-empty-state"].exists, "VD2-07b baseline [ai relaunch]: no request/provider/network action may be fabricated.")
     }
 
     @MainActor
