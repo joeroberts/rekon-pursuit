@@ -238,7 +238,7 @@ struct PipelineView: View {
     private var responsiveTable: some View {
         GeometryReader { geometry in
             if geometry.size.width < PipelineTableLayout.desktopInspectorMinimumWidth {
-                ZStack(alignment: .trailing) {
+                ZStack(alignment: .topTrailing) {
                     table(isCompact: true)
                     if let selectedOpportunity {
                         PipelineInspector(opportunity: selectedOpportunity, close: { selectedTableID = nil }) {
@@ -258,12 +258,14 @@ struct PipelineView: View {
                     }
                 }
                 .animation(reduceMotion ? nil : .default, value: selectedTableID)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 HStack(alignment: .top, spacing: 16) {
                     table(isCompact: false)
                     inspector
                         .frame(width: PipelineTableLayout.inspectorWidth)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
     }
