@@ -349,6 +349,9 @@ struct ContentView: View {
                     horizontalLane: $pipelineHorizontalLane,
                     open: openOpportunity,
                     delete: { pendingDeletion = $0 },
+                    changeStage: { opportunity, target in
+                        model.changeStage(opportunity, to: target)
+                    },
                     addOpportunity: beginPipelineAddOpportunity,
                     importCSV: {
                         addOpportunityOrigin = nil

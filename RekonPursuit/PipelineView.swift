@@ -93,6 +93,7 @@ struct PipelineView: View {
     @Binding var horizontalLane: PipelineBoardLane?
     let open: (Opportunity) -> Void
     let delete: (Opportunity) -> Void
+    let changeStage: (Opportunity, PipelineStage) -> Void
     let addOpportunity: () -> Void
     let importCSV: () -> Void
     @State private var selectedTableID: String?
@@ -248,6 +249,10 @@ struct PipelineView: View {
                         PipelineInspector(opportunity: selectedOpportunity, close: { selectedTableID = nil }) {
                             anchorID = selectedOpportunity.id
                             open(selectedOpportunity)
+                        } changeStage: { target in
+                            changeStage(selectedOpportunity, target)
+                        } delete: {
+                            delete(selectedOpportunity)
                         }
                         .accessibilityElement(children: .contain)
                         .accessibilityIdentifier("pipeline-inspector-drawer")
@@ -293,10 +298,6 @@ struct PipelineView: View {
                         .accessibilityIdentifier("pipeline-table-row-\(opportunity.id)")
                         .accessibilityLabel("\(opportunity.title), \(opportunity.company), \(opportunity.stage.rawValue)")
                         .accessibilityValue(selectedTableID == opportunity.id ? "Selected" : "Not selected")
-                        .contextMenu {
-                            Button("Delete", role: .destructive) { delete(opportunity) }
-                                .accessibilityIdentifier("pipeline-delete-\(opportunity.id)")
-                        }
                     }
                 }
                 .listStyle(.plain)
@@ -328,6 +329,10 @@ struct PipelineView: View {
             PipelineInspector(opportunity: selectedOpportunity, close: { selectedTableID = nil }) {
                 anchorID = selectedOpportunity.id
                 open(selectedOpportunity)
+            } changeStage: { target in
+                changeStage(selectedOpportunity, target)
+            } delete: {
+                delete(selectedOpportunity)
             }
         } else {
             PipelineInspectorEmptyState()
@@ -539,6 +544,8 @@ private struct PipelineInspector: View {
     let opportunity: Opportunity
     let close: (() -> Void)?
     let openDetails: () -> Void
+    let changeStage: (PipelineStage) -> Void
+    let delete: () -> Void
 
     private var locationSummary: String? {
         let parts = [opportunity.location, opportunity.workArrangement == .notSpecified ? nil : opportunity.workArrangement.rawValue]
@@ -552,15 +559,42 @@ private struct PipelineInspector: View {
                 PipelineEmployerMark(company: opportunity.company, size: 50)
                     .accessibilityIdentifier("pipeline-inspector-employer-mark-\(opportunity.id)")
                 Spacer()
-                if let close {
-                    Button(action: close) {
-                        Image(systemName: "xmark")
-                            .font(.body.weight(.medium))
+                VStack(alignment: .trailing, spacing: 8) {
+                    if let close {
+                        Button(action: close) {
+                            Image(systemName: "xmark")
+                                .font(.body.weight(.medium))
+                                .frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("pipeline-inspector-close")
+                        .accessibilityLabel("Close selection details")
+                    }
+                    Menu {
+                        Menu("Move to stage…") {
+                            ForEach(PipelineStage.allCases, id: \.self) { target in
+                                Button(target.rawValue) {
+                                    changeStage(target)
+                                }
+                                .accessibilityIdentifier("pipeline-inspector-move-stage-\(target.rawValue.lowercased())-\(opportunity.id)")
+                                .accessibilityLabel("Move \(opportunity.title) to \(target.rawValue)")
+                            }
+                        }
+                        .accessibilityIdentifier("pipeline-inspector-move-stage-menu-\(opportunity.id)")
+
+                        Divider()
+
+                        Button("Delete", role: .destructive, action: delete)
+                            .accessibilityIdentifier("pipeline-inspector-delete-\(opportunity.id)")
+                            .accessibilityLabel("Delete \(opportunity.title)")
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.body.weight(.semibold))
                             .frame(width: 28, height: 28)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("pipeline-inspector-close")
-                    .accessibilityLabel("Close selection details")
+                    .menuStyle(.borderlessButton)
+                    .accessibilityIdentifier("pipeline-inspector-actions-\(opportunity.id)")
+                    .accessibilityLabel("Opportunity actions")
                 }
             }
             VStack(alignment: .leading, spacing: 6) {
