@@ -569,6 +569,28 @@ private struct PipelineInspector: View {
                 value: opportunity.nextAction.isEmpty ? "No next action is recorded." : opportunity.nextAction,
                 accessibilityIdentifier: "pipeline-inspector-fact-next-action-\(opportunity.id)"
             )
+            if let dueAt = opportunity.dueAt {
+                PipelineInspectorFact(
+                    title: "Due date",
+                    value: dueAt.formatted(date: .abbreviated, time: .omitted)
+                )
+            }
+            PipelineInspectorFact(
+                title: "Current response",
+                value: opportunity.responseState.rawValue
+            )
+            if let compensation = opportunity.pipelineCompensationSummary {
+                PipelineInspectorFact(
+                    title: "Compensation",
+                    value: compensation
+                )
+            }
+            if let stageChangedAt = opportunity.stageChangedAt {
+                PipelineInspectorFact(
+                    title: "Stage changed",
+                    value: stageChangedAt.formatted(date: .abbreviated, time: .omitted)
+                )
+            }
             Spacer(minLength: 0)
             Button(action: openDetails) {
                 HStack {
@@ -612,6 +634,18 @@ extension Opportunity {
         let parts = [location, workArrangement == .notSpecified ? nil : workArrangement.rawValue]
             .compactMap { $0?.isEmpty == false ? $0 : nil }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    var pipelineCompensationSummary: String? {
+        if compensationMinimum != nil || compensationMaximum != nil {
+            let formatter = FloatingPointFormatStyle<Double>.Currency(code: "USD").precision(.fractionLength(0))
+            let values = [compensationMinimum.map { $0.formatted(formatter) }, compensationMaximum.map { $0.formatted(formatter) }]
+                .compactMap { $0 }
+            return values.joined(separator: " – ") + (compensationPayPeriod.map { " / \($0.rawValue.lowercased())" } ?? "")
+        }
+
+        let value = compensation?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value?.isEmpty == false ? value : nil
     }
 }
 
