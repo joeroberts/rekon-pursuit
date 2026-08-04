@@ -129,15 +129,15 @@ final class RekonPursuitTests: XCTestCase {
 
     func testPipelineInspectorStageMoveFeedbackKeepsTheSelectedOpportunityAndUsesCanonicalResults() {
         let opportunityID = "00000000-0000-4000-8000-000000000205"
-        let cases: [(StageMoveResult, String, PipelineStage)] = [
-            (.persisted(opportunityID: opportunityID, from: .saved, to: .screening), "Moved to Screening.", .screening),
-            (.noOp(opportunityID: opportunityID, stage: .saved), "Already in Saved.", .saved),
-            (.reconciliationBlocked(opportunityID: opportunityID, target: .closed), "Confirm reconciliation before moving to Closed.", .saved),
-            (.unavailable(opportunityID: opportunityID), "Opportunity is no longer available locally.", .saved),
-            (.failed(opportunityID: opportunityID), "The local stage was not changed.", .saved)
+        let cases: [(StageMoveResult, String)] = [
+            (.persisted(opportunityID: opportunityID, from: .saved, to: .screening), "Moved to Screening."),
+            (.noOp(opportunityID: opportunityID, stage: .saved), "Already in Saved."),
+            (.reconciliationBlocked(opportunityID: opportunityID, target: .closed), "Confirm reconciliation before moving to Closed."),
+            (.unavailable(opportunityID: opportunityID), "Opportunity is no longer available locally."),
+            (.failed(opportunityID: opportunityID), "The local stage was not changed.")
         ]
 
-        for (result, expectedOutcome, expectedStage) in cases {
+        for (result, expectedOutcome) in cases {
             let feedback = PipelineInspectorStageMoveFeedback.make(
                 for: result,
                 selectedOpportunityID: opportunityID,
@@ -146,7 +146,6 @@ final class RekonPursuitTests: XCTestCase {
 
             XCTAssertEqual(feedback.selectedOpportunityID, opportunityID)
             XCTAssertEqual(feedback.outcomeText, expectedOutcome)
-            XCTAssertEqual(feedback.presentedStage, expectedStage)
         }
     }
 

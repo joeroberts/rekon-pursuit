@@ -87,7 +87,6 @@ nonisolated enum AddOpportunityOrigin: Equatable {
 nonisolated struct PipelineInspectorStageMoveFeedback: Equatable {
     let selectedOpportunityID: String
     let outcomeText: String
-    let presentedStage: PipelineStage
 
     static func make(
         for result: StageMoveResult,
@@ -100,8 +99,7 @@ nonisolated struct PipelineInspectorStageMoveFeedback: Equatable {
         )
         return Self(
             selectedOpportunityID: selectedOpportunityID,
-            outcomeText: presentation.outcomeText,
-            presentedStage: presentation.presentedStage
+            outcomeText: presentation.outcomeText
         )
     }
 }
