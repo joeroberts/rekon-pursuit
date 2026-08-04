@@ -104,6 +104,53 @@ nonisolated struct PipelineInspectorStageMoveFeedback: Equatable {
     }
 }
 
+/// Resolves where a truthful stage-move outcome remains visible after the
+/// Table projection updates. A persisted move that filters the selected row
+/// out of Table has no inspector in which to retain local feedback, so the
+/// same canonical outcome is announced at the Pipeline level instead.
+nonisolated struct PipelineTableInspectorStageMovePresentation: Equatable {
+    let inspectorFeedback: PipelineInspectorStageMoveFeedback?
+    let tableNotice: String?
+
+    static func make(
+        for result: StageMoveResult,
+        selectedOpportunityID: String,
+        sourceStage: PipelineStage,
+        visibleOpportunityIDs: Set<String>
+    ) -> Self {
+        let resultOpportunityID: String
+        let isPersisted: Bool
+
+        switch result {
+        case let .persisted(opportunityID, _, _):
+            resultOpportunityID = opportunityID
+            isPersisted = true
+        case let .noOp(opportunityID, _),
+             let .reconciliationBlocked(opportunityID, _),
+             let .unavailable(opportunityID),
+             let .failed(opportunityID):
+            resultOpportunityID = opportunityID
+            isPersisted = false
+        }
+
+        guard resultOpportunityID == selectedOpportunityID else {
+            return Self(inspectorFeedback: nil, tableNotice: nil)
+        }
+
+        let inspectorFeedback = PipelineInspectorStageMoveFeedback.make(
+            for: result,
+            selectedOpportunityID: selectedOpportunityID,
+            sourceStage: sourceStage
+        )
+
+        guard isPersisted, !visibleOpportunityIDs.contains(selectedOpportunityID) else {
+            return Self(inspectorFeedback: inspectorFeedback, tableNotice: nil)
+        }
+
+        return Self(inspectorFeedback: nil, tableNotice: inspectorFeedback.outcomeText)
+    }
+}
+
 /// Pipeline owns only ephemeral presentation state. ContentView retains the
 /// workspace, canonical route, destructive dialog, and return-anchor owners.
 struct PipelineView: View {
@@ -121,6 +168,7 @@ struct PipelineView: View {
     let importCSV: () -> Void
     @State private var selectedTableID: String?
     @State private var inspectorStageMoveFeedback: PipelineInspectorStageMoveFeedback?
+    @State private var tableStageMoveNotice: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var visibleOpportunities: [Opportunity] {
@@ -135,6 +183,7 @@ struct PipelineView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             pipelineToolbar
+            pipelineStageMoveNotice
             if visibleOpportunities.isEmpty {
                 FlexibleCenteredContent {
                     if model.opportunities.isEmpty {
@@ -172,6 +221,21 @@ struct PipelineView: View {
         .onChange(of: selectedTableID) { _, selectedID in
             guard inspectorStageMoveFeedback?.selectedOpportunityID != selectedID else { return }
             inspectorStageMoveFeedback = nil
+            if selectedID != nil {
+                tableStageMoveNotice = nil
+            }
+        }
+    }
+
+    /// The stable Pipeline-level live-region identifier is
+    /// `pipeline-stage-move-notice`.
+    @ViewBuilder private var pipelineStageMoveNotice: some View {
+        if let tableStageMoveNotice {
+            Text(tableStageMoveNotice)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(RekonTheme.primaryText)
+                .accessibilityIdentifier("pipeline-stage-move-notice")
+                .accessibilityAddTraits(.updatesFrequently)
         }
     }
 
@@ -382,11 +446,14 @@ struct PipelineView: View {
 
     private func recordInspectorStageMove(for opportunity: Opportunity, to target: PipelineStage) {
         let result = changeStage(opportunity, target)
-        inspectorStageMoveFeedback = PipelineInspectorStageMoveFeedback.make(
+        let presentation = PipelineTableInspectorStageMovePresentation.make(
             for: result,
             selectedOpportunityID: opportunity.id,
-            sourceStage: opportunity.stage
+            sourceStage: opportunity.stage,
+            visibleOpportunityIDs: Set(visibleOpportunities.map(\.id))
         )
+        inspectorStageMoveFeedback = presentation.inspectorFeedback
+        tableStageMoveNotice = presentation.tableNotice
     }
 
 }

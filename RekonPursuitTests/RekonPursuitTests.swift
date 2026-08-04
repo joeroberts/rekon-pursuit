@@ -149,6 +149,58 @@ final class RekonPursuitTests: XCTestCase {
         }
     }
 
+    func testPipelineTableInspectorStageMovePresentationEscalatesOnlyPersistedDeparture() {
+        let selectedOpportunityID = "00000000-0000-4000-8000-000000000205"
+        let anotherOpportunityID = "00000000-0000-4000-8000-000000000206"
+
+        let filteredDeparture = PipelineTableInspectorStageMovePresentation.make(
+            for: .persisted(opportunityID: selectedOpportunityID, from: .saved, to: .closed),
+            selectedOpportunityID: selectedOpportunityID,
+            sourceStage: .saved,
+            visibleOpportunityIDs: [anotherOpportunityID]
+        )
+        XCTAssertNil(filteredDeparture.inspectorFeedback)
+        XCTAssertEqual(filteredDeparture.tableNotice, "Moved to Closed.")
+
+        let visibleMove = PipelineTableInspectorStageMovePresentation.make(
+            for: .persisted(opportunityID: selectedOpportunityID, from: .saved, to: .screening),
+            selectedOpportunityID: selectedOpportunityID,
+            sourceStage: .saved,
+            visibleOpportunityIDs: [selectedOpportunityID]
+        )
+        XCTAssertEqual(visibleMove.inspectorFeedback?.selectedOpportunityID, selectedOpportunityID)
+        XCTAssertEqual(visibleMove.inspectorFeedback?.outcomeText, "Moved to Screening.")
+        XCTAssertNil(visibleMove.tableNotice)
+
+        let mismatchedResult = PipelineTableInspectorStageMovePresentation.make(
+            for: .persisted(opportunityID: anotherOpportunityID, from: .saved, to: .closed),
+            selectedOpportunityID: selectedOpportunityID,
+            sourceStage: .saved,
+            visibleOpportunityIDs: []
+        )
+        XCTAssertNil(mismatchedResult.inspectorFeedback)
+        XCTAssertNil(mismatchedResult.tableNotice)
+
+        let nonPersistedCases: [(StageMoveResult, String)] = [
+            (.noOp(opportunityID: selectedOpportunityID, stage: .saved), "Already in Saved."),
+            (.reconciliationBlocked(opportunityID: selectedOpportunityID, target: .closed), "Confirm reconciliation before moving to Closed."),
+            (.unavailable(opportunityID: selectedOpportunityID), "Opportunity is no longer available locally."),
+            (.failed(opportunityID: selectedOpportunityID), "The local stage was not changed.")
+        ]
+
+        for (result, expectedOutcome) in nonPersistedCases {
+            let presentation = PipelineTableInspectorStageMovePresentation.make(
+                for: result,
+                selectedOpportunityID: selectedOpportunityID,
+                sourceStage: .saved,
+                visibleOpportunityIDs: []
+            )
+            XCTAssertEqual(presentation.inspectorFeedback?.selectedOpportunityID, selectedOpportunityID)
+            XCTAssertEqual(presentation.inspectorFeedback?.outcomeText, expectedOutcome)
+            XCTAssertNil(presentation.tableNotice)
+        }
+    }
+
     @MainActor
     func testPersistedResultUsesExactStageChipAndBoardLane() {
         let deliveryGate = PipelineStageMoveDeliveryGate()
