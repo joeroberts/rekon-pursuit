@@ -481,10 +481,10 @@ struct PipelineEmployerMark: View {
 
 /// The desktop tracks deliberately match the information density of the
 /// approved mock. We never squeeze this five-column layout beside an
-/// inspector: below the documented available width, Pipeline switches to its
+/// inspector: below the measured 1,108pt minimum, Pipeline switches to its
 /// compact dense Table and existing in-place drawer instead.
 private enum PipelineTableLayout {
-    static let desktopInspectorMinimumWidth: CGFloat = 1220
+    static let desktopInspectorMinimumWidth: CGFloat = 1110
     static let inspectorWidth: CGFloat = 330
     static let roleWidth: CGFloat = 180
     static let employerWidth: CGFloat = 140
