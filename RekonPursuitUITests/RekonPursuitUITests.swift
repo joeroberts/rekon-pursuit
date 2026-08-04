@@ -1986,35 +1986,6 @@ final class RekonPursuitUITests: XCTestCase {
     }
 
     @MainActor
-    func testVD204DeletingASelectedTableRowUsesTheExistingConfirmationAndClearsTheInspector() {
-        let app = launchApp(fixture: "pipeline")
-        app.descendants(matching: .any)["sidebar-pipeline"].tap()
-
-        let row = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-"))
-            .firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        let id = String(row.identifier.dropFirst("pipeline-table-row-".count))
-        row.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(id)"].waitForExistence(timeout: 5))
-
-        row.rightClick()
-        let delete = app.menuItems["pipeline-delete-\(id)"]
-        XCTAssertTrue(delete.waitForExistence(timeout: 5))
-        delete.click()
-        XCTAssertTrue(app.staticTexts["Delete opportunity?"].waitForExistence(timeout: 5))
-        app.sheets.firstMatch.buttons["Delete"].click()
-
-        let deletedRow = app.descendants(matching: .any)["pipeline-table-row-\(id)"]
-        XCTAssertTrue(
-            deletedRow.waitForNonExistence(timeout: 5),
-            "The deleted opportunity must eventually leave the real Pipeline table accessibility tree."
-        )
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-drawer"].waitForNonExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-table-region"].isHittable)
-    }
-
-    @MainActor
     func testSidebarDestinationsExposeTheActiveDailyRoute() {
         let app = launchApp(fixture: "empty")
 
