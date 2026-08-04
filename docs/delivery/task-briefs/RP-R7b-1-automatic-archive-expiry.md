@@ -2,7 +2,7 @@
 
 ## User-visible outcome
 
-At the next successful workspace-open or inactive-to-active app opportunity after a workspace-managed archive's fixed 30-day expiry, Rekon Pursuit safely removes it only when it still exactly matches the verified, catalogued archive. External/user-selected archives are retained and marked for manual removal; Settings reflects the durable redacted outcome and no active workspace data is affected.
+At the next successful workspace-open or inactive-to-active app opportunity after a fixed 30-day expiry, Rekon Pursuit safely removes an archive only when both catalogue predicates hold: `storage_class == "managed"` and `managed_relative_path` is the generated canonical `<lowercase archive UUID>.rekonarchive` leaf beneath the workspace-private `portable-archives` root. It must still exactly match the verified catalogue. Every other row is retained: pre-v28 migrated rows are `external` (not a third class), and external/user-selected, missing-locator, or noncanonical-locator rows are never destructive targets. Expiry never resolves an external bookmark, opens, renames, or deletes those rows; it records the durable manual-removal-required or blocked outcome. Settings reflects the durable redacted outcome and no active workspace data is affected.
 
 ## Release boundary
 
@@ -23,4 +23,4 @@ This is R7b-1 only. It does not purge deleted records from retained archives, re
 
 ## Material risk and handling
 
-An expired managed archive is a destructive target. The worker must use only a validated workspace-relative locator, verify a regular no-follow file and public v1 binding, preserve durable prepared/quarantined state across non-success paths, and retain the catalogue on every non-success path. External archives are never destructive targets. Activity records categories only, never paths, bookmark bytes, payloads, or recovery material.
+Only an archive satisfying both managed predicates is a destructive target. The worker must use the canonical workspace-relative locator beneath `portable-archives`, verify a regular no-follow file and public v1 binding, preserve the durable `expired_prepared` → `expired_quarantined` sequence across non-success paths, and retain the catalogue on every non-success path. All other rows are never destructive targets: no external bookmark resolution, open, rename, or deletion is permitted. Activity records categories only, never paths, bookmark bytes, payloads, or recovery material.
