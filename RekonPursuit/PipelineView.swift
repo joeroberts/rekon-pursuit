@@ -344,7 +344,7 @@ private struct PipelineTableRow: View {
         HStack(alignment: .center, spacing: isCompact ? 12 : PipelineTableLayout.columnSpacing) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(opportunity.title)
-                    .font(.body.weight(.semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .lineLimit(isCompact ? 1 : 2)
                 if let locality = opportunity.locationSummary {
                     HStack(spacing: 6) {
@@ -353,7 +353,7 @@ private struct PipelineTableRow: View {
                             .frame(width: 5, height: 5)
                         Text(locality)
                     }
-                        .font(.caption)
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(RekonTheme.secondaryText)
                         .lineLimit(1)
                         .accessibilityIdentifier("pipeline-table-locality-\(opportunity.id)")
@@ -365,7 +365,7 @@ private struct PipelineTableRow: View {
                 HStack(spacing: 8) {
                     PipelineEmployerMark(company: opportunity.company)
                     Text(opportunity.company)
-                        .font(.body)
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(RekonTheme.primaryText)
                         .lineLimit(2)
                 }
@@ -379,15 +379,15 @@ private struct PipelineTableRow: View {
                 VStack(alignment: .leading, spacing: 5) {
                     if opportunity.nextAction.isEmpty {
                         Text("—")
-                            .font(.subheadline)
+                            .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(RekonTheme.secondaryText)
                     } else {
                         Text(opportunity.nextAction)
-                            .font(.subheadline.weight(.medium))
+                            .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(RekonTheme.primaryText)
                             .lineLimit(1)
                         Text(dueDateText)
-                            .font(.subheadline)
+                            .font(.system(size: 14))
                             .foregroundStyle(RekonTheme.secondaryText)
                             .lineLimit(1)
                     }
@@ -396,12 +396,12 @@ private struct PipelineTableRow: View {
                 HStack(spacing: 7) {
                     if opportunity.dueAt != nil {
                         Image(systemName: "calendar")
-                            .font(.subheadline.weight(.medium))
+                            .font(.system(size: 14, weight: .medium))
                     }
                     Text(dueDateText)
                         .lineLimit(1)
                 }
-                    .font(.subheadline)
+                    .font(.system(size: 14))
                     .foregroundStyle(RekonTheme.secondaryText)
                     .frame(width: PipelineTableLayout.dueDateWidth, alignment: .leading)
             }
@@ -461,7 +461,7 @@ private struct PipelineTableHeader: View {
                     .accessibilityIdentifier("pipeline-table-header-due-date")
             }
         }
-        .font(isCompact ? .subheadline.weight(.medium) : .body.weight(.medium))
+        .font(isCompact ? .subheadline.weight(.medium) : .system(size: 15, weight: .medium))
         .foregroundStyle(RekonTheme.secondaryText)
         .padding(.horizontal, isCompact ? 14 : PipelineTableLayout.horizontalPadding)
         .padding(.vertical, isCompact ? 15 : 18)
@@ -512,7 +512,7 @@ struct PipelineStagePill: View {
 
     var body: some View {
         Text(stage.rawValue)
-            .font(.caption2.weight(.medium))
+            .font(.system(size: 13, weight: .medium))
             .foregroundStyle(color)
             .lineLimit(1)
             .padding(.horizontal, 9)
