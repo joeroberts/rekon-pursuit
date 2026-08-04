@@ -681,6 +681,30 @@ struct PipelinePrimaryButtonStyle: ButtonStyle {
 /// their visual rendering. A SwiftUI surface behind a standard AppKit control
 /// cannot remove the control's opaque gray bezel, which is why these are not
 /// general-purpose styles and are only used by Pipeline.
+nonisolated enum PipelineNavySegmentedContentTone: Equatable {
+    case accent
+    case primary
+    case muted
+
+    static func resolve(isSelected: Bool, isEnabled: Bool) -> Self {
+        guard isEnabled else { return .muted }
+        return isSelected ? .accent : .primary
+    }
+}
+
+private enum PipelineNavySegmentedContentColor {
+    static func resolve(_ tone: PipelineNavySegmentedContentTone) -> NSColor {
+        switch tone {
+        case .accent:
+            NSColor(RekonTheme.accent)
+        case .primary:
+            NSColor(RekonTheme.primaryText)
+        case .muted:
+            NSColor(RekonTheme.secondaryText)
+        }
+    }
+}
+
 private enum PipelineNativeControlDrawing {
     static let cornerRadius: CGFloat = RekonTheme.Radius.control
 
@@ -903,16 +927,23 @@ final class PipelineNavySegmentedControl: NSSegmentedControl {
 
             let title = label(forSegment: index) ?? ""
             let symbolName = index == 0 ? "list.bullet" : "square.grid.2x2"
+            let contentTone = PipelineNavySegmentedContentTone.resolve(
+                isSelected: isSelected,
+                isEnabled: isEnabled
+            )
+            let contentColor = PipelineNavySegmentedContentColor.resolve(contentTone)
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: 15, weight: isSelected ? .semibold : .medium),
-                .foregroundColor: PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
+                .foregroundColor: contentColor
             ]
             let titleSize = title.size(withAttributes: attributes)
             let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
                 .withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+            symbol?.isTemplate = true
             let symbolSize = symbol?.size ?? .zero
             let contentWidth = symbolSize.width + 6 + titleSize.width
             let contentX = segmentRect.midX - contentWidth / 2
+            contentColor.set()
             symbol?.draw(
                 in: NSRect(
                     x: contentX,
@@ -1112,7 +1143,7 @@ struct PipelineNavyViewModeControl: NSViewRepresentable {
         segmented.target = context.coordinator
         segmented.action = #selector(Coordinator.selectMode(_:))
         segmented.setAccessibilityIdentifier(accessibilityIdentifier)
-        segmented.setAccessibilityLabel("\(accessibilityLabel), \(accessibilityLabel)")
+        segmented.setAccessibilityLabel(accessibilityLabel)
         return segmented
     }
 
@@ -1122,7 +1153,7 @@ struct PipelineNavyViewModeControl: NSViewRepresentable {
             segmented.selectedSegment = selection
         }
         segmented.setAccessibilityIdentifier(accessibilityIdentifier)
-        segmented.setAccessibilityLabel("\(accessibilityLabel), \(accessibilityLabel)")
+        segmented.setAccessibilityLabel(accessibilityLabel)
         segmented.needsDisplay = true
     }
 

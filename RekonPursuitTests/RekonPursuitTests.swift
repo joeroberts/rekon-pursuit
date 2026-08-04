@@ -11,6 +11,25 @@ final class RekonPursuitTests: XCTestCase {
         XCTAssertFalse(PipelineInspectorPresentationPolicy.usesCompactTable(forAvailableWidth: 1220))
     }
 
+    func testPipelineNavySegmentedContentToneMapsSelectionAndAvailability() {
+        XCTAssertEqual(
+            PipelineNavySegmentedContentTone.resolve(isSelected: true, isEnabled: true),
+            .accent
+        )
+        XCTAssertEqual(
+            PipelineNavySegmentedContentTone.resolve(isSelected: false, isEnabled: true),
+            .primary
+        )
+        XCTAssertEqual(
+            PipelineNavySegmentedContentTone.resolve(isSelected: true, isEnabled: false),
+            .muted
+        )
+        XCTAssertEqual(
+            PipelineNavySegmentedContentTone.resolve(isSelected: false, isEnabled: false),
+            .muted
+        )
+    }
+
     @MainActor
     func testPipelineNativeTableSelectionOwnerRestoresOnlyTheTableItOwnsAcrossReplacement() {
         let initialTable = NSTableView()
@@ -80,7 +99,7 @@ final class RekonPursuitTests: XCTestCase {
         XCTAssertEqual(segmented.frame.width, 216, accuracy: 0.5)
         XCTAssertEqual(segmented.frame.height, 44, accuracy: 0.5)
         XCTAssertEqual(segmented.accessibilityIdentifier(), "pipeline-view-mode")
-        XCTAssertEqual(segmented.accessibilityLabel(), "View, View")
+        XCTAssertEqual(segmented.accessibilityLabel(), "View")
         XCTAssertEqual(descendants(of: host, as: NSButton.self).count, 0)
 
         segmented.selectedSegment = 1

@@ -1616,7 +1616,7 @@ final class RekonPursuitUITests: XCTestCase {
         let compactViewMode = compactApp.descendants(matching: .any)["pipeline-view-mode"]
         XCTAssertTrue(compactViewMode.waitForExistence(timeout: 5))
         XCTAssertTrue(compactViewMode.isHittable)
-        XCTAssertEqual(compactViewMode.label, "View, View")
+        XCTAssertEqual(compactViewMode.label, "View")
         XCTAssertFalse(compactApp.staticTexts["pipeline-view-label"].exists)
         let compactScreenshot = XCTAttachment(screenshot: compactApp.screenshot())
         compactScreenshot.name = "VD204 compact Pipeline toolbar"
@@ -1716,7 +1716,7 @@ final class RekonPursuitUITests: XCTestCase {
 
         let viewMode = app.descendants(matching: .any)["pipeline-view-mode"]
         XCTAssertTrue(viewMode.exists)
-        XCTAssertEqual(viewMode.label, "View, View")
+        XCTAssertEqual(viewMode.label, "View")
         XCTAssertTrue(viewMode.isHittable)
         XCTAssertTrue(app.descendants(matching: .any)["pipeline-table-region"].waitForExistence(timeout: 5))
         viewMode.radioButtons["Board"].click()
@@ -1805,7 +1805,7 @@ final class RekonPursuitUITests: XCTestCase {
             let viewMode = app.descendants(matching: .any)["pipeline-view-mode"]
             XCTAssertTrue(viewMode.waitForExistence(timeout: 5))
             XCTAssertEqual(viewMode.elementType, .radioGroup)
-            XCTAssertEqual(viewMode.label, "View, View")
+            XCTAssertEqual(viewMode.label, "View")
             XCTAssertTrue(viewMode.isHittable)
             XCTAssertTrue(viewMode.radioButtons["Board"].isHittable)
 
@@ -1846,7 +1846,7 @@ final class RekonPursuitUITests: XCTestCase {
             XCTAssertTrue(includeClosed.isHittable)
             XCTAssertTrue(viewMode.exists)
             XCTAssertEqual(viewMode.elementType, .radioGroup)
-            XCTAssertEqual(viewMode.label, "View, View")
+            XCTAssertEqual(viewMode.label, "View")
             XCTAssertTrue(viewMode.isHittable)
             XCTAssertTrue(viewMode.radioButtons["Table"].isHittable)
             XCTAssertTrue(viewMode.radioButtons["Board"].isHittable)
