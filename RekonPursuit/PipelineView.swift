@@ -533,13 +533,9 @@ private struct PipelineInspector: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack {
-                Text("Selection summary")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(RekonTheme.secondaryText)
-                    .accessibilityIdentifier("pipeline-inspector-\(opportunity.id)")
-                Spacer()
-                if let close {
+            if let close {
+                HStack {
+                    Spacer()
                     Button(action: close) {
                         Image(systemName: "xmark")
                     }
@@ -583,10 +579,6 @@ private struct PipelineInspector: View {
                 title: "Next action",
                 value: opportunity.nextAction.isEmpty ? "No next action is recorded." : opportunity.nextAction,
                 accessibilityIdentifier: "pipeline-inspector-fact-next-action-\(opportunity.id)"
-            )
-            PipelineInspectorFact(
-                title: "Due date",
-                value: opportunity.dueAt.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "No due date"
             )
             Spacer(minLength: 0)
             Button(action: openDetails) {
