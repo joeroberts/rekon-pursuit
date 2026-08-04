@@ -707,55 +707,6 @@ private enum PipelineNativeControlDrawing {
     }
 }
 
-private class PipelineNativeControl: NSControl {
-    var isPointerHovering = false { didSet { needsDisplay = true } }
-    var isPressed = false { didSet { needsDisplay = true } }
-
-    override var isEnabled: Bool { didSet { needsDisplay = true } }
-
-    private var trackingArea: NSTrackingArea?
-
-    var interactionState: PipelineNavySurfaceInteractionState {
-        PipelineNavySurfacePresentation.interactionState(
-            isEnabled: isEnabled,
-            isPointerHovering: isPointerHovering,
-            isKeyboardFocused: window?.firstResponder === self,
-            isPressed: isPressed
-        )
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingArea { removeTrackingArea(trackingArea) }
-        let trackingArea = NSTrackingArea(
-            rect: bounds,
-            options: [.activeInKeyWindow, .mouseEnteredAndExited, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(trackingArea)
-        self.trackingArea = trackingArea
-    }
-
-    override func mouseEntered(with event: NSEvent) { isPointerHovering = true }
-    override func mouseExited(with event: NSEvent) { isPointerHovering = false }
-    override func becomeFirstResponder() -> Bool {
-        let accepted = super.becomeFirstResponder()
-        if accepted { needsDisplay = true }
-        return accepted
-    }
-    override func resignFirstResponder() -> Bool {
-        let accepted = super.resignFirstResponder()
-        if accepted { needsDisplay = true }
-        return accepted
-    }
-    override func mouseDown(with event: NSEvent) {
-        isPressed = true
-        super.mouseDown(with: event)
-        isPressed = false
-    }
-}
-
 final class PipelineNavyPopupButton: NSPopUpButton {
     var isPointerHovering = false { didSet { needsDisplay = true } }
     var isPressed = false { didSet { needsDisplay = true } }
@@ -870,81 +821,6 @@ final class PipelineNavyCheckbox: NSButton {
         ]
         let titleSize = title.size(withAttributes: attributes)
         title.draw(at: NSPoint(x: box.maxX + 7, y: bounds.midY - titleSize.height / 2), withAttributes: attributes)
-    }
-}
-
-final class PipelineNavySegmentedControl: NSSegmentedControl {
-    var isPointerHovering = false { didSet { needsDisplay = true } }
-    var isPressed = false { didSet { needsDisplay = true } }
-    private var trackingArea: NSTrackingArea?
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        trackingMode = .selectOne
-        focusRingType = .none
-    }
-
-    required init?(coder: NSCoder) { nil }
-
-    private var interactionState: PipelineNavySurfaceInteractionState {
-        PipelineNavySurfacePresentation.interactionState(isEnabled: isEnabled, isPointerHovering: isPointerHovering, isKeyboardFocused: window?.firstResponder === self, isPressed: isPressed)
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingArea { removeTrackingArea(trackingArea) }
-        let trackingArea = NSTrackingArea(rect: bounds, options: [.activeInKeyWindow, .mouseEnteredAndExited, .inVisibleRect], owner: self, userInfo: nil)
-        addTrackingArea(trackingArea)
-        self.trackingArea = trackingArea
-    }
-
-    override func mouseEntered(with event: NSEvent) { isPointerHovering = true }
-    override func mouseExited(with event: NSEvent) { isPointerHovering = false }
-    override func becomeFirstResponder() -> Bool { let accepted = super.becomeFirstResponder(); if accepted { needsDisplay = true }; return accepted }
-    override func resignFirstResponder() -> Bool { let accepted = super.resignFirstResponder(); if accepted { needsDisplay = true }; return accepted }
-    override func mouseDown(with event: NSEvent) { isPressed = true; super.mouseDown(with: event); isPressed = false }
-
-    override func draw(_ dirtyRect: NSRect) {
-        PipelineNativeControlDrawing.paint(in: bounds, state: interactionState)
-        guard segmentCount > 0 else { return }
-        let segmentWidth = bounds.width / CGFloat(segmentCount)
-        for index in 0..<segmentCount {
-            let rect = NSRect(x: CGFloat(index) * segmentWidth, y: 0, width: segmentWidth, height: bounds.height).insetBy(dx: 3, dy: 3)
-            let selected = selectedSegment == index
-            if selected {
-                PipelineNativeControlDrawing.paint(in: rect, state: window?.firstResponder === self ? .keyboardFocus : .selected, cornerRadius: 7)
-            }
-            let title = label(forSegment: index) ?? ""
-            let symbolName = index == 0 ? "list.bullet" : "square.grid.2x2"
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 17, weight: selected ? .semibold : .medium),
-                .foregroundColor: PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
-            ]
-            let titleSize = title.size(withAttributes: attributes)
-            let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
-                .withSymbolConfiguration(.init(pointSize: 18, weight: .medium))
-            let symbolSize = symbol?.size ?? .zero
-            let contentWidth = symbolSize.width + 8 + titleSize.width
-            let contentX = rect.midX - contentWidth / 2
-            symbol?.draw(
-                in: NSRect(
-                    x: contentX,
-                    y: rect.midY - symbolSize.height / 2,
-                    width: symbolSize.width,
-                    height: symbolSize.height
-                ),
-                from: .zero,
-                operation: .sourceOver,
-                fraction: isEnabled ? 1 : 0.64
-            )
-            title.draw(
-                at: NSPoint(
-                    x: contentX + symbolSize.width + 8,
-                    y: rect.midY - titleSize.height / 2
-                ),
-                withAttributes: attributes
-            )
-        }
     }
 }
 
