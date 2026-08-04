@@ -299,9 +299,10 @@ struct PipelineView: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .listRowSeparatorTint(RekonTheme.borderSubtle)
                 Divider().overlay(RekonTheme.borderSubtle)
                 Text("1–\(visibleOpportunities.count) of \(visibleOpportunities.count) opportunities")
-                    .font(.caption)
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(RekonTheme.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
@@ -341,12 +342,17 @@ private struct PipelineTableRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: isCompact ? 12 : PipelineTableLayout.columnSpacing) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(opportunity.title)
-                    .font(.body.weight(.semibold))
+                    .font(.body.weight(.medium))
                     .lineLimit(isCompact ? 1 : 2)
                 if let locality = opportunity.locationSummary {
-                    Label(locality, systemImage: "mappin.circle.fill")
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(localityColor)
+                            .frame(width: 5, height: 5)
+                        Text(locality)
+                    }
                         .font(.caption)
                         .foregroundStyle(RekonTheme.secondaryText)
                         .lineLimit(1)
@@ -356,10 +362,10 @@ private struct PipelineTableRow: View {
             .frame(minWidth: isCompact ? 105 : PipelineTableLayout.roleWidth, maxWidth: .infinity, alignment: .leading)
 
             if !isCompact {
-                HStack(spacing: 4) {
+                HStack(spacing: 8) {
                     PipelineEmployerMark(company: opportunity.company)
                     Text(opportunity.company)
-                        .font(.caption2)
+                        .font(.subheadline)
                         .foregroundStyle(RekonTheme.primaryText)
                         .lineLimit(2)
                 }
@@ -370,32 +376,54 @@ private struct PipelineTableRow: View {
                 .frame(width: isCompact ? 78 : PipelineTableLayout.stageWidth, alignment: .leading)
 
             if !isCompact {
-                Text(opportunity.nextAction.isEmpty ? "—" : opportunity.nextAction)
-                    .font(.subheadline)
-                    .foregroundStyle(opportunity.nextAction.isEmpty ? RekonTheme.secondaryText : RekonTheme.primaryText)
-                    .lineLimit(2)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(opportunity.nextAction.isEmpty ? "—" : opportunity.nextAction)
+                        .font(.subheadline)
+                        .foregroundStyle(opportunity.nextAction.isEmpty ? RekonTheme.secondaryText : RekonTheme.primaryText)
+                        .lineLimit(1)
+                    Text(dueDateText)
+                        .font(.caption)
+                        .foregroundStyle(RekonTheme.secondaryText)
+                        .lineLimit(1)
+                }
                     .frame(minWidth: PipelineTableLayout.nextActionWidth, maxWidth: .infinity, alignment: .leading)
-                Text(opportunity.dueAt.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "—")
+                HStack(spacing: 7) {
+                    Image(systemName: "calendar")
+                        .font(.caption.weight(.medium))
+                    Text(dueDateText)
+                        .lineLimit(1)
+                }
                     .font(.caption)
                     .foregroundStyle(RekonTheme.secondaryText)
-                    .lineLimit(1)
                     .frame(width: PipelineTableLayout.dueDateWidth, alignment: .leading)
             }
         }
-        .padding(.vertical, isCompact ? 10 : 14)
+        .padding(.vertical, isCompact ? 11 : 13)
         .padding(.horizontal, isCompact ? 14 : PipelineTableLayout.horizontalPadding)
         .background(
-            isSelected ? RekonTheme.elevatedSurface : Color.clear,
+            isSelected ? RekonTheme.surface.opacity(0.92) : Color.clear,
             in: RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
         )
         .overlay(
             RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
-                .stroke(isSelected ? RekonTheme.accent : Color.clear, lineWidth: isSelected ? 1.5 : 0)
+                .stroke(isSelected ? RekonTheme.violet : Color.clear, lineWidth: isSelected ? 1 : 0)
         )
         .overlay(alignment: .leading) {
             if isSelected {
-                Capsule().fill(RekonTheme.violet).frame(width: 3).padding(.vertical, 7)
+                Capsule().fill(RekonTheme.accent).frame(width: 3).padding(.vertical, 7)
             }
+        }
+    }
+
+    private var dueDateText: String {
+        opportunity.dueAt.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "—"
+    }
+
+    private var localityColor: Color {
+        switch opportunity.stage {
+        case .saved, .screening, .interviewing: RekonTheme.violet
+        case .applied, .offer: RekonTheme.success
+        case .closed: RekonTheme.secondaryText
         }
     }
 }
@@ -425,10 +453,10 @@ private struct PipelineTableHeader: View {
                     .accessibilityIdentifier("pipeline-table-header-due-date")
             }
         }
-                .font(.subheadline.weight(.medium))
+        .font(.subheadline.weight(.medium))
         .foregroundStyle(RekonTheme.secondaryText)
         .padding(.horizontal, isCompact ? 14 : PipelineTableLayout.horizontalPadding)
-        .padding(.vertical, 14)
+        .padding(.vertical, 15)
     }
 }
 
@@ -437,10 +465,10 @@ struct PipelineEmployerMark: View {
 
     var body: some View {
         Text(String(company.prefix(1)).uppercased())
-            .font(.caption.weight(.bold))
+            .font(.subheadline.weight(.bold))
             .foregroundStyle(RekonTheme.shellForeground)
-            .frame(width: 16, height: 16)
-            .background(RekonTheme.violet.opacity(0.62), in: RoundedRectangle(cornerRadius: 6))
+            .frame(width: 32, height: 32)
+            .background(RekonTheme.violet.opacity(0.62), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -478,10 +506,10 @@ struct PipelineStagePill: View {
             .font(.caption2.weight(.medium))
             .foregroundStyle(color)
             .lineLimit(1)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 5)
-            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
-            .overlay(RoundedRectangle(cornerRadius: 7).stroke(color.opacity(0.35), lineWidth: 1))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(color.opacity(0.35), lineWidth: 1))
     }
 }
 
@@ -500,7 +528,8 @@ private struct PipelineInspector: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("Selection summary")
-                    .font(.headline)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(RekonTheme.secondaryText)
                     .accessibilityIdentifier("pipeline-inspector-\(opportunity.id)")
                 Spacer()
                 if let close {
@@ -515,17 +544,17 @@ private struct PipelineInspector: View {
 
             HStack(alignment: .top, spacing: 12) {
                 PipelineEmployerMark(company: opportunity.company)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 52, height: 52)
                     .background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: 10))
                     .accessibilityIdentifier("pipeline-inspector-employer-mark-\(opportunity.id)")
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(opportunity.title).font(.title3.bold()).textSelection(.enabled)
+                    Text(opportunity.title).font(.title3.weight(.semibold)).textSelection(.enabled)
                     Text(opportunity.company)
                         .foregroundStyle(RekonTheme.secondaryText)
                         .accessibilityIdentifier("pipeline-inspector-company-\(opportunity.id)")
                     if let locationSummary {
                         Text(locationSummary)
-                            .font(.subheadline)
+                            .font(.caption)
                             .foregroundStyle(RekonTheme.secondaryText)
                     }
                 }
@@ -557,9 +586,9 @@ private struct PipelineInspector: View {
                 .accessibilityIdentifier("pipeline-open-details-\(opportunity.id)")
                 .frame(maxWidth: .infinity)
         }
-        .padding(18)
-        .background(RekonTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(RekonTheme.border, lineWidth: 1))
+        .padding(22)
+        .background(RekonTheme.backgroundRaised, in: RoundedRectangle(cornerRadius: RekonTheme.Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: RekonTheme.Radius.card).stroke(RekonTheme.borderSubtle, lineWidth: 1))
     }
 }
 
