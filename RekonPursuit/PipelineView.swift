@@ -293,7 +293,6 @@ struct PipelineView: View {
                             isCompact: isCompact
                         )
                         .tag(opportunity.id)
-                        .background(PipelineNativeTableSelectionSuppressor())
                         .accessibilityElement(children: .combine)
                         .accessibilityIdentifier("pipeline-table-row-\(opportunity.id)")
                         .accessibilityLabel("\(opportunity.title), \(opportunity.company), \(opportunity.stage.rawValue)")
@@ -303,6 +302,7 @@ struct PipelineView: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .listRowSeparatorTint(RekonTheme.borderSubtle)
+                .background(PipelineNativeTableSelectionBridge().allowsHitTesting(false))
                 Divider().overlay(RekonTheme.borderSubtle)
                 Text("1–\(visibleOpportunities.count) of \(visibleOpportunities.count) opportunities")
                     .font(.caption.weight(.medium))
@@ -433,23 +433,92 @@ private struct PipelineTableRow: View {
     }
 }
 
-/// Keep AppKit's selection ownership for keyboard navigation and accessibility,
-/// while letting the row's SwiftUI background provide the quieter visual state.
-private struct PipelineNativeTableSelectionSuppressor: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        NSView()
+/// Keeps AppKit's selection ownership for keyboard navigation and accessibility,
+/// while the row's SwiftUI background provides the quieter selected appearance.
+///
+/// The bridge is attached once to the List, instead of once per row. It records
+/// the native table's existing style and restores it when the List leaves the
+/// hierarchy, so this presentation detail cannot leak into another List.
+private struct PipelineNativeTableSelectionBridge: NSViewRepresentable {
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
     }
 
-    func updateNSView(_ view: NSView, context: Context) {
-        DispatchQueue.main.async {
-            var ancestor: NSView? = view
-            while let current = ancestor {
-                if let tableView = current as? NSTableView {
-                    tableView.selectionHighlightStyle = .none
-                    return
+    func makeNSView(context: Context) -> LifecycleView {
+        let view = LifecycleView()
+        view.hierarchyDidChange = { [weak coordinator = context.coordinator] view in
+            coordinator?.install(from: view)
+        }
+        return view
+    }
+
+    func updateNSView(_ view: LifecycleView, context: Context) {
+        context.coordinator.install(from: view)
+    }
+
+    static func dismantleNSView(_ view: LifecycleView, coordinator: Coordinator) {
+        coordinator.restore()
+    }
+
+    final class Coordinator {
+        private weak var tableView: NSTableView?
+        private var previousSelectionHighlightStyle: NSTableView.SelectionHighlightStyle?
+
+        func install(from view: NSView) {
+            guard let discoveredTableView = tableView(near: view) else { return }
+            guard tableView !== discoveredTableView else { return }
+
+            restore()
+            tableView = discoveredTableView
+            previousSelectionHighlightStyle = discoveredTableView.selectionHighlightStyle
+            discoveredTableView.selectionHighlightStyle = .none
+        }
+
+        func restore() {
+            guard let tableView, let previousSelectionHighlightStyle else { return }
+            tableView.selectionHighlightStyle = previousSelectionHighlightStyle
+            self.tableView = nil
+            self.previousSelectionHighlightStyle = nil
+        }
+
+        private func tableView(near view: NSView) -> NSTableView? {
+            var current: NSView? = view
+            while let node = current {
+                if let tableView = node as? NSTableView {
+                    return tableView
                 }
-                ancestor = current.superview
+                if let tableView = firstTableView(in: node) {
+                    return tableView
+                }
+                current = node.superview
             }
+            return nil
+        }
+
+        private func firstTableView(in view: NSView) -> NSTableView? {
+            for subview in view.subviews {
+                if let tableView = subview as? NSTableView {
+                    return tableView
+                }
+                if let tableView = firstTableView(in: subview) {
+                    return tableView
+                }
+            }
+            return nil
+        }
+    }
+
+    final class LifecycleView: NSView {
+        var hierarchyDidChange: ((NSView) -> Void)?
+
+        override func viewDidMoveToSuperview() {
+            super.viewDidMoveToSuperview()
+            hierarchyDidChange?(self)
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            hierarchyDidChange?(self)
         }
     }
 }
