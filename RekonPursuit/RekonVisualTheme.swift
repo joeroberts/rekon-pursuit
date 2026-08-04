@@ -1104,6 +1104,7 @@ struct PipelineViewModeSelector: View {
             ) {
                 showsBoard = false
             }
+            .frame(maxWidth: .infinity)
             .accessibilityIdentifier("pipeline-table-view")
 
             PipelineViewModeButton(
@@ -1113,6 +1114,7 @@ struct PipelineViewModeSelector: View {
             ) {
                 showsBoard = true
             }
+            .frame(maxWidth: .infinity)
             .accessibilityIdentifier("pipeline-board-view")
         }
         .accessibilityElement(children: .contain)
@@ -1144,8 +1146,10 @@ private struct PipelineViewModeButton: View {
             Label(title, systemImage: icon)
                 .font(.system(size: 15, weight: isSelected ? .semibold : .medium))
                 .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
         }
         .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, minHeight: 44)
         .foregroundStyle(isSelected ? RekonTheme.accent : RekonTheme.primaryText)
         .pipelineNavySurface(interactionState)
         .contentShape(RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
