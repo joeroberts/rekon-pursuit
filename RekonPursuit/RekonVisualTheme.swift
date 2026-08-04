@@ -849,7 +849,8 @@ struct PipelineNavySearchControl: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(RekonTheme.secondaryText)
-                    .accessibilityHidden(true)
+                    .accessibilityIdentifier("pipeline-search-icon")
+                    .accessibilityLabel("Search")
             }
 
             TextField("", text: $text)
@@ -869,7 +870,10 @@ struct PipelineNavySearchControl: View {
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(RekonTheme.secondaryText)
                 }
+                .frame(minWidth: 20, minHeight: 20)
                 .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .accessibilityIdentifier("pipeline-clear-search")
                 .accessibilityLabel("Clear search")
             }
         }

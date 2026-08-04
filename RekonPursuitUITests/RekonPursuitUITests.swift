@@ -785,6 +785,39 @@ final class RekonPursuitUITests: XCTestCase {
     }
 
     @MainActor
+    func testVD210PipelineSearchClearRestoresTheUnfilteredTableAndSearchAffordance() {
+        let app = launchApp(fixture: "pipeline", windowSize: "wide")
+        app.descendants(matching: .any)["sidebar-pipeline"].tap()
+
+        let search = app.textFields["opportunity-search"]
+        let searchIcon = app.images["pipeline-search-icon"]
+        let clearSearch = app.buttons["pipeline-clear-search"]
+        let rows = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-"))
+
+        XCTAssertTrue(search.waitForExistence(timeout: 5), "Pipeline search must be available before verifying its empty-state affordance.")
+        XCTAssertTrue(searchIcon.waitForExistence(timeout: 5), "An empty Pipeline search must expose its magnifying-glass affordance.")
+        XCTAssertFalse(clearSearch.exists, "An empty Pipeline search must not expose a clear action.")
+        XCTAssertGreaterThan(rows.count, 0, "The seeded Pipeline fixture must begin with visible table rows.")
+
+        search.click()
+        search.typeText("no matching opportunity")
+
+        XCTAssertTrue(app.staticTexts["No opportunities match"].waitForExistence(timeout: 5), "Typing a non-matching query must filter the Pipeline table.")
+        XCTAssertFalse(searchIcon.exists, "A populated Pipeline search must hide its magnifying-glass affordance.")
+        XCTAssertTrue(clearSearch.waitForExistence(timeout: 5), "A populated Pipeline search must expose a clear action.")
+        XCTAssertEqual(clearSearch.label, "Clear search", "The Pipeline clear action must disclose its purpose to assistive technology.")
+        XCTAssertTrue(clearSearch.isHittable, "The Pipeline clear action must be directly usable.")
+
+        clearSearch.click()
+
+        XCTAssertTrue(searchIcon.waitForExistence(timeout: 5), "Clearing Pipeline search must restore its magnifying-glass affordance.")
+        XCTAssertFalse(clearSearch.exists, "Clearing Pipeline search must remove the clear action.")
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 5), "Clearing Pipeline search must restore table rows.")
+        XCTAssertEqual(search.value as? String, "", "Clearing Pipeline search must restore the empty query.")
+    }
+
+    @MainActor
     func testVD204PipelineFidelityBoardContract() {
         let wideApp = launchApp(fixture: "pipeline", windowSize: "wide")
         wideApp.descendants(matching: .any)["sidebar-pipeline"].tap()
