@@ -758,6 +758,7 @@ private class PipelineNativeControl: NSControl {
 
 final class PipelineNavySearchField: NSSearchField {
     var chromeStateDidChange: (() -> Void)?
+    private var nativeSearchButtonCell: NSButtonCell?
 
     override var isEnabled: Bool { didSet { chromeStateDidChange?() } }
 
@@ -770,7 +771,9 @@ final class PipelineNavySearchField: NSSearchField {
         font = .systemFont(ofSize: 15)
         textColor = PipelineNativeControlDrawing.textColor(isEnabled: true)
         lineBreakMode = .byTruncatingTail
+        nativeSearchButtonCell = (cell as? NSSearchFieldCell)?.searchButtonCell
         applyBlankPlaceholder()
+        updateSearchButtonVisibility()
     }
 
     required init?(coder: NSCoder) { nil }
@@ -788,7 +791,25 @@ final class PipelineNavySearchField: NSSearchField {
 
     func refreshChrome() {
         applyBlankPlaceholder()
+        updateSearchButtonVisibility()
         textColor = PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
+    }
+
+    /// Reuses AppKit's own search-button cell so the magnifier is present only
+    /// while the field is empty, without altering the native editor geometry.
+    func updateSearchButtonVisibility() {
+        guard let searchFieldCell = cell as? NSSearchFieldCell else { return }
+
+        if stringValue.isEmpty {
+            if searchFieldCell.searchButtonCell == nil, let nativeSearchButtonCell {
+                searchFieldCell.searchButtonCell = nativeSearchButtonCell
+            }
+        } else if let searchButtonCell = searchFieldCell.searchButtonCell {
+            nativeSearchButtonCell = searchButtonCell
+            searchFieldCell.searchButtonCell = nil
+        }
+
+        needsDisplay = true
     }
 
     private func applyBlankPlaceholder() {
@@ -1093,6 +1114,7 @@ struct PipelineNavySearchControl: NSViewRepresentable {
         func controlTextDidChange(_ notification: Notification) {
             guard let field = notification.object as? NSTextField else { return }
             text = field.stringValue
+            (field as? PipelineNavySearchField)?.updateSearchButtonVisibility()
         }
     }
 }
