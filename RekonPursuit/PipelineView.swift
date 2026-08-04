@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// A reversible presentation projection for the Board. It does not alter the
@@ -80,6 +81,76 @@ nonisolated enum AddOpportunityOrigin: Equatable {
     }
 }
 
+/// Inspector stage actions use the same truthful result projection as Board
+/// moves. Retaining the selected identifier keeps feedback attached to the
+/// opportunity that initiated the action rather than to a transient menu.
+nonisolated struct PipelineInspectorStageMoveFeedback: Equatable {
+    let selectedOpportunityID: String
+    let outcomeText: String
+
+    static func make(
+        for result: StageMoveResult,
+        selectedOpportunityID: String,
+        sourceStage: PipelineStage
+    ) -> Self {
+        let presentation = PipelineStageMovePresentation.make(
+            for: result,
+            sourceStage: sourceStage
+        )
+        return Self(
+            selectedOpportunityID: selectedOpportunityID,
+            outcomeText: presentation.outcomeText
+        )
+    }
+}
+
+/// Resolves where a truthful stage-move outcome remains visible after the
+/// Table projection updates. A persisted move that filters the selected row
+/// out of Table has no inspector in which to retain local feedback, so the
+/// same canonical outcome is announced at the Pipeline level instead.
+nonisolated struct PipelineTableInspectorStageMovePresentation: Equatable {
+    let inspectorFeedback: PipelineInspectorStageMoveFeedback?
+    let tableNotice: String?
+
+    static func make(
+        for result: StageMoveResult,
+        selectedOpportunityID: String,
+        sourceStage: PipelineStage,
+        visibleOpportunityIDs: Set<String>
+    ) -> Self {
+        let resultOpportunityID: String
+        let isPersisted: Bool
+
+        switch result {
+        case let .persisted(opportunityID, _, _):
+            resultOpportunityID = opportunityID
+            isPersisted = true
+        case let .noOp(opportunityID, _),
+             let .reconciliationBlocked(opportunityID, _),
+             let .unavailable(opportunityID),
+             let .failed(opportunityID):
+            resultOpportunityID = opportunityID
+            isPersisted = false
+        }
+
+        guard resultOpportunityID == selectedOpportunityID else {
+            return Self(inspectorFeedback: nil, tableNotice: nil)
+        }
+
+        let inspectorFeedback = PipelineInspectorStageMoveFeedback.make(
+            for: result,
+            selectedOpportunityID: selectedOpportunityID,
+            sourceStage: sourceStage
+        )
+
+        guard isPersisted, !visibleOpportunityIDs.contains(selectedOpportunityID) else {
+            return Self(inspectorFeedback: inspectorFeedback, tableNotice: nil)
+        }
+
+        return Self(inspectorFeedback: nil, tableNotice: inspectorFeedback.outcomeText)
+    }
+}
+
 /// Pipeline owns only ephemeral presentation state. ContentView retains the
 /// workspace, canonical route, destructive dialog, and return-anchor owners.
 struct PipelineView: View {
@@ -92,9 +163,12 @@ struct PipelineView: View {
     @Binding var horizontalLane: PipelineBoardLane?
     let open: (Opportunity) -> Void
     let delete: (Opportunity) -> Void
+    let changeStage: (Opportunity, PipelineStage) -> StageMoveResult
     let addOpportunity: () -> Void
     let importCSV: () -> Void
     @State private var selectedTableID: String?
+    @State private var inspectorStageMoveFeedback: PipelineInspectorStageMoveFeedback?
+    @State private var tableStageMoveNotice: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var visibleOpportunities: [Opportunity] {
@@ -107,18 +181,9 @@ struct PipelineView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Opportunities").font(.largeTitle.bold())
-                Spacer()
-                Button("Import CSV", action: importCSV)
-                    .buttonStyle(PipelineSecondaryButtonStyle())
-                    .accessibilityIdentifier("pipeline-import-csv")
-                Button("Add opportunity", action: addOpportunity)
-                    .buttonStyle(RekonPrimaryButtonStyle())
-                    .accessibilityIdentifier("pipeline-add-opportunity")
-            }
+        VStack(alignment: .leading, spacing: 14) {
             pipelineToolbar
+            pipelineStageMoveNotice
             if visibleOpportunities.isEmpty {
                 FlexibleCenteredContent {
                     if model.opportunities.isEmpty {
@@ -153,24 +218,55 @@ struct PipelineView: View {
                 self.selectedTableID = nil
             }
         }
+        .onChange(of: selectedTableID) { _, selectedID in
+            guard inspectorStageMoveFeedback?.selectedOpportunityID != selectedID else { return }
+            inspectorStageMoveFeedback = nil
+            if selectedID != nil {
+                tableStageMoveNotice = nil
+            }
+        }
+    }
+
+    /// The stable Pipeline-level live-region identifier is
+    /// `pipeline-stage-move-notice`.
+    @ViewBuilder private var pipelineStageMoveNotice: some View {
+        if let tableStageMoveNotice {
+            Text(tableStageMoveNotice)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(RekonTheme.primaryText)
+                .accessibilityIdentifier("pipeline-stage-move-notice")
+                .accessibilityAddTraits(.updatesFrequently)
+        }
     }
 
     private var pipelineToolbar: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: RekonTheme.Spacing.standard) {
-                searchControl
-                filterControls
-                viewModeControl(showsLabel: true)
+            HStack(spacing: 10) {
+                HStack(spacing: 10) {
+                    searchControl
+                    stageControl
+                    includeClosedControl
+                }
+
+                Spacer(minLength: 10)
+
+                viewModeControl
+                toolbarActions
             }
 
-            VStack(alignment: .leading, spacing: RekonTheme.Spacing.tight) {
-                HStack(spacing: RekonTheme.Spacing.standard) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
                     searchControl
-                    viewModeControl(showsLabel: false)
+                    stageControl
+                    includeClosedControl
                 }
-                filterControls
+                HStack(spacing: 10) {
+                    viewModeControl
+                    toolbarActions
+                }
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var searchControl: some View {
@@ -179,61 +275,92 @@ struct PipelineView: View {
             accessibilityIdentifier: "opportunity-search",
             accessibilityLabel: "Search opportunities"
         )
-        .frame(minWidth: 120, maxWidth: 380)
-        .frame(height: 42)
+        .frame(width: 238, height: 44)
     }
 
-    private var filterControls: some View {
-        HStack(spacing: RekonTheme.Spacing.standard) {
-            PipelineNavyStageControl(
-                selection: $stage,
-                options: ["All stages"] + PipelineStage.allCases.map(\.rawValue),
-                accessibilityIdentifier: "pipeline-stage-filter",
-                accessibilityLabel: "Stage"
-            )
-            .frame(width: 130, height: 42)
+    private var stageControl: some View {
+        PipelineNavyStageControl(
+            selection: $stage,
+            options: ["All stages"] + PipelineStage.allCases.map(\.rawValue),
+            accessibilityIdentifier: "pipeline-stage-filter",
+            accessibilityLabel: "Stage"
+        )
+        .frame(width: 148, height: 44)
+    }
 
-            PipelineNavyCheckboxControl(
-                isOn: $includesClosed,
-                title: "Include closed",
-                accessibilityIdentifier: "pipeline-include-closed",
-                accessibilityLabel: "Include closed",
-                accessibilityValue: includesClosed ? "Included" : "Excluded"
-            )
-            .frame(width: 130, height: 42)
+    private var includeClosedControl: some View {
+        PipelineNavyCheckboxControl(
+            isOn: $includesClosed,
+            title: "Include closed",
+            accessibilityIdentifier: "pipeline-include-closed",
+            accessibilityLabel: "Include closed",
+            accessibilityValue: includesClosed ? "Included" : "Excluded"
+        )
+        .fixedSize(horizontal: true, vertical: false)
+        .frame(minHeight: 44)
+    }
+
+    private var viewModeControl: some View {
+        PipelineNavyViewModeControl(
+            showsBoard: $showsBoard,
+            accessibilityIdentifier: "pipeline-view-mode",
+            accessibilityLabel: "View"
+        )
+        .frame(width: 216, height: 44)
+    }
+
+    private var toolbarActions: some View {
+        HStack(spacing: 2.5) {
+            importControl
+            addControl
         }
     }
 
-    @ViewBuilder private func viewModeControl(showsLabel: Bool) -> some View {
-        HStack(spacing: RekonTheme.Spacing.tight) {
-            if showsLabel {
-                Text("View")
-                    .lineLimit(1)
-                    .accessibilityIdentifier("pipeline-view-label")
-            }
-            PipelineNavyViewModeControl(
-                showsBoard: $showsBoard,
-                accessibilityIdentifier: "pipeline-view-mode",
-                accessibilityLabel: "View"
-            )
-            .frame(width: 130, height: 42)
+    private var importControl: some View {
+        Button(action: importCSV) {
+            Label("Import CSV", systemImage: "arrow.down.to.line")
+                .lineLimit(1)
         }
+        .buttonStyle(PipelineToolbarSecondaryButtonStyle())
+        .frame(minWidth: 136)
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(1)
+        .accessibilityIdentifier("pipeline-import-csv")
+    }
+
+    private var addControl: some View {
+        Button("Add opportunity", action: addOpportunity)
+            .buttonStyle(PipelinePrimaryButtonStyle())
+            .frame(minWidth: 166)
+            .accessibilityIdentifier("pipeline-add-opportunity")
     }
 
     private var responsiveTable: some View {
         GeometryReader { geometry in
-            if geometry.size.width < PipelineTableLayout.desktopInspectorMinimumWidth {
-                ZStack(alignment: .trailing) {
+            if PipelineInspectorPresentationPolicy.usesCompactTable(forAvailableWidth: geometry.size.width) {
+                ZStack(alignment: .topTrailing) {
                     table(isCompact: true)
+                        .zIndex(0)
                     if let selectedOpportunity {
-                        PipelineInspector(opportunity: selectedOpportunity, close: { selectedTableID = nil }) {
+                        PipelineInspector(
+                            opportunity: selectedOpportunity,
+                            stageMoveOutcome: inspectorStageMoveFeedback?.selectedOpportunityID == selectedOpportunity.id
+                                ? inspectorStageMoveFeedback?.outcomeText
+                                : nil,
+                            close: { selectedTableID = nil }
+                        ) {
                             anchorID = selectedOpportunity.id
                             open(selectedOpportunity)
+                        } changeStage: { target in
+                            recordInspectorStageMove(for: selectedOpportunity, to: target)
+                        } delete: {
+                            delete(selectedOpportunity)
                         }
                         .accessibilityElement(children: .contain)
                         .accessibilityIdentifier("pipeline-inspector-drawer")
                         .frame(width: min(380, max(300, geometry.size.width * 0.48)))
                         .transition(reduceMotion ? .identity : .move(edge: .trailing).combined(with: .opacity))
+                        .zIndex(1)
                         .transaction { transaction in
                             if reduceMotion {
                                 transaction.animation = nil
@@ -242,13 +369,15 @@ struct PipelineView: View {
                         }
                     }
                 }
-                .animation(reduceMotion ? nil : .default, value: selectedTableID)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: selectedTableID)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 HStack(alignment: .top, spacing: 16) {
                     table(isCompact: false)
                     inspector
                         .frame(width: PipelineTableLayout.inspectorWidth)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
     }
@@ -270,23 +399,22 @@ struct PipelineView: View {
                         .accessibilityIdentifier("pipeline-table-row-\(opportunity.id)")
                         .accessibilityLabel("\(opportunity.title), \(opportunity.company), \(opportunity.stage.rawValue)")
                         .accessibilityValue(selectedTableID == opportunity.id ? "Selected" : "Not selected")
-                        .contextMenu {
-                            Button("Delete", role: .destructive) { delete(opportunity) }
-                                .accessibilityIdentifier("pipeline-delete-\(opportunity.id)")
-                        }
                     }
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .listRowSeparatorTint(RekonTheme.borderSubtle)
+                .background(PipelineNativeTableSelectionBridge().allowsHitTesting(false))
                 Divider().overlay(RekonTheme.borderSubtle)
                 Text("1–\(visibleOpportunities.count) of \(visibleOpportunities.count) opportunities")
-                    .font(.caption)
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(RekonTheme.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .accessibilityIdentifier("pipeline-table-result-count")
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(RekonTheme.backgroundRaised, in: RoundedRectangle(cornerRadius: RekonTheme.Radius.card))
             .overlay(
                 RoundedRectangle(cornerRadius: RekonTheme.Radius.card)
@@ -300,14 +428,36 @@ struct PipelineView: View {
 
     @ViewBuilder private var inspector: some View {
         if let selectedOpportunity {
-            PipelineInspector(opportunity: selectedOpportunity, close: nil) {
+            PipelineInspector(
+                opportunity: selectedOpportunity,
+                stageMoveOutcome: inspectorStageMoveFeedback?.selectedOpportunityID == selectedOpportunity.id
+                    ? inspectorStageMoveFeedback?.outcomeText
+                    : nil,
+                close: { selectedTableID = nil }
+            ) {
                 anchorID = selectedOpportunity.id
                 open(selectedOpportunity)
+            } changeStage: { target in
+                recordInspectorStageMove(for: selectedOpportunity, to: target)
+            } delete: {
+                delete(selectedOpportunity)
             }
         } else {
             PipelineInspectorEmptyState()
                 .accessibilityIdentifier("pipeline-inspector-empty")
         }
+    }
+
+    private func recordInspectorStageMove(for opportunity: Opportunity, to target: PipelineStage) {
+        let result = changeStage(opportunity, target)
+        let presentation = PipelineTableInspectorStageMovePresentation.make(
+            for: result,
+            selectedOpportunityID: opportunity.id,
+            sourceStage: opportunity.stage,
+            visibleOpportunityIDs: Set(visibleOpportunities.map(\.id))
+        )
+        inspectorStageMoveFeedback = presentation.inspectorFeedback
+        tableStageMoveNotice = presentation.tableNotice
     }
 
 }
@@ -319,13 +469,18 @@ private struct PipelineTableRow: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: isCompact ? 12 : PipelineTableLayout.columnSpacing) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(opportunity.title)
-                    .font(.body.weight(.semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .lineLimit(isCompact ? 1 : 2)
                 if let locality = opportunity.locationSummary {
-                    Label(locality, systemImage: "mappin.circle.fill")
-                        .font(.caption)
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(localityColor)
+                            .frame(width: 5, height: 5)
+                        Text(locality)
+                    }
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(RekonTheme.secondaryText)
                         .lineLimit(1)
                         .accessibilityIdentifier("pipeline-table-locality-\(opportunity.id)")
@@ -334,10 +489,10 @@ private struct PipelineTableRow: View {
             .frame(minWidth: isCompact ? 105 : PipelineTableLayout.roleWidth, maxWidth: .infinity, alignment: .leading)
 
             if !isCompact {
-                HStack(spacing: 4) {
+                HStack(spacing: 8) {
                     PipelineEmployerMark(company: opportunity.company)
                     Text(opportunity.company)
-                        .font(.caption2)
+                        .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(RekonTheme.primaryText)
                         .lineLimit(2)
                 }
@@ -348,33 +503,176 @@ private struct PipelineTableRow: View {
                 .frame(width: isCompact ? 78 : PipelineTableLayout.stageWidth, alignment: .leading)
 
             if !isCompact {
-                Text(opportunity.nextAction.isEmpty ? "—" : opportunity.nextAction)
-                    .font(.subheadline)
-                    .foregroundStyle(opportunity.nextAction.isEmpty ? RekonTheme.secondaryText : RekonTheme.primaryText)
-                    .lineLimit(2)
+                VStack(alignment: .leading, spacing: 5) {
+                    if opportunity.nextAction.isEmpty {
+                        Text("—")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(RekonTheme.secondaryText)
+                    } else {
+                        Text(opportunity.nextAction)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(RekonTheme.primaryText)
+                            .lineLimit(1)
+                        Text(dueDateText)
+                            .font(.system(size: 14))
+                            .foregroundStyle(RekonTheme.secondaryText)
+                            .lineLimit(1)
+                    }
+                }
                     .frame(minWidth: PipelineTableLayout.nextActionWidth, maxWidth: .infinity, alignment: .leading)
-                Text(opportunity.dueAt.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "—")
-                    .font(.caption)
+                HStack(spacing: 7) {
+                    if opportunity.dueAt != nil {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 14, weight: .medium))
+                    }
+                    Text(dueDateText)
+                        .lineLimit(1)
+                }
+                    .font(.system(size: 14))
                     .foregroundStyle(RekonTheme.secondaryText)
-                    .lineLimit(1)
                     .frame(width: PipelineTableLayout.dueDateWidth, alignment: .leading)
             }
         }
-        .padding(.vertical, isCompact ? 8 : 12)
+        .padding(.vertical, isCompact ? 11 : 18)
         .padding(.horizontal, isCompact ? 14 : PipelineTableLayout.horizontalPadding)
-        .background(
-            isSelected ? RekonTheme.elevatedSurface : Color.clear,
-            in: RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
-                .stroke(isSelected ? RekonTheme.accent : Color.clear, lineWidth: isSelected ? 1.5 : 0)
-        )
-        .overlay(alignment: .leading) {
-            if isSelected {
-                Capsule().fill(RekonTheme.violet).frame(width: 3).padding(.vertical, 7)
-            }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(isSelected ? RekonTheme.accent.opacity(0.075) : Color.clear)
+        .listRowInsets(EdgeInsets())
+    }
+
+    private var dueDateText: String {
+        opportunity.dueAt.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "—"
+    }
+
+    private var localityColor: Color {
+        switch opportunity.stage {
+        case .saved, .screening, .interviewing: RekonTheme.violet
+        case .applied, .offer: RekonTheme.success
+        case .closed: RekonTheme.secondaryText
         }
+    }
+}
+
+/// Keeps AppKit's selection ownership for keyboard navigation and accessibility,
+/// while the row's SwiftUI background provides the quieter selected appearance.
+///
+/// The bridge is attached once to the List, instead of once per row. It records
+/// the native table's existing style and restores it when the List leaves the
+/// hierarchy, so this presentation detail cannot leak into another List.
+private struct PipelineNativeTableSelectionBridge: NSViewRepresentable {
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> LifecycleView {
+        let view = LifecycleView()
+        view.hierarchyDidChange = { [weak coordinator = context.coordinator] view in
+            coordinator?.install(from: view)
+        }
+        return view
+    }
+
+    func updateNSView(_ view: LifecycleView, context: Context) {
+        context.coordinator.install(from: view)
+    }
+
+    static func dismantleNSView(_ view: LifecycleView, coordinator: Coordinator) {
+        coordinator.restore()
+    }
+
+    final class Coordinator {
+        private let selectionOwner = PipelineNativeTableSelectionOwner()
+
+        func install(from view: NSView) {
+            selectionOwner.install(from: view)
+        }
+
+        func restore() {
+            selectionOwner.restore()
+        }
+    }
+
+    final class LifecycleView: NSView {
+        var hierarchyDidChange: ((NSView) -> Void)?
+
+        override func viewDidMoveToSuperview() {
+            super.viewDidMoveToSuperview()
+            hierarchyDidChange?(self)
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            hierarchyDidChange?(self)
+        }
+
+        override func layout() {
+            super.layout()
+            // SwiftUI installs a background before its sibling List finishes
+            // building the native table. Layout is the first lifecycle point
+            // at which that table is reliably discoverable.
+            hierarchyDidChange?(self)
+        }
+    }
+}
+
+/// Owns the selection-highlight override for the one native table that hosts
+/// the Pipeline List. Resolution first uses an enclosing scroll view, then
+/// falls back only to the nearest ancestor with exactly one table descendant;
+/// ambiguous or unrelated tables are left untouched. The previous style is
+/// restored only while this owner still owns the `.none` override.
+final class PipelineNativeTableSelectionOwner {
+    private weak var tableView: NSTableView?
+    private var previousSelectionHighlightStyle: NSTableView.SelectionHighlightStyle?
+
+    func install(from view: NSView) {
+        guard let discoveredTableView = listTable(owning: view) else { return }
+        guard tableView !== discoveredTableView else { return }
+
+        restore()
+        tableView = discoveredTableView
+        previousSelectionHighlightStyle = discoveredTableView.selectionHighlightStyle
+        discoveredTableView.selectionHighlightStyle = .none
+    }
+
+    func restore() {
+        guard let tableView, let previousSelectionHighlightStyle else { return }
+        if tableView.selectionHighlightStyle == .none {
+            tableView.selectionHighlightStyle = previousSelectionHighlightStyle
+        }
+        self.tableView = nil
+        self.previousSelectionHighlightStyle = nil
+    }
+
+    private func listTable(owning view: NSView) -> NSTableView? {
+        var current: NSView? = view
+        while let node = current {
+            if let scrollView = node as? NSScrollView {
+                return scrollView.documentView as? NSTableView
+            }
+            current = node.superview
+        }
+        return siblingListTable(near: view)
+    }
+
+    /// SwiftUI can mount a background representable beside, rather than inside,
+    /// the List's native scroll view. Search outward only until a container has
+    /// exactly one table descendant; ambiguity deliberately leaves other Lists
+    /// untouched.
+    private func siblingListTable(near view: NSView) -> NSTableView? {
+        var current = view.superview
+        while let node = current {
+            let tables = tableViews(in: node)
+            if tables.count == 1 {
+                return tables[0]
+            }
+            current = node.superview
+        }
+        return nil
+    }
+
+    private func tableViews(in view: NSView) -> [NSTableView] {
+        let directTables = view.subviews.compactMap { $0 as? NSTableView }
+        return directTables + view.subviews.flatMap(tableViews(in:))
     }
 }
 
@@ -403,31 +701,42 @@ private struct PipelineTableHeader: View {
                     .accessibilityIdentifier("pipeline-table-header-due-date")
             }
         }
-        .font(.caption.weight(.medium))
+        .font(isCompact ? .subheadline.weight(.medium) : .system(size: 15, weight: .medium))
         .foregroundStyle(RekonTheme.secondaryText)
         .padding(.horizontal, isCompact ? 14 : PipelineTableLayout.horizontalPadding)
-        .padding(.vertical, 12)
+        .padding(.vertical, isCompact ? 15 : 18)
     }
 }
 
 struct PipelineEmployerMark: View {
     let company: String
+    var size: CGFloat = 32
 
     var body: some View {
         Text(String(company.prefix(1)).uppercased())
-            .font(.caption.weight(.bold))
+            .font(.system(size: size * 0.43, weight: .bold))
             .foregroundStyle(RekonTheme.shellForeground)
-            .frame(width: 16, height: 16)
-            .background(RekonTheme.violet.opacity(0.62), in: RoundedRectangle(cornerRadius: 6))
+            .frame(width: size, height: size)
+            .background(RekonTheme.violet.opacity(0.62), in: RoundedRectangle(cornerRadius: size * 0.25))
+    }
+}
+
+/// Owns the responsive guard band between the five-column desktop Table and
+/// the compact Table with its in-place inspector drawer. Keeping this policy
+/// independent of the view makes the approved breakpoint directly testable.
+nonisolated enum PipelineInspectorPresentationPolicy {
+    static let desktopMinimumWidth: CGFloat = 1220
+
+    static func usesCompactTable(forAvailableWidth width: CGFloat) -> Bool {
+        width < desktopMinimumWidth
     }
 }
 
 /// The desktop tracks deliberately match the information density of the
 /// approved mock. We never squeeze this five-column layout beside an
-/// inspector: below the documented available width, Pipeline switches to its
-/// compact dense Table and existing in-place drawer instead.
+/// inspector: below the approved 1,220pt guard band, Pipeline switches to
+/// its compact dense Table and existing in-place drawer instead.
 private enum PipelineTableLayout {
-    static let desktopInspectorMinimumWidth: CGFloat = 1220
     static let inspectorWidth: CGFloat = 330
     static let roleWidth: CGFloat = 180
     static let employerWidth: CGFloat = 140
@@ -453,20 +762,23 @@ struct PipelineStagePill: View {
 
     var body: some View {
         Text(stage.rawValue)
-            .font(.caption2.weight(.medium))
+            .font(.system(size: 13, weight: .medium))
             .foregroundStyle(color)
             .lineLimit(1)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 5)
-            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
-            .overlay(RoundedRectangle(cornerRadius: 7).stroke(color.opacity(0.35), lineWidth: 1))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(color.opacity(0.35), lineWidth: 1))
     }
 }
 
 private struct PipelineInspector: View {
     let opportunity: Opportunity
+    let stageMoveOutcome: String?
     let close: (() -> Void)?
     let openDetails: () -> Void
+    let changeStage: (PipelineStage) -> Void
+    let delete: () -> Void
 
     private var locationSummary: String? {
         let parts = [opportunity.location, opportunity.workArrangement == .notSpecified ? nil : opportunity.workArrangement.rawValue]
@@ -475,37 +787,61 @@ private struct PipelineInspector: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Selection summary")
-                    .font(.headline)
-                    .accessibilityIdentifier("pipeline-inspector-\(opportunity.id)")
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top) {
+                PipelineEmployerMark(company: opportunity.company, size: 50)
+                    .accessibilityIdentifier("pipeline-inspector-employer-mark-\(opportunity.id)")
                 Spacer()
-                if let close {
-                    Button(action: close) {
-                        Image(systemName: "xmark")
+                VStack(alignment: .trailing, spacing: 8) {
+                    if let close {
+                        Button(action: close) {
+                            Image(systemName: "xmark")
+                                .font(.body.weight(.medium))
+                                .frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("pipeline-inspector-close")
+                        .accessibilityLabel("Close selection details")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("pipeline-inspector-close")
-                    .accessibilityLabel("Close selection details")
+                    Menu {
+                        Menu("Move to stage…") {
+                            ForEach(PipelineStage.allCases, id: \.self) { target in
+                                Button(target.rawValue) {
+                                    changeStage(target)
+                                }
+                                .accessibilityIdentifier("pipeline-inspector-move-stage-\(target.rawValue.lowercased())-\(opportunity.id)")
+                                .accessibilityLabel("Move \(opportunity.title) to \(target.rawValue)")
+                            }
+                        }
+                        .accessibilityIdentifier("pipeline-inspector-move-stage-menu-\(opportunity.id)")
+
+                        Divider()
+
+                        Button("Delete", role: .destructive, action: delete)
+                            .accessibilityIdentifier("pipeline-inspector-delete-\(opportunity.id)")
+                            .accessibilityLabel("Delete \(opportunity.title)")
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.body.weight(.semibold))
+                            .frame(width: 28, height: 28)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .accessibilityIdentifier("pipeline-inspector-actions-\(opportunity.id)")
+                    .accessibilityLabel("Opportunity actions")
                 }
             }
-
-            HStack(alignment: .top, spacing: 12) {
-                PipelineEmployerMark(company: opportunity.company)
-                    .frame(width: 44, height: 44)
-                    .background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: 10))
-                    .accessibilityIdentifier("pipeline-inspector-employer-mark-\(opportunity.id)")
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(opportunity.title).font(.title3.bold()).textSelection(.enabled)
-                    Text(opportunity.company)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(opportunity.title)
+                    .font(.title2.weight(.semibold))
+                    .textSelection(.enabled)
+                Text(opportunity.company)
+                    .font(.title3.weight(.medium))
+                    .foregroundStyle(RekonTheme.secondaryText)
+                    .accessibilityIdentifier("pipeline-inspector-company-\(opportunity.id)")
+                if let locationSummary {
+                    Text(locationSummary)
+                        .font(.subheadline)
                         .foregroundStyle(RekonTheme.secondaryText)
-                        .accessibilityIdentifier("pipeline-inspector-company-\(opportunity.id)")
-                    if let locationSummary {
-                        Text(locationSummary)
-                            .font(.subheadline)
-                            .foregroundStyle(RekonTheme.secondaryText)
-                    }
                 }
             }
             Divider().overlay(RekonTheme.borderSubtle)
@@ -516,6 +852,13 @@ private struct PipelineInspector: View {
                 PipelineStagePill(stage: opportunity.stage)
                     .accessibilityIdentifier("pipeline-inspector-stage-\(opportunity.id)")
             }
+            if let stageMoveOutcome {
+                Text(stageMoveOutcome)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(RekonTheme.primaryText)
+                    .accessibilityIdentifier("pipeline-inspector-stage-move-outcome-\(opportunity.id)")
+                    .accessibilityAddTraits(.updatesFrequently)
+            }
             PipelineInspectorFact(
                 title: "Applied",
                 value: opportunity.applicationDate.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "Not recorded"
@@ -525,19 +868,44 @@ private struct PipelineInspector: View {
                 value: opportunity.nextAction.isEmpty ? "No next action is recorded." : opportunity.nextAction,
                 accessibilityIdentifier: "pipeline-inspector-fact-next-action-\(opportunity.id)"
             )
+            if let dueAt = opportunity.dueAt {
+                PipelineInspectorFact(
+                    title: "Due date",
+                    value: dueAt.formatted(date: .abbreviated, time: .omitted)
+                )
+            }
             PipelineInspectorFact(
-                title: "Due date",
-                value: opportunity.dueAt.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "No due date"
+                title: "Current response",
+                value: opportunity.responseState.rawValue
             )
-            Spacer(minLength: 0)
-            Button("Open details", action: openDetails)
+            if let compensation = opportunity.pipelineCompensationSummary {
+                PipelineInspectorFact(
+                    title: "Compensation",
+                    value: compensation
+                )
+            }
+            if let stageChangedAt = opportunity.stageChangedAt {
+                PipelineInspectorFact(
+                    title: "Stage changed",
+                    value: stageChangedAt.formatted(date: .abbreviated, time: .omitted)
+                )
+            }
+            Button(action: openDetails) {
+                HStack {
+                    Spacer(minLength: 0)
+                    Text("Open details")
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity)
+            }
                 .buttonStyle(PipelineSecondaryButtonStyle())
                 .accessibilityIdentifier("pipeline-open-details-\(opportunity.id)")
                 .frame(maxWidth: .infinity)
+            Spacer(minLength: 0)
         }
-        .padding(18)
-        .background(RekonTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(RekonTheme.border, lineWidth: 1))
+        .padding(24)
+        .background(RekonTheme.backgroundRaised, in: RoundedRectangle(cornerRadius: RekonTheme.Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: RekonTheme.Radius.card).stroke(RekonTheme.borderSubtle, lineWidth: 1))
     }
 }
 
@@ -565,6 +933,18 @@ extension Opportunity {
         let parts = [location, workArrangement == .notSpecified ? nil : workArrangement.rawValue]
             .compactMap { $0?.isEmpty == false ? $0 : nil }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    var pipelineCompensationSummary: String? {
+        if compensationMinimum != nil || compensationMaximum != nil {
+            let formatter = FloatingPointFormatStyle<Double>.Currency(code: "USD").precision(.fractionLength(0))
+            let values = [compensationMinimum.map { $0.formatted(formatter) }, compensationMaximum.map { $0.formatted(formatter) }]
+                .compactMap { $0 }
+            return values.joined(separator: " – ") + (compensationPayPeriod.map { " / \($0.rawValue.lowercased())" } ?? "")
+        }
+
+        let value = compensation?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value?.isEmpty == false ? value : nil
     }
 }
 

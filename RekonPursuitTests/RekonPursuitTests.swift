@@ -1,9 +1,132 @@
 import AppKit
+import SwiftUI
 import XCTest
 
 @testable import RekonPursuit
 
 final class RekonPursuitTests: XCTestCase {
+
+    func testPipelineInspectorPresentationUsesDesktopAtTheApproved1220PointGuardBand() {
+        XCTAssertTrue(PipelineInspectorPresentationPolicy.usesCompactTable(forAvailableWidth: 1219))
+        XCTAssertFalse(PipelineInspectorPresentationPolicy.usesCompactTable(forAvailableWidth: 1220))
+    }
+
+    func testPipelineNavySegmentedContentToneMapsSelectionAndAvailability() {
+        XCTAssertEqual(
+            PipelineNavySegmentedContentTone.resolve(isSelected: true, isEnabled: true),
+            .accent
+        )
+        XCTAssertEqual(
+            PipelineNavySegmentedContentTone.resolve(isSelected: false, isEnabled: true),
+            .primary
+        )
+        XCTAssertEqual(
+            PipelineNavySegmentedContentTone.resolve(isSelected: true, isEnabled: false),
+            .muted
+        )
+        XCTAssertEqual(
+            PipelineNavySegmentedContentTone.resolve(isSelected: false, isEnabled: false),
+            .muted
+        )
+    }
+
+    @MainActor
+    func testPipelineNativeTableSelectionOwnerRestoresOnlyTheTableItOwnsAcrossReplacement() {
+        let initialTable = NSTableView()
+        initialTable.selectionHighlightStyle = .regular
+        let initialScrollView = NSScrollView()
+        initialScrollView.documentView = initialTable
+        let initialHost = NSView()
+        initialTable.addSubview(initialHost)
+
+        let replacementTable = NSTableView()
+        replacementTable.selectionHighlightStyle = .regular
+        let replacementScrollView = NSScrollView()
+        replacementScrollView.documentView = replacementTable
+        let replacementHost = NSView()
+        replacementTable.addSubview(replacementHost)
+
+        let owner = PipelineNativeTableSelectionOwner()
+        owner.install(from: initialHost)
+        XCTAssertEqual(initialTable.selectionHighlightStyle, .none)
+        XCTAssertEqual(replacementTable.selectionHighlightStyle, .regular)
+
+        owner.install(from: replacementHost)
+        XCTAssertEqual(initialTable.selectionHighlightStyle, .regular)
+        XCTAssertEqual(replacementTable.selectionHighlightStyle, .none)
+
+        // A replacement table can be reconfigured by its new SwiftUI owner.
+        // This bridge must not restore a stale style over that owner’s change.
+        replacementTable.selectionHighlightStyle = .regular
+        owner.restore()
+        XCTAssertEqual(replacementTable.selectionHighlightStyle, .regular)
+    }
+
+    @MainActor
+    func testPipelineNativeTableSelectionOwnerFindsItsSiblingListTableWhenSwiftUIMountsTheBridgeAsABackground() {
+        let hostingContainer = NSView()
+        let bridgeHost = NSView()
+        let listScrollView = NSScrollView()
+        let listTable = NSTableView()
+        listTable.selectionHighlightStyle = .regular
+        listScrollView.documentView = listTable
+        hostingContainer.addSubview(bridgeHost)
+        hostingContainer.addSubview(listScrollView)
+
+        let owner = PipelineNativeTableSelectionOwner()
+        owner.install(from: bridgeHost)
+
+        XCTAssertEqual(
+            listTable.selectionHighlightStyle,
+            .none,
+            "A Pipeline bridge mounted beside its List must suppress the native selection fill so the row's subdued SwiftUI highlight is the only selection treatment."
+        )
+    }
+
+    @MainActor
+    func testPipelineViewModeUsesOneNativeSegmentedControlAsTheSoleModeInputOwner() throws {
+        // This fails if Table and Board become separate SwiftUI buttons: the
+        // AppKit-hosted control must own the contiguous two-segment hit target,
+        // its selection state, keyboard behavior, and accessibility contract.
+        var showsBoard = false
+        let host = NSHostingView(
+            rootView: PipelineNavyViewModeControl(
+                showsBoard: Binding(
+                    get: { showsBoard },
+                    set: { showsBoard = $0 }
+                ),
+                accessibilityIdentifier: "pipeline-view-mode",
+                accessibilityLabel: "View"
+            )
+        )
+        host.frame = NSRect(x: 0, y: 0, width: 216, height: 44)
+        host.layoutSubtreeIfNeeded()
+
+        func descendants<T: NSView>(of view: NSView, as _: T.Type) -> [T] {
+            let directMatches = view.subviews.compactMap { $0 as? T }
+            return directMatches + view.subviews.flatMap { descendants(of: $0, as: T.self) }
+        }
+
+        let segmented = try XCTUnwrap(
+            descendants(of: host, as: NSSegmentedControl.self).first,
+            "Pipeline view mode must have one AppKit segmented-control input owner."
+        )
+        XCTAssertEqual(descendants(of: host, as: NSSegmentedControl.self).count, 1)
+        XCTAssertEqual(segmented.trackingMode, NSSegmentedControl.SwitchTracking.selectOne)
+        XCTAssertEqual(segmented.segmentCount, 2)
+        XCTAssertEqual(segmented.label(forSegment: 0), "Table")
+        XCTAssertEqual(segmented.label(forSegment: 1), "Board")
+        XCTAssertEqual(segmented.selectedSegment, 0)
+        XCTAssertEqual(segmented.frame.width, 216, accuracy: 0.5)
+        XCTAssertEqual(segmented.frame.height, 44, accuracy: 0.5)
+        XCTAssertEqual(segmented.accessibilityIdentifier(), "pipeline-view-mode")
+        XCTAssertEqual(segmented.accessibilityLabel(), "View")
+        XCTAssertEqual(descendants(of: host, as: NSButton.self).count, 0)
+
+        segmented.selectedSegment = 1
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(segmented.action), to: segmented.target, from: segmented))
+        XCTAssertTrue(showsBoard, "Selecting Board through AppKit must update the SwiftUI binding.")
+    }
 
     func testStageMovePayloadContainsOnlyOpportunityID() throws {
         let opportunityID = "00000000-0000-4000-8000-000000000205"
@@ -88,6 +211,80 @@ final class RekonPursuitTests: XCTestCase {
         XCTAssertTrue(presentations.allSatisfy { $0.presentedStage == .saved })
         XCTAssertTrue(presentations.allSatisfy { $0.boardLane == .saved })
         XCTAssertEqual(Set(presentations.map(\.outcomeText)).count, results.count)
+    }
+
+    func testPipelineInspectorStageMoveFeedbackKeepsTheSelectedOpportunityAndUsesCanonicalResults() {
+        let opportunityID = "00000000-0000-4000-8000-000000000205"
+        let cases: [(StageMoveResult, String)] = [
+            (.persisted(opportunityID: opportunityID, from: .saved, to: .screening), "Moved to Screening."),
+            (.noOp(opportunityID: opportunityID, stage: .saved), "Already in Saved."),
+            (.reconciliationBlocked(opportunityID: opportunityID, target: .closed), "Confirm reconciliation before moving to Closed."),
+            (.unavailable(opportunityID: opportunityID), "Opportunity is no longer available locally."),
+            (.failed(opportunityID: opportunityID), "The local stage was not changed.")
+        ]
+
+        for (result, expectedOutcome) in cases {
+            let feedback = PipelineInspectorStageMoveFeedback.make(
+                for: result,
+                selectedOpportunityID: opportunityID,
+                sourceStage: .saved
+            )
+
+            XCTAssertEqual(feedback.selectedOpportunityID, opportunityID)
+            XCTAssertEqual(feedback.outcomeText, expectedOutcome)
+        }
+    }
+
+    func testPipelineTableInspectorStageMovePresentationEscalatesOnlyPersistedDeparture() {
+        let selectedOpportunityID = "00000000-0000-4000-8000-000000000205"
+        let anotherOpportunityID = "00000000-0000-4000-8000-000000000206"
+
+        let filteredDeparture = PipelineTableInspectorStageMovePresentation.make(
+            for: .persisted(opportunityID: selectedOpportunityID, from: .saved, to: .closed),
+            selectedOpportunityID: selectedOpportunityID,
+            sourceStage: .saved,
+            visibleOpportunityIDs: [anotherOpportunityID]
+        )
+        XCTAssertNil(filteredDeparture.inspectorFeedback)
+        XCTAssertEqual(filteredDeparture.tableNotice, "Moved to Closed.")
+
+        let visibleMove = PipelineTableInspectorStageMovePresentation.make(
+            for: .persisted(opportunityID: selectedOpportunityID, from: .saved, to: .screening),
+            selectedOpportunityID: selectedOpportunityID,
+            sourceStage: .saved,
+            visibleOpportunityIDs: [selectedOpportunityID]
+        )
+        XCTAssertEqual(visibleMove.inspectorFeedback?.selectedOpportunityID, selectedOpportunityID)
+        XCTAssertEqual(visibleMove.inspectorFeedback?.outcomeText, "Moved to Screening.")
+        XCTAssertNil(visibleMove.tableNotice)
+
+        let mismatchedResult = PipelineTableInspectorStageMovePresentation.make(
+            for: .persisted(opportunityID: anotherOpportunityID, from: .saved, to: .closed),
+            selectedOpportunityID: selectedOpportunityID,
+            sourceStage: .saved,
+            visibleOpportunityIDs: []
+        )
+        XCTAssertNil(mismatchedResult.inspectorFeedback)
+        XCTAssertNil(mismatchedResult.tableNotice)
+
+        let nonPersistedCases: [(StageMoveResult, String)] = [
+            (.noOp(opportunityID: selectedOpportunityID, stage: .saved), "Already in Saved."),
+            (.reconciliationBlocked(opportunityID: selectedOpportunityID, target: .closed), "Confirm reconciliation before moving to Closed."),
+            (.unavailable(opportunityID: selectedOpportunityID), "Opportunity is no longer available locally."),
+            (.failed(opportunityID: selectedOpportunityID), "The local stage was not changed.")
+        ]
+
+        for (result, expectedOutcome) in nonPersistedCases {
+            let presentation = PipelineTableInspectorStageMovePresentation.make(
+                for: result,
+                selectedOpportunityID: selectedOpportunityID,
+                sourceStage: .saved,
+                visibleOpportunityIDs: []
+            )
+            XCTAssertEqual(presentation.inspectorFeedback?.selectedOpportunityID, selectedOpportunityID)
+            XCTAssertEqual(presentation.inspectorFeedback?.outcomeText, expectedOutcome)
+            XCTAssertNil(presentation.tableNotice)
+        }
     }
 
     @MainActor

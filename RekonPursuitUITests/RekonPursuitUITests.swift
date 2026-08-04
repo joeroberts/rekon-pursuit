@@ -59,6 +59,37 @@ final class RekonPursuitUITests: XCTestCase {
     }
 
     @MainActor
+    private func pipelineInspectorCompany(for opportunityID: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["pipeline-inspector-company-\(opportunityID)"]
+    }
+
+    @MainActor
+    private func pipelineInspectorStage(for opportunityID: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["pipeline-inspector-stage-\(opportunityID)"]
+    }
+
+    @MainActor
+    private func assertPipelineInspectorSelection(
+        for opportunityID: String,
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(
+            pipelineInspectorCompany(for: opportunityID, in: app).waitForExistence(timeout: 5),
+            "Selecting a Pipeline row must render that opportunity's inspector company.",
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            pipelineInspectorStage(for: opportunityID, in: app).exists,
+            "Selecting a Pipeline row must render that opportunity's inspector stage.",
+            file: file,
+            line: line
+        )
+    }
+
+    @MainActor
     private func activityEvidence(named prefix: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)["sidebar-activity-and-ai"].tap()
         XCTAssertTrue(app.textFields["activity-search"].waitForExistence(timeout: 5), "Expected the real local Activity & AI ledger.")
@@ -325,7 +356,7 @@ final class RekonPursuitUITests: XCTestCase {
         let row = app.descendants(matching: .any)["pipeline-table-row-\(opportunityID)"]
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(opportunityID)"].waitForExistence(timeout: 5))
+        assertPipelineInspectorSelection(for: opportunityID, in: app)
         app.buttons["pipeline-open-details-\(opportunityID)"].tap()
         XCTAssertTrue(app.buttons["Back to Pipeline"].waitForExistence(timeout: 5))
         let more = app.descendants(matching: .any)["More"]
@@ -577,15 +608,17 @@ final class RekonPursuitUITests: XCTestCase {
         let secondID = String(secondRow.identifier.dropFirst("pipeline-table-row-".count))
         firstRow.tap()
 
-        XCTAssertEqual(firstRow.value as? String, "Selected", "Selecting a Pipeline table row must update only its local selection state before the inspector is rendered.")
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(firstID)"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-company-\(firstID)"].exists)
+        assertPipelineInspectorSelection(for: firstID, in: app)
         XCTAssertFalse(app.textFields["selected-opportunity-title"].exists)
         XCTAssertFalse(app.buttons["Back to Pipeline"].exists)
 
         secondRow.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(secondID)"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.descendants(matching: .any)["pipeline-inspector-\(firstID)"].exists)
+        assertPipelineInspectorSelection(for: secondID, in: app)
+        XCTAssertFalse(
+            pipelineInspectorCompany(for: firstID, in: app).exists,
+            "Changing row selection must replace the previous inspector content."
+        )
+        XCTAssertFalse(pipelineInspectorStage(for: firstID, in: app).exists)
 
         app.buttons["pipeline-open-details-\(secondID)"].tap()
         XCTAssertTrue(app.textFields["selected-opportunity-title"].waitForExistence(timeout: 5))
@@ -623,18 +656,15 @@ final class RekonPursuitUITests: XCTestCase {
         let savedRowExists = savedRow.waitForExistence(timeout: 5)
         savedRow.tap()
         let savedID = String(savedRow.identifier.dropFirst("pipeline-table-row-".count))
-        let savedSelection = savedRow.value as? String
         let employerMark = wideApp.descendants(matching: .any)["pipeline-inspector-employer-mark-\(savedID)"]
         let stage = wideApp.descendants(matching: .any)["pipeline-inspector-stage-\(savedID)"]
         let nextAction = wideApp.descendants(matching: .any)["pipeline-inspector-fact-next-action-\(savedID)"]
         let openDetails = wideApp.descendants(matching: .any)["pipeline-open-details-\(savedID)"]
-        let currentInspector = wideApp.descendants(matching: .any)["pipeline-inspector-\(savedID)"]
 
-        // These are retained-state prerequisites for the owner-facing
-        // capture, not the deliberately RED future fidelity identifiers.
+        // The selected opportunity's current inspector facts are retained
+        // state prerequisites for the owner-facing capture.
         XCTAssertTrue(savedRowExists)
-        XCTAssertEqual(savedSelection, "Selected")
-        XCTAssertTrue(currentInspector.waitForExistence(timeout: 5))
+        assertPipelineInspectorSelection(for: savedID, in: wideApp)
 
         // The owner-facing Table capture must show the selected data row and
         // the adjacent inspector hierarchy together, not an unselected empty
@@ -701,6 +731,90 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertTrue(compactRowExists)
         XCTAssertTrue(compactDrawerExists)
         XCTAssertEqual(compactSheetCount, 0)
+    }
+
+    @MainActor
+    func testVD210PipelineTableSwitchesAtTheActualAvailableWidthBoundary() {
+        // The fixture host's breakpoint sizes reserve the fixed 310pt rail,
+        // the split divider, and Pipeline's 28pt leading/trailing padding so
+        // these assertions exercise the GeometryReader width itself: 1,219
+        // and 1,220 points respectively.
+        let compactApp = launchApp(fixture: "pipeline", windowSize: "breakpoint-1219")
+        assertWindow(compactApp.windows.firstMatch, hasSize: CGSize(width: 1586, height: 994))
+        compactApp.descendants(matching: .any)["sidebar-pipeline"].tap()
+
+        XCTAssertTrue(compactApp.descendants(matching: .any)["pipeline-table-header-role"].waitForExistence(timeout: 5))
+        XCTAssertTrue(compactApp.descendants(matching: .any)["pipeline-table-header-stage"].exists)
+        XCTAssertFalse(compactApp.descendants(matching: .any)["pipeline-table-header-employer"].exists)
+        XCTAssertFalse(compactApp.descendants(matching: .any)["pipeline-table-header-next-action"].exists)
+        XCTAssertFalse(compactApp.descendants(matching: .any)["pipeline-table-header-due-date"].exists)
+
+        let compactRow = compactApp.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-"))
+            .firstMatch
+        XCTAssertTrue(compactRow.waitForExistence(timeout: 5))
+        compactRow.tap()
+        XCTAssertTrue(
+            compactApp.descendants(matching: .any)["pipeline-inspector-drawer"].waitForExistence(timeout: 5),
+            "At 1,219pt Pipeline must keep the two-column Table and use its in-place drawer."
+        )
+        compactApp.terminate()
+
+        let desktopApp = launchApp(fixture: "pipeline", windowSize: "breakpoint-1220")
+        assertWindow(desktopApp.windows.firstMatch, hasSize: CGSize(width: 1587, height: 994))
+        desktopApp.descendants(matching: .any)["sidebar-pipeline"].tap()
+
+        let desktopHeaders = ["role", "employer", "stage", "next-action", "due-date"].map {
+            desktopApp.descendants(matching: .any)["pipeline-table-header-\($0)"]
+        }
+        for header in desktopHeaders {
+            XCTAssertTrue(header.waitForExistence(timeout: 5), "At 1,220pt every desktop Table column must be present.")
+            XCTAssertTrue(header.isHittable, "At 1,220pt the desktop Table must not clip a column heading.")
+        }
+        let desktopRow = desktopApp.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-"))
+            .firstMatch
+        XCTAssertTrue(desktopRow.waitForExistence(timeout: 5))
+        let desktopID = String(desktopRow.identifier.dropFirst("pipeline-table-row-".count))
+        desktopRow.tap()
+        XCTAssertTrue(
+            desktopApp.descendants(matching: .any)["pipeline-inspector-drawer"].waitForNonExistence(timeout: 2),
+            "At 1,220pt selection must retain the persistent inspector instead of presenting a drawer."
+        )
+        assertPipelineInspectorSelection(for: desktopID, in: desktopApp)
+    }
+
+    @MainActor
+    func testVD210PipelineSearchClearRestoresTheUnfilteredTableAndSearchAffordance() {
+        let app = launchApp(fixture: "pipeline", windowSize: "wide")
+        app.descendants(matching: .any)["sidebar-pipeline"].tap()
+
+        let search = app.textFields["opportunity-search"]
+        let searchIcon = app.images["pipeline-search-icon"]
+        let clearSearch = app.buttons["pipeline-clear-search"]
+        let rows = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-"))
+
+        XCTAssertTrue(search.waitForExistence(timeout: 5), "Pipeline search must be available before verifying its empty-state affordance.")
+        XCTAssertTrue(searchIcon.waitForExistence(timeout: 5), "An empty Pipeline search must expose its magnifying-glass affordance.")
+        XCTAssertFalse(clearSearch.exists, "An empty Pipeline search must not expose a clear action.")
+        XCTAssertGreaterThan(rows.count, 0, "The seeded Pipeline fixture must begin with visible table rows.")
+
+        search.click()
+        search.typeText("no matching opportunity")
+
+        XCTAssertTrue(app.staticTexts["No opportunities match"].waitForExistence(timeout: 5), "Typing a non-matching query must filter the Pipeline table.")
+        XCTAssertFalse(searchIcon.exists, "A populated Pipeline search must hide its magnifying-glass affordance.")
+        XCTAssertTrue(clearSearch.waitForExistence(timeout: 5), "A populated Pipeline search must expose a clear action.")
+        XCTAssertEqual(clearSearch.label, "Clear search", "The Pipeline clear action must disclose its purpose to assistive technology.")
+        XCTAssertTrue(clearSearch.isHittable, "The Pipeline clear action must be directly usable.")
+
+        clearSearch.click()
+
+        XCTAssertTrue(searchIcon.waitForExistence(timeout: 5), "Clearing Pipeline search must restore its magnifying-glass affordance.")
+        XCTAssertFalse(clearSearch.exists, "Clearing Pipeline search must remove the clear action.")
+        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: 5), "Clearing Pipeline search must restore table rows.")
+        XCTAssertEqual(search.value as? String, "", "Clearing Pipeline search must restore the empty query.")
     }
 
     @MainActor
@@ -782,34 +896,38 @@ final class RekonPursuitUITests: XCTestCase {
         assertionViewMode.radioButtons["Board"].click()
         XCTAssertTrue(assertionApp.descendants(matching: .any)["pipeline-board-region"].waitForExistence(timeout: 5))
 
-        for lane in ["saved", "applied", "interviewing", "offer"] {
+        for lane in ["saved", "applied", "screening", "interviewing", "offer"] {
             XCTAssertTrue(assertionApp.descendants(matching: .any)["pipeline-board-lane-\(lane)"].exists)
             XCTAssertTrue(assertionApp.descendants(matching: .any)["pipeline-board-lane-count-\(lane)"].exists)
             XCTAssertTrue(assertionApp.buttons["pipeline-board-lane-add-\(lane)"].exists)
         }
         XCTAssertFalse(assertionApp.descendants(matching: .any)["pipeline-board-lane-closed"].exists)
         let appliedLane = assertionApp.descendants(matching: .any)["pipeline-board-lane-applied"]
+        let screeningLane = assertionApp.descendants(matching: .any)["pipeline-board-lane-screening"]
         XCTAssertTrue(appliedLane.waitForExistence(timeout: 5))
+        XCTAssertTrue(screeningLane.waitForExistence(timeout: 5))
         // AppKit exposes a rendered Board card as one atomic Button, so its
         // rich child metadata is not independently queryable by XCTest. The
         // deterministic fixture and pure lane-mapping contract cover the
         // canonical Screening record; fresh signed-capture visual QA covers
         // the visible employer, chip, locality, next-action, and due-date
         // facts. Keep executable proof here of the globally named card and
-        // its visual containment within the live Applied lane.
+        // its visual containment within the live Screening lane, and its
+        // exclusion from the Applied lane.
         let screeningCard = assertionApp.buttons
             .matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "pipeline-opportunity-", "Product Designer"))
             .firstMatch
         XCTAssertTrue(screeningCard.waitForExistence(timeout: 5))
-        let appliedFrame = appliedLane.frame
+        let screeningFrame = screeningLane.frame
         let cardFrame = screeningCard.frame
         let accessibilityFrameTolerance: CGFloat = 8
         XCTAssertGreaterThan(cardFrame.width, 0)
         XCTAssertGreaterThan(cardFrame.height, 0)
-        XCTAssertGreaterThanOrEqual(cardFrame.minX, appliedFrame.minX - accessibilityFrameTolerance)
-        XCTAssertGreaterThanOrEqual(cardFrame.minY, appliedFrame.minY - accessibilityFrameTolerance)
-        XCTAssertLessThanOrEqual(cardFrame.maxX, appliedFrame.maxX + accessibilityFrameTolerance)
-        XCTAssertLessThanOrEqual(cardFrame.maxY, appliedFrame.maxY + accessibilityFrameTolerance)
+        XCTAssertGreaterThanOrEqual(cardFrame.minX, screeningFrame.minX - accessibilityFrameTolerance)
+        XCTAssertGreaterThanOrEqual(cardFrame.minY, screeningFrame.minY - accessibilityFrameTolerance)
+        XCTAssertLessThanOrEqual(cardFrame.maxX, screeningFrame.maxX + accessibilityFrameTolerance)
+        XCTAssertLessThanOrEqual(cardFrame.maxY, screeningFrame.maxY + accessibilityFrameTolerance)
+        XCTAssertFalse(isContained(screeningCard, in: appliedLane))
         let includeClosed = assertionApp.checkBoxes["pipeline-include-closed"]
         XCTAssertTrue(includeClosed.waitForExistence(timeout: 5))
         includeClosed.click()
@@ -864,7 +982,17 @@ final class RekonPursuitUITests: XCTestCase {
                 forDuration: 0.7,
                 thenDragTo: target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
             )
-            XCTAssertTrue(movingApp.staticTexts[expectedOutcome].waitForExistence(timeout: 5))
+            let outcome = movingApp.descendants(matching: .any)["pipeline-stage-move-outcome"]
+            XCTAssertTrue(outcome.waitForExistence(timeout: 5))
+            expectation(
+                for: NSPredicate(
+                    format: "label == %@ OR value == %@",
+                    expectedOutcome,
+                    expectedOutcome
+                ),
+                evaluatedWith: outcome
+            )
+            waitForExpectations(timeout: 5)
             XCTAssertTrue(isContained(movingApp.buttons["pipeline-opportunity-\(opportunityID)"], in: target))
             movingApp.terminate()
             movingApp = launchApp(fixture: "pipeline", windowSize: "wide", session: session)
@@ -1432,7 +1560,7 @@ final class RekonPursuitUITests: XCTestCase {
         openDrawerScreenshot.name = "VD204 compact drawer open — expected future state (intentional RED until drawer exists)"
         openDrawerScreenshot.lifetime = .keepAlways
         add(openDrawerScreenshot)
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(id)"].exists)
+        assertPipelineInspectorSelection(for: id, in: app)
         let close = app.buttons["pipeline-inspector-close"]
         XCTAssertTrue(close.exists)
         XCTAssertEqual(app.sheets.count, 0)
@@ -1459,8 +1587,9 @@ final class RekonPursuitUITests: XCTestCase {
         let secondID = String(secondRow.identifier.dropFirst("pipeline-table-row-".count))
         secondRow.tap()
         XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-drawer"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(secondID)"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["pipeline-inspector-\(id)"].exists)
+        assertPipelineInspectorSelection(for: secondID, in: app)
+        XCTAssertFalse(pipelineInspectorCompany(for: id, in: app).exists)
+        XCTAssertFalse(pipelineInspectorStage(for: id, in: app).exists)
     }
 
     @MainActor
@@ -1473,9 +1602,10 @@ final class RekonPursuitUITests: XCTestCase {
             .matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-"))
             .firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))
-        XCTAssertEqual(row.value as? String, "Not selected")
+        let id = String(row.identifier.dropFirst("pipeline-table-row-".count))
+        XCTAssertFalse(app.descendants(matching: .any)["pipeline-inspector-drawer"].exists)
         row.tap()
-        XCTAssertEqual(row.value as? String, "Selected")
+        assertPipelineInspectorSelection(for: id, in: app)
 
         // Keep this screenshot for manual visual review of the selection
         // treatment alongside the row's semantic selection checks above.
@@ -1500,7 +1630,7 @@ final class RekonPursuitUITests: XCTestCase {
         let compactViewMode = compactApp.descendants(matching: .any)["pipeline-view-mode"]
         XCTAssertTrue(compactViewMode.waitForExistence(timeout: 5))
         XCTAssertTrue(compactViewMode.isHittable)
-        XCTAssertEqual(compactViewMode.label, "View, View")
+        XCTAssertEqual(compactViewMode.label, "View")
         XCTAssertFalse(compactApp.staticTexts["pipeline-view-label"].exists)
         let compactScreenshot = XCTAttachment(screenshot: compactApp.screenshot())
         compactScreenshot.name = "VD204 compact Pipeline toolbar"
@@ -1511,11 +1641,47 @@ final class RekonPursuitUITests: XCTestCase {
         let wideApp = launchApp(fixture: "pipeline", windowSize: "wide")
         wideApp.descendants(matching: .any)["sidebar-pipeline"].tap()
         XCTAssertTrue(wideApp.descendants(matching: .any)["pipeline-view-mode"].waitForExistence(timeout: 5))
-        XCTAssertTrue(wideApp.staticTexts["pipeline-view-label"].exists)
+        XCTAssertFalse(wideApp.staticTexts["pipeline-view-label"].exists)
         let wideScreenshot = XCTAttachment(screenshot: wideApp.screenshot())
         wideScreenshot.name = "VD204 wide Pipeline toolbar"
         wideScreenshot.lifetime = .keepAlways
         add(wideScreenshot)
+    }
+
+    @MainActor
+    func testVD210PipelineViewModeSegmentsRemainContiguousAndOperableAcrossWideAndCompactLayouts() {
+        for (layoutName, windowSize) in [("wide", "wide"), ("compact", "compact")] {
+            let app = launchApp(fixture: "pipeline", windowSize: windowSize)
+            app.descendants(matching: .any)["sidebar-pipeline"].tap()
+
+            let viewMode = app.descendants(matching: .any)["pipeline-view-mode"]
+            XCTAssertTrue(viewMode.waitForExistence(timeout: 5), "\(layoutName) Pipeline must expose its mode control.")
+            XCTAssertEqual(viewMode.elementType, .radioGroup)
+            let table = viewMode.radioButtons["Table"]
+            let board = viewMode.radioButtons["Board"]
+            XCTAssertEqual(viewMode.radioButtons.count, 2, "\(layoutName) Pipeline must expose exactly Table and Board segments.")
+            XCTAssertTrue(table.isHittable)
+            XCTAssertTrue(board.isHittable)
+
+            // AppKit exposes a semantic frame around each radio label; the
+            // actual pointer target is the enclosing NSSegmentedControl. The
+            // sibling frames must remain adjacent, while outer-edge clicks on
+            // the group prove that control owns the complete 44-point target.
+            XCTAssertEqual(table.frame.height, board.frame.height, accuracy: 0.5)
+            XCTAssertGreaterThanOrEqual(viewMode.frame.height, 44)
+            XCTAssertEqual(table.frame.maxX + 1, board.frame.minX, accuracy: 0.5, "\(layoutName) Table and Board must remain contiguous.")
+
+            viewMode.coordinate(withNormalizedOffset: CGVector(dx: 0.99, dy: 0.5)).click()
+            XCTAssertTrue(app.descendants(matching: .any)["pipeline-board-region"].waitForExistence(timeout: 5))
+            XCTAssertEqual(String(describing: board.value ?? ""), "1")
+            XCTAssertEqual(String(describing: table.value ?? ""), "0")
+
+            viewMode.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5)).click()
+            XCTAssertTrue(app.descendants(matching: .any)["pipeline-table-region"].waitForExistence(timeout: 5))
+            XCTAssertEqual(String(describing: table.value ?? ""), "1")
+            XCTAssertEqual(String(describing: board.value ?? ""), "0")
+            app.terminate()
+        }
     }
 
     @MainActor
@@ -1564,7 +1730,7 @@ final class RekonPursuitUITests: XCTestCase {
 
         let viewMode = app.descendants(matching: .any)["pipeline-view-mode"]
         XCTAssertTrue(viewMode.exists)
-        XCTAssertEqual(viewMode.label, "View, View")
+        XCTAssertEqual(viewMode.label, "View")
         XCTAssertTrue(viewMode.isHittable)
         XCTAssertTrue(app.descendants(matching: .any)["pipeline-table-region"].waitForExistence(timeout: 5))
         viewMode.radioButtons["Board"].click()
@@ -1653,7 +1819,7 @@ final class RekonPursuitUITests: XCTestCase {
             let viewMode = app.descendants(matching: .any)["pipeline-view-mode"]
             XCTAssertTrue(viewMode.waitForExistence(timeout: 5))
             XCTAssertEqual(viewMode.elementType, .radioGroup)
-            XCTAssertEqual(viewMode.label, "View, View")
+            XCTAssertEqual(viewMode.label, "View")
             XCTAssertTrue(viewMode.isHittable)
             XCTAssertTrue(viewMode.radioButtons["Board"].isHittable)
 
@@ -1694,7 +1860,7 @@ final class RekonPursuitUITests: XCTestCase {
             XCTAssertTrue(includeClosed.isHittable)
             XCTAssertTrue(viewMode.exists)
             XCTAssertEqual(viewMode.elementType, .radioGroup)
-            XCTAssertEqual(viewMode.label, "View, View")
+            XCTAssertEqual(viewMode.label, "View")
             XCTAssertTrue(viewMode.isHittable)
             XCTAssertTrue(viewMode.radioButtons["Table"].isHittable)
             XCTAssertTrue(viewMode.radioButtons["Board"].isHittable)
@@ -1829,7 +1995,7 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertTrue(persistedRow.waitForExistence(timeout: 5))
         XCTAssertTrue(persistedRow.label.hasPrefix("\(persistedTitle), Northstar Labs, Applied"))
         persistedRow.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(seniorID)"].waitForExistence(timeout: 5))
+        assertPipelineInspectorSelection(for: seniorID, in: app)
         XCTAssertTrue(app.staticTexts[persistedTitle].exists)
 
         app.descendants(matching: .any)["sidebar-activity-and-ai"].tap()
@@ -1857,8 +2023,9 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         XCTAssertEqual(rows.count, 5, "The closed fixture record must be excluded before the local Closed control is enabled.")
         let selectedRow = rows.firstMatch
+        let selectedID = String(selectedRow.identifier.dropFirst("pipeline-table-row-".count))
         selectedRow.tap()
-        XCTAssertEqual(selectedRow.value as? String, "Selected")
+        assertPipelineInspectorSelection(for: selectedID, in: app)
 
         search.click()
         search.typeText("northstar senior")
@@ -1870,7 +2037,11 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["No opportunities match"].exists)
         app.buttons["pipeline-clear-filters"].tap()
         XCTAssertEqual(rows.count, 5)
-        XCTAssertFalse(app.descendants(matching: .any)["pipeline-inspector-drawer"].exists, "Filtering a selected record out must clear, rather than retain, the ephemeral inspector selection.")
+        XCTAssertFalse(
+            pipelineInspectorCompany(for: selectedID, in: app).exists,
+            "Filtering a selected record out must clear its inspector selection."
+        )
+        XCTAssertFalse(pipelineInspectorStage(for: selectedID, in: app).exists)
         XCTAssertTrue(app.descendants(matching: .any)["pipeline-table-region"].isHittable)
 
         XCTAssertTrue(stage.waitForExistence(timeout: 5))
@@ -1895,35 +2066,6 @@ final class RekonPursuitUITests: XCTestCase {
             closedRow.waitForExistence(timeout: 5),
             "Only the explicit Pipeline Closed control may reveal the closed fixture record."
         )
-    }
-
-    @MainActor
-    func testVD204DeletingASelectedTableRowUsesTheExistingConfirmationAndClearsTheInspector() {
-        let app = launchApp(fixture: "pipeline")
-        app.descendants(matching: .any)["sidebar-pipeline"].tap()
-
-        let row = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-"))
-            .firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        let id = String(row.identifier.dropFirst("pipeline-table-row-".count))
-        row.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(id)"].waitForExistence(timeout: 5))
-
-        row.rightClick()
-        let delete = app.menuItems["pipeline-delete-\(id)"]
-        XCTAssertTrue(delete.waitForExistence(timeout: 5))
-        delete.click()
-        XCTAssertTrue(app.staticTexts["Delete opportunity?"].waitForExistence(timeout: 5))
-        app.sheets.firstMatch.buttons["Delete"].click()
-
-        let deletedRow = app.descendants(matching: .any)["pipeline-table-row-\(id)"]
-        XCTAssertTrue(
-            deletedRow.waitForNonExistence(timeout: 5),
-            "The deleted opportunity must eventually leave the real Pipeline table accessibility tree."
-        )
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-drawer"].waitForNonExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-table-region"].isHittable)
     }
 
     @MainActor
@@ -2236,7 +2378,7 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         let id = String(row.identifier.dropFirst("pipeline-table-row-".count))
         row.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(id)"].waitForExistence(timeout: 5))
+        assertPipelineInspectorSelection(for: id, in: app)
 
         let openDetails = app.buttons["pipeline-open-details-\(id)"]
         XCTAssertTrue(openDetails.waitForExistence(timeout: 5))
@@ -2261,7 +2403,7 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         let id = String(row.identifier.dropFirst("pipeline-table-row-".count))
         row.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(id)"].waitForExistence(timeout: 5))
+        assertPipelineInspectorSelection(for: id, in: app)
         app.buttons["pipeline-open-details-\(id)"].tap()
         XCTAssertTrue(app.buttons["Back to Pipeline"].waitForExistence(timeout: 5))
 

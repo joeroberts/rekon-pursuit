@@ -368,7 +368,7 @@ struct RekonPrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.body.weight(.semibold))
+            .font(.system(size: 17, weight: .semibold))
             .foregroundStyle(.white)
             .padding(.horizontal, RekonTheme.Spacing.standard)
             .padding(.vertical, RekonTheme.Spacing.tight)
@@ -642,12 +642,69 @@ struct PipelineSecondaryButtonStyle: ButtonStyle {
     }
 }
 
+/// The toolbar's import action is intentionally quieter and more compact than
+/// detail-pane actions that share the Pipeline secondary treatment.
+struct PipelineToolbarSecondaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        PipelineToolbarSecondaryButtonBody(
+            label: configuration.label,
+            isEnabled: isEnabled,
+            isPressed: configuration.isPressed
+        )
+    }
+}
+
+/// Pipeline's top-level creation action has the same visual scale as its
+/// adjacent controls without changing primary actions elsewhere in the app.
+struct PipelinePrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 44)
+            .background(
+                RekonTheme.actionGradient.opacity(isEnabled ? (configuration.isPressed ? 0.84 : 1) : 0.45),
+                in: RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
+    }
+}
+
 // MARK: - Pipeline-local AppKit controls
 
 /// These controls intentionally own both their AppKit interaction semantics and
 /// their visual rendering. A SwiftUI surface behind a standard AppKit control
 /// cannot remove the control's opaque gray bezel, which is why these are not
 /// general-purpose styles and are only used by Pipeline.
+nonisolated enum PipelineNavySegmentedContentTone: Equatable {
+    case accent
+    case primary
+    case muted
+
+    static func resolve(isSelected: Bool, isEnabled: Bool) -> Self {
+        guard isEnabled else { return .muted }
+        return isSelected ? .accent : .primary
+    }
+}
+
+private enum PipelineNavySegmentedContentColor {
+    static func resolve(_ tone: PipelineNavySegmentedContentTone) -> NSColor {
+        switch tone {
+        case .accent:
+            NSColor(RekonTheme.accent)
+        case .primary:
+            NSColor(RekonTheme.primaryText)
+        case .muted:
+            NSColor(RekonTheme.secondaryText)
+        }
+    }
+}
+
 private enum PipelineNativeControlDrawing {
     static let cornerRadius: CGFloat = RekonTheme.Radius.control
 
@@ -671,123 +728,6 @@ private enum PipelineNativeControlDrawing {
 
     static func secondaryTextColor(isEnabled: Bool) -> NSColor {
         NSColor(isEnabled ? RekonTheme.secondaryText : RekonTheme.secondaryText.opacity(0.64))
-    }
-}
-
-private class PipelineNativeControl: NSControl {
-    var isPointerHovering = false { didSet { needsDisplay = true } }
-    var isPressed = false { didSet { needsDisplay = true } }
-
-    override var isEnabled: Bool { didSet { needsDisplay = true } }
-
-    private var trackingArea: NSTrackingArea?
-
-    var interactionState: PipelineNavySurfaceInteractionState {
-        PipelineNavySurfacePresentation.interactionState(
-            isEnabled: isEnabled,
-            isPointerHovering: isPointerHovering,
-            isKeyboardFocused: window?.firstResponder === self,
-            isPressed: isPressed
-        )
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingArea { removeTrackingArea(trackingArea) }
-        let trackingArea = NSTrackingArea(
-            rect: bounds,
-            options: [.activeInKeyWindow, .mouseEnteredAndExited, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(trackingArea)
-        self.trackingArea = trackingArea
-    }
-
-    override func mouseEntered(with event: NSEvent) { isPointerHovering = true }
-    override func mouseExited(with event: NSEvent) { isPointerHovering = false }
-    override func becomeFirstResponder() -> Bool {
-        let accepted = super.becomeFirstResponder()
-        if accepted { needsDisplay = true }
-        return accepted
-    }
-    override func resignFirstResponder() -> Bool {
-        let accepted = super.resignFirstResponder()
-        if accepted { needsDisplay = true }
-        return accepted
-    }
-    override func mouseDown(with event: NSEvent) {
-        isPressed = true
-        super.mouseDown(with: event)
-        isPressed = false
-    }
-}
-
-final class PipelineNavySearchField: NSTextField {
-    var isPointerHovering = false { didSet { refreshChrome() } }
-    private var trackingArea: NSTrackingArea?
-
-    override var isEnabled: Bool { didSet { refreshChrome() } }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        isBezeled = false
-        isBordered = false
-        drawsBackground = false
-        focusRingType = .none
-        wantsLayer = true
-        font = .systemFont(ofSize: 15)
-        textColor = PipelineNativeControlDrawing.textColor(isEnabled: true)
-        placeholderAttributedString = NSAttributedString(
-            string: "Search opportunities",
-            attributes: [.foregroundColor: PipelineNativeControlDrawing.secondaryTextColor(isEnabled: true)]
-        )
-        lineBreakMode = .byTruncatingTail
-    }
-
-    required init?(coder: NSCoder) { nil }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingArea { removeTrackingArea(trackingArea) }
-        let trackingArea = NSTrackingArea(rect: bounds, options: [.activeInKeyWindow, .mouseEnteredAndExited, .inVisibleRect], owner: self, userInfo: nil)
-        addTrackingArea(trackingArea)
-        self.trackingArea = trackingArea
-    }
-
-    override func mouseEntered(with event: NSEvent) { isPointerHovering = true }
-    override func mouseExited(with event: NSEvent) { isPointerHovering = false }
-    override func becomeFirstResponder() -> Bool {
-        let accepted = super.becomeFirstResponder()
-        if accepted { refreshChrome() }
-        return accepted
-    }
-    override func resignFirstResponder() -> Bool {
-        let accepted = super.resignFirstResponder()
-        if accepted { refreshChrome() }
-        return accepted
-    }
-
-    func refreshChrome() {
-        let state = PipelineNavySurfacePresentation.interactionState(
-            isEnabled: isEnabled,
-            isPointerHovering: isPointerHovering,
-            isKeyboardFocused: window?.firstResponder === self,
-            isPressed: false
-        )
-        let presentation = PipelineNavySurfacePresentation.presentation(for: state)
-        layer?.backgroundColor = NSColor(PipelineNavySurfaceColor.resolve(presentation.fill).opacity(presentation.opacity)).cgColor
-        layer?.borderColor = NSColor(PipelineNavySurfaceColor.resolve(presentation.outline)).cgColor
-        layer?.borderWidth = presentation.borderWidth
-        layer?.cornerRadius = PipelineNativeControlDrawing.cornerRadius
-        layer?.shadowColor = state == .keyboardFocus ? NSColor(RekonTheme.violet).cgColor : nil
-        layer?.shadowOpacity = state == .keyboardFocus ? 0.45 : 0
-        layer?.shadowRadius = state == .keyboardFocus ? 6 : 0
-        textColor = PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
-        placeholderAttributedString = NSAttributedString(
-            string: "Search opportunities",
-            attributes: [.foregroundColor: PipelineNativeControlDrawing.secondaryTextColor(isEnabled: isEnabled)]
-        )
     }
 }
 
@@ -838,7 +778,7 @@ final class PipelineNavyPopupButton: NSPopUpButton {
         arrow.move(to: NSPoint(x: arrowCenterX - 5, y: arrowCenterY + 2))
         arrow.line(to: NSPoint(x: arrowCenterX, y: arrowCenterY - 3))
         arrow.line(to: NSPoint(x: arrowCenterX + 5, y: arrowCenterY + 2))
-        arrow.lineWidth = 1.6
+        arrow.lineWidth = 1.8
         PipelineNativeControlDrawing.secondaryTextColor(isEnabled: isEnabled).setStroke()
         arrow.stroke()
     }
@@ -859,6 +799,11 @@ final class PipelineNavyCheckbox: NSButton {
 
     required init?(coder: NSCoder) { nil }
 
+    override var intrinsicContentSize: NSSize {
+        let titleSize = title.size(withAttributes: [.font: NSFont.systemFont(ofSize: 15, weight: .medium)])
+        return NSSize(width: ceil(titleSize.width) + 23, height: 44)
+    }
+
     private var interactionState: PipelineNavySurfaceInteractionState {
         PipelineNavySurfacePresentation.interactionState(isEnabled: isEnabled, isPointerHovering: isPointerHovering, isKeyboardFocused: window?.firstResponder === self, isPressed: isPressed)
     }
@@ -878,8 +823,7 @@ final class PipelineNavyCheckbox: NSButton {
     override func mouseDown(with event: NSEvent) { isPressed = true; super.mouseDown(with: event); isPressed = false }
 
     override func draw(_ dirtyRect: NSRect) {
-        PipelineNativeControlDrawing.paint(in: bounds, state: interactionState)
-        let box = NSRect(x: 10, y: bounds.midY - 9, width: 18, height: 18)
+        let box = NSRect(x: 0, y: bounds.midY - 8, width: 16, height: 16)
         let boxPath = NSBezierPath(roundedRect: box, xRadius: 5, yRadius: 5)
         NSColor(RekonTheme.background).setFill()
         boxPath.fill()
@@ -900,10 +844,13 @@ final class PipelineNavyCheckbox: NSButton {
             .foregroundColor: PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
         ]
         let titleSize = title.size(withAttributes: attributes)
-        title.draw(at: NSPoint(x: box.maxX + 8, y: bounds.midY - titleSize.height / 2), withAttributes: attributes)
+        title.draw(at: NSPoint(x: box.maxX + 7, y: bounds.midY - titleSize.height / 2), withAttributes: attributes)
     }
 }
 
+/// Pipeline's one native input owner for the Table / Board mode. Rendering is
+/// intentionally local to this control so the AppKit selector has no hidden
+/// SwiftUI proxy or global appearance dependency.
 final class PipelineNavySegmentedControl: NSSegmentedControl {
     var isPointerHovering = false { didSet { needsDisplay = true } }
     var isPressed = false { didSet { needsDisplay = true } }
@@ -918,77 +865,166 @@ final class PipelineNavySegmentedControl: NSSegmentedControl {
     required init?(coder: NSCoder) { nil }
 
     private var interactionState: PipelineNavySurfaceInteractionState {
-        PipelineNavySurfacePresentation.interactionState(isEnabled: isEnabled, isPointerHovering: isPointerHovering, isKeyboardFocused: window?.firstResponder === self, isPressed: isPressed)
+        PipelineNavySurfacePresentation.interactionState(
+            isEnabled: isEnabled,
+            isPointerHovering: isPointerHovering,
+            isKeyboardFocused: window?.firstResponder === self,
+            isPressed: isPressed
+        )
     }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let trackingArea { removeTrackingArea(trackingArea) }
-        let trackingArea = NSTrackingArea(rect: bounds, options: [.activeInKeyWindow, .mouseEnteredAndExited, .inVisibleRect], owner: self, userInfo: nil)
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.activeInKeyWindow, .mouseEnteredAndExited, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
         addTrackingArea(trackingArea)
         self.trackingArea = trackingArea
     }
 
     override func mouseEntered(with event: NSEvent) { isPointerHovering = true }
     override func mouseExited(with event: NSEvent) { isPointerHovering = false }
-    override func becomeFirstResponder() -> Bool { let accepted = super.becomeFirstResponder(); if accepted { needsDisplay = true }; return accepted }
-    override func resignFirstResponder() -> Bool { let accepted = super.resignFirstResponder(); if accepted { needsDisplay = true }; return accepted }
-    override func mouseDown(with event: NSEvent) { isPressed = true; super.mouseDown(with: event); isPressed = false }
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted { needsDisplay = true }
+        return accepted
+    }
+    override func resignFirstResponder() -> Bool {
+        let accepted = super.resignFirstResponder()
+        if accepted { needsDisplay = true }
+        return accepted
+    }
+    override func mouseDown(with event: NSEvent) {
+        isPressed = true
+        super.mouseDown(with: event)
+        isPressed = false
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         PipelineNativeControlDrawing.paint(in: bounds, state: interactionState)
         guard segmentCount > 0 else { return }
+
         let segmentWidth = bounds.width / CGFloat(segmentCount)
         for index in 0..<segmentCount {
-            let rect = NSRect(x: CGFloat(index) * segmentWidth, y: 0, width: segmentWidth, height: bounds.height).insetBy(dx: 3, dy: 3)
-            let selected = selectedSegment == index
-            if selected {
-                PipelineNativeControlDrawing.paint(in: rect, state: window?.firstResponder === self ? .keyboardFocus : .selected, cornerRadius: 7)
+            let segmentRect = NSRect(
+                x: CGFloat(index) * segmentWidth,
+                y: 0,
+                width: segmentWidth,
+                height: bounds.height
+            ).insetBy(dx: 3, dy: 3)
+            let isSelected = selectedSegment == index
+            if isSelected {
+                PipelineNativeControlDrawing.paint(
+                    in: segmentRect,
+                    state: window?.firstResponder === self ? .keyboardFocus : .selected,
+                    cornerRadius: 7
+                )
             }
+
             let title = label(forSegment: index) ?? ""
+            let symbolName = index == 0 ? "list.bullet" : "square.grid.2x2"
+            let contentTone = PipelineNavySegmentedContentTone.resolve(
+                isSelected: isSelected,
+                isEnabled: isEnabled
+            )
+            let contentColor = PipelineNavySegmentedContentColor.resolve(contentTone)
             let attributes: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 15, weight: selected ? .semibold : .medium),
-                .foregroundColor: PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
+                .font: NSFont.systemFont(ofSize: 15, weight: isSelected ? .semibold : .medium),
+                .foregroundColor: contentColor
             ]
             let titleSize = title.size(withAttributes: attributes)
-            title.draw(at: NSPoint(x: rect.midX - titleSize.width / 2, y: rect.midY - titleSize.height / 2), withAttributes: attributes)
+            let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+            symbol?.isTemplate = true
+            let symbolSize = symbol?.size ?? .zero
+            let contentWidth = symbolSize.width + 6 + titleSize.width
+            let contentX = segmentRect.midX - contentWidth / 2
+            contentColor.set()
+            symbol?.draw(
+                in: NSRect(
+                    x: contentX,
+                    y: segmentRect.midY - symbolSize.height / 2,
+                    width: symbolSize.width,
+                    height: symbolSize.height
+                ),
+                from: .zero,
+                operation: .sourceOver,
+                fraction: isEnabled ? 1 : 0.64
+            )
+            title.draw(
+                at: NSPoint(
+                    x: contentX + symbolSize.width + 6,
+                    y: segmentRect.midY - titleSize.height / 2
+                ),
+                withAttributes: attributes
+            )
         }
     }
 }
 
-struct PipelineNavySearchControl: NSViewRepresentable {
+/// Pipeline's search control is intentionally a direct SwiftUI binding. This
+/// avoids AppKit's `NSSearchField` cancel-button behavior getting out of sync
+/// with the query that drives the table.
+struct PipelineNavySearchControl: View {
     @Binding var text: String
     let accessibilityIdentifier: String
     let accessibilityLabel: String
+    @State private var isPointerHovering = false
+    @FocusState private var isFocused: Bool
 
-    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
-
-    func makeNSView(context: Context) -> PipelineNavySearchField {
-        let field = PipelineNavySearchField(frame: .zero)
-        field.delegate = context.coordinator
-        field.stringValue = text
-        field.setAccessibilityIdentifier(accessibilityIdentifier)
-        field.setAccessibilityLabel(accessibilityLabel)
-        field.refreshChrome()
-        return field
+    private var interactionState: PipelineNavySurfaceInteractionState {
+        PipelineNavySurfacePresentation.interactionState(
+            isEnabled: true,
+            isPointerHovering: isPointerHovering,
+            isKeyboardFocused: isFocused,
+            isPressed: false
+        )
     }
 
-    func updateNSView(_ field: PipelineNavySearchField, context: Context) {
-        if field.stringValue != text { field.stringValue = text }
-        field.setAccessibilityIdentifier(accessibilityIdentifier)
-        field.setAccessibilityLabel(accessibilityLabel)
-        field.refreshChrome()
-    }
+    var body: some View {
+        HStack(spacing: 8) {
+            if text.isEmpty {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(RekonTheme.secondaryText)
+                    .accessibilityIdentifier("pipeline-search-icon")
+                    .accessibilityLabel("Search")
+            }
 
-    static func dismantleNSView(_ field: PipelineNavySearchField, coordinator: Coordinator) { field.delegate = nil }
+            TextField("", text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 15))
+                .foregroundStyle(RekonTheme.primaryText)
+                .focused($isFocused)
+                .accessibilityIdentifier(accessibilityIdentifier)
+                .accessibilityLabel(accessibilityLabel)
 
-    final class Coordinator: NSObject, NSTextFieldDelegate {
-        @Binding var text: String
-        init(text: Binding<String>) { _text = text }
-        func controlTextDidChange(_ notification: Notification) {
-            guard let field = notification.object as? NSTextField else { return }
-            text = field.stringValue
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                    isFocused = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(RekonTheme.secondaryText)
+                }
+                .frame(minWidth: 20, minHeight: 20)
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .accessibilityIdentifier("pipeline-clear-search")
+                .accessibilityLabel("Clear search")
+            }
         }
+        .padding(.horizontal, 11)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .pipelineNavySurface(interactionState)
+        .contentShape(RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
+        .onHover { isPointerHovering = $0 }
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -999,6 +1035,13 @@ struct PipelineNavyStageControl: NSViewRepresentable {
     let accessibilityLabel: String
 
     func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: PipelineNavyPopupButton, context: Context) -> CGSize? {
+        CGSize(
+            width: proposal.width ?? nsView.fittingSize.width,
+            height: proposal.height ?? nsView.fittingSize.height
+        )
+    }
 
     func makeNSView(context: Context) -> PipelineNavyPopupButton {
         let popup = PipelineNavyPopupButton(frame: .zero, pullsDown: false)
@@ -1038,6 +1081,13 @@ struct PipelineNavyCheckboxControl: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(isOn: $isOn) }
 
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: PipelineNavyCheckbox, context: Context) -> CGSize? {
+        CGSize(
+            width: proposal.width ?? nsView.fittingSize.width,
+            height: proposal.height ?? nsView.fittingSize.height
+        )
+    }
+
     func makeNSView(context: Context) -> PipelineNavyCheckbox {
         let checkbox = PipelineNavyCheckbox(frame: .zero)
         checkbox.title = title
@@ -1069,7 +1119,20 @@ struct PipelineNavyViewModeControl: NSViewRepresentable {
     let accessibilityIdentifier: String
     let accessibilityLabel: String
 
-    func makeCoordinator() -> Coordinator { Coordinator(showsBoard: $showsBoard) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(showsBoard: $showsBoard)
+    }
+
+    func sizeThatFits(
+        _ proposal: ProposedViewSize,
+        nsView: PipelineNavySegmentedControl,
+        context: Context
+    ) -> CGSize? {
+        CGSize(
+            width: proposal.width ?? 216,
+            height: proposal.height ?? 44
+        )
+    }
 
     func makeNSView(context: Context) -> PipelineNavySegmentedControl {
         let segmented = PipelineNavySegmentedControl(frame: .zero)
@@ -1080,26 +1143,30 @@ struct PipelineNavyViewModeControl: NSViewRepresentable {
         segmented.target = context.coordinator
         segmented.action = #selector(Coordinator.selectMode(_:))
         segmented.setAccessibilityIdentifier(accessibilityIdentifier)
-        // Match the pre-existing SwiftUI segmented Picker projection while
-        // preserving the native radio descendants' individual Table/Board
-        // labels. Existing assistive-tech automation uses this composite
-        // group label as its stable contract.
-        segmented.setAccessibilityLabel("\(accessibilityLabel), \(accessibilityLabel)")
+        segmented.setAccessibilityLabel(accessibilityLabel)
         return segmented
     }
 
     func updateNSView(_ segmented: PipelineNavySegmentedControl, context: Context) {
         let selection = showsBoard ? 1 : 0
-        if segmented.selectedSegment != selection { segmented.selectedSegment = selection }
+        if segmented.selectedSegment != selection {
+            segmented.selectedSegment = selection
+        }
         segmented.setAccessibilityIdentifier(accessibilityIdentifier)
-        segmented.setAccessibilityLabel("\(accessibilityLabel), \(accessibilityLabel)")
+        segmented.setAccessibilityLabel(accessibilityLabel)
         segmented.needsDisplay = true
     }
 
     final class Coordinator: NSObject {
         @Binding var showsBoard: Bool
-        init(showsBoard: Binding<Bool>) { _showsBoard = showsBoard }
-        @objc func selectMode(_ sender: NSSegmentedControl) { showsBoard = sender.selectedSegment == 1 }
+
+        init(showsBoard: Binding<Bool>) {
+            _showsBoard = showsBoard
+        }
+
+        @objc func selectMode(_ sender: NSSegmentedControl) {
+            showsBoard = sender.selectedSegment == 1
+        }
     }
 }
 
@@ -1121,10 +1188,39 @@ private struct PipelineSecondaryButtonBody<Label: View>: View {
 
     var body: some View {
         label
-            .font(.body.weight(.medium))
+            .font(.system(size: 17, weight: .semibold))
             .foregroundStyle(RekonTheme.primaryText)
-            .padding(.horizontal, RekonTheme.Spacing.standard)
-            .padding(.vertical, RekonTheme.Spacing.tight)
+            .padding(.horizontal, 18)
+            .frame(minHeight: 50)
+            .pipelineNavySurface(interactionState)
+            .contentShape(RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
+            .focused($isFocused)
+            .onHover { isPointerHovering = $0 }
+    }
+}
+
+private struct PipelineToolbarSecondaryButtonBody<Label: View>: View {
+    let label: Label
+    let isEnabled: Bool
+    let isPressed: Bool
+    @State private var isPointerHovering = false
+    @FocusState private var isFocused: Bool
+
+    private var interactionState: PipelineNavySurfaceInteractionState {
+        PipelineNavySurfacePresentation.interactionState(
+            isEnabled: isEnabled,
+            isPointerHovering: isPointerHovering,
+            isKeyboardFocused: isFocused,
+            isPressed: isPressed
+        )
+    }
+
+    var body: some View {
+        label
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(RekonTheme.primaryText)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 44)
             .pipelineNavySurface(interactionState)
             .contentShape(RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
             .focused($isFocused)

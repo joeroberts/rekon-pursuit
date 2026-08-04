@@ -253,7 +253,7 @@ struct PipelineBoardView: View {
                     ForEach(PipelineBoardLane.displayedLanes(includesClosed: includesClosed), id: \.self) { lane in
                         boardLane(lane)
                             .id(lane)
-                            .frame(width: 280, alignment: .leading)
+                        .frame(width: 304, alignment: .leading)
                     }
                 }
                 .padding(.bottom, 4)
@@ -307,24 +307,18 @@ struct PipelineBoardView: View {
     private func boardLane(_ lane: PipelineBoardLane) -> some View {
         let laneOpportunities = opportunities.filter { lane.includes($0.stage) }
         return ScrollViewReader { laneProxy in
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 10) {
                     Image(systemName: lane.symbolName)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.title3.weight(.semibold))
                         .foregroundStyle(lane.accent)
-                    Text(lane.title).font(.headline)
+                    Text(lane.title)
+                        .font(.title3.weight(.semibold))
                     Text("\(laneOpportunities.count)")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(RekonTheme.secondaryText)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(RekonTheme.surface, in: Capsule())
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(lane.accent)
                         .accessibilityIdentifier("pipeline-board-lane-count-\(lane.accessibilityName)")
                     Spacer(minLength: 0)
-                    Image(systemName: "ellipsis")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(RekonTheme.secondaryText)
-                        .accessibilityHidden(true)
                 }
 
                 ScrollView {
@@ -363,7 +357,7 @@ struct PipelineBoardView: View {
                 .foregroundStyle(RekonTheme.accent)
                 .accessibilityIdentifier("pipeline-board-lane-add-\(lane.accessibilityName)")
             }
-            .padding(14)
+            .padding(16)
             .background(
                 hoveredLane == lane ? lane.accent.opacity(0.12) : RekonTheme.backgroundRaised,
                 in: RoundedRectangle(cornerRadius: RekonTheme.Radius.card)
@@ -561,16 +555,16 @@ private struct PipelineOpportunityMoveCard: View {
         ZStack(alignment: .topTrailing) {
             Button(action: open) {
                 VStack(alignment: .leading, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 7) {
                         Text(opportunity.title)
-                            .font(.subheadline.weight(.semibold))
+                            .font(.body.weight(.semibold))
                             .foregroundStyle(RekonTheme.primaryText)
                             .lineLimit(2)
                             .padding(.trailing, 42)
                         HStack(spacing: 6) {
                             PipelineEmployerMark(company: opportunity.company)
                             Text(opportunity.company)
-                                .font(.caption)
+                                .font(.subheadline)
                                 .foregroundStyle(RekonTheme.secondaryText)
                                 .lineLimit(1)
                                 .accessibilityIdentifier("pipeline-board-card-company-\(opportunity.id)")
@@ -579,7 +573,7 @@ private struct PipelineOpportunityMoveCard: View {
 
                     if let locality = opportunity.locationSummary {
                         Label(locality, systemImage: "mappin.circle.fill")
-                            .font(.caption)
+                            .font(.subheadline)
                             .foregroundStyle(RekonTheme.secondaryText)
                             .lineLimit(1)
                             .accessibilityIdentifier("pipeline-board-card-locality-\(opportunity.id)")
@@ -589,10 +583,10 @@ private struct PipelineOpportunityMoveCard: View {
 
                     VStack(alignment: .leading, spacing: 5) {
                         Text("Next action")
-                            .font(.caption2)
+                            .font(.caption.weight(.medium))
                             .foregroundStyle(RekonTheme.secondaryText)
                         Text(opportunity.nextAction.isEmpty ? "No next action" : opportunity.nextAction)
-                            .font(.caption.weight(.medium))
+                            .font(.subheadline.weight(.medium))
                             .foregroundStyle(RekonTheme.primaryText)
                             .lineLimit(2)
                             .accessibilityIdentifier("pipeline-board-card-next-action-\(opportunity.id)")
@@ -603,7 +597,7 @@ private struct PipelineOpportunityMoveCard: View {
                         Text(opportunity.dueAt.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "No due date")
                             .lineLimit(1)
                     }
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(RekonTheme.secondaryText)
                     .accessibilityIdentifier("pipeline-board-card-due-date-\(opportunity.id)")
                 }
@@ -627,7 +621,8 @@ private struct PipelineOpportunityMoveCard: View {
             )
             .frame(width: 36, height: 36)
         }
-        .padding(12)
+        .padding(14)
+        .frame(minHeight: 196, alignment: .top)
         .background(RekonTheme.surface, in: RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
