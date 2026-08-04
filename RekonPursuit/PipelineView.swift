@@ -223,9 +223,12 @@ struct PipelineView: View {
     private var importControl: some View {
         Button(action: importCSV) {
             Label("Import CSV", systemImage: "arrow.down.to.line")
+                .lineLimit(1)
         }
         .buttonStyle(PipelineToolbarSecondaryButtonStyle())
         .frame(minWidth: 136)
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(1)
         .accessibilityIdentifier("pipeline-import-csv")
     }
 
