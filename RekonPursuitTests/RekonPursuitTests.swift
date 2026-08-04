@@ -127,6 +127,29 @@ final class RekonPursuitTests: XCTestCase {
         XCTAssertEqual(Set(presentations.map(\.outcomeText)).count, results.count)
     }
 
+    func testPipelineInspectorStageMoveFeedbackKeepsTheSelectedOpportunityAndUsesCanonicalResults() {
+        let opportunityID = "00000000-0000-4000-8000-000000000205"
+        let cases: [(StageMoveResult, String, PipelineStage)] = [
+            (.persisted(opportunityID: opportunityID, from: .saved, to: .screening), "Moved to Screening.", .screening),
+            (.noOp(opportunityID: opportunityID, stage: .saved), "Already in Saved.", .saved),
+            (.reconciliationBlocked(opportunityID: opportunityID, target: .closed), "Confirm reconciliation before moving to Closed.", .saved),
+            (.unavailable(opportunityID: opportunityID), "Opportunity is no longer available locally.", .saved),
+            (.failed(opportunityID: opportunityID), "The local stage was not changed.", .saved)
+        ]
+
+        for (result, expectedOutcome, expectedStage) in cases {
+            let feedback = PipelineInspectorStageMoveFeedback.make(
+                for: result,
+                selectedOpportunityID: opportunityID,
+                sourceStage: .saved
+            )
+
+            XCTAssertEqual(feedback.selectedOpportunityID, opportunityID)
+            XCTAssertEqual(feedback.outcomeText, expectedOutcome)
+            XCTAssertEqual(feedback.presentedStage, expectedStage)
+        }
+    }
+
     @MainActor
     func testPersistedResultUsesExactStageChipAndBoardLane() {
         let deliveryGate = PipelineStageMoveDeliveryGate()

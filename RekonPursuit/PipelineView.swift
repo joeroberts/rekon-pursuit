@@ -81,6 +81,31 @@ nonisolated enum AddOpportunityOrigin: Equatable {
     }
 }
 
+/// Inspector stage actions use the same truthful result projection as Board
+/// moves. Retaining the selected identifier keeps feedback attached to the
+/// opportunity that initiated the action rather than to a transient menu.
+nonisolated struct PipelineInspectorStageMoveFeedback: Equatable {
+    let selectedOpportunityID: String
+    let outcomeText: String
+    let presentedStage: PipelineStage
+
+    static func make(
+        for result: StageMoveResult,
+        selectedOpportunityID: String,
+        sourceStage: PipelineStage
+    ) -> Self {
+        let presentation = PipelineStageMovePresentation.make(
+            for: result,
+            sourceStage: sourceStage
+        )
+        return Self(
+            selectedOpportunityID: selectedOpportunityID,
+            outcomeText: presentation.outcomeText,
+            presentedStage: presentation.presentedStage
+        )
+    }
+}
+
 /// Pipeline owns only ephemeral presentation state. ContentView retains the
 /// workspace, canonical route, destructive dialog, and return-anchor owners.
 struct PipelineView: View {
@@ -93,10 +118,11 @@ struct PipelineView: View {
     @Binding var horizontalLane: PipelineBoardLane?
     let open: (Opportunity) -> Void
     let delete: (Opportunity) -> Void
-    let changeStage: (Opportunity, PipelineStage) -> Void
+    let changeStage: (Opportunity, PipelineStage) -> StageMoveResult
     let addOpportunity: () -> Void
     let importCSV: () -> Void
     @State private var selectedTableID: String?
+    @State private var inspectorStageMoveFeedback: PipelineInspectorStageMoveFeedback?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var visibleOpportunities: [Opportunity] {
@@ -144,6 +170,10 @@ struct PipelineView: View {
             if let selectedTableID, !ids.contains(selectedTableID) {
                 self.selectedTableID = nil
             }
+        }
+        .onChange(of: selectedTableID) { _, selectedID in
+            guard inspectorStageMoveFeedback?.selectedOpportunityID != selectedID else { return }
+            inspectorStageMoveFeedback = nil
         }
     }
 
@@ -246,11 +276,17 @@ struct PipelineView: View {
                     table(isCompact: true)
                         .zIndex(0)
                     if let selectedOpportunity {
-                        PipelineInspector(opportunity: selectedOpportunity, close: { selectedTableID = nil }) {
+                        PipelineInspector(
+                            opportunity: selectedOpportunity,
+                            stageMoveOutcome: inspectorStageMoveFeedback?.selectedOpportunityID == selectedOpportunity.id
+                                ? inspectorStageMoveFeedback?.outcomeText
+                                : nil,
+                            close: { selectedTableID = nil }
+                        ) {
                             anchorID = selectedOpportunity.id
                             open(selectedOpportunity)
                         } changeStage: { target in
-                            changeStage(selectedOpportunity, target)
+                            recordInspectorStageMove(for: selectedOpportunity, to: target)
                         } delete: {
                             delete(selectedOpportunity)
                         }
@@ -326,11 +362,17 @@ struct PipelineView: View {
 
     @ViewBuilder private var inspector: some View {
         if let selectedOpportunity {
-            PipelineInspector(opportunity: selectedOpportunity, close: { selectedTableID = nil }) {
+            PipelineInspector(
+                opportunity: selectedOpportunity,
+                stageMoveOutcome: inspectorStageMoveFeedback?.selectedOpportunityID == selectedOpportunity.id
+                    ? inspectorStageMoveFeedback?.outcomeText
+                    : nil,
+                close: { selectedTableID = nil }
+            ) {
                 anchorID = selectedOpportunity.id
                 open(selectedOpportunity)
             } changeStage: { target in
-                changeStage(selectedOpportunity, target)
+                recordInspectorStageMove(for: selectedOpportunity, to: target)
             } delete: {
                 delete(selectedOpportunity)
             }
@@ -338,6 +380,15 @@ struct PipelineView: View {
             PipelineInspectorEmptyState()
                 .accessibilityIdentifier("pipeline-inspector-empty")
         }
+    }
+
+    private func recordInspectorStageMove(for opportunity: Opportunity, to target: PipelineStage) {
+        let result = changeStage(opportunity, target)
+        inspectorStageMoveFeedback = PipelineInspectorStageMoveFeedback.make(
+            for: result,
+            selectedOpportunityID: opportunity.id,
+            sourceStage: opportunity.stage
+        )
     }
 
 }
@@ -625,6 +676,7 @@ struct PipelineStagePill: View {
 
 private struct PipelineInspector: View {
     let opportunity: Opportunity
+    let stageMoveOutcome: String?
     let close: (() -> Void)?
     let openDetails: () -> Void
     let changeStage: (PipelineStage) -> Void
@@ -701,6 +753,13 @@ private struct PipelineInspector: View {
                 Spacer()
                 PipelineStagePill(stage: opportunity.stage)
                     .accessibilityIdentifier("pipeline-inspector-stage-\(opportunity.id)")
+            }
+            if let stageMoveOutcome {
+                Text(stageMoveOutcome)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(RekonTheme.primaryText)
+                    .accessibilityIdentifier("pipeline-inspector-stage-move-outcome-\(opportunity.id)")
+                    .accessibilityAddTraits(.updatesFrequently)
             }
             PipelineInspectorFact(
                 title: "Applied",
