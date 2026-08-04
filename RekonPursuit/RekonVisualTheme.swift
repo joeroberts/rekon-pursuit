@@ -771,10 +771,6 @@ final class PipelineNavySearchField: NSSearchField {
         wantsLayer = true
         font = .systemFont(ofSize: 15)
         textColor = PipelineNativeControlDrawing.textColor(isEnabled: true)
-        placeholderAttributedString = NSAttributedString(
-            string: "Search opportunities",
-            attributes: [.foregroundColor: PipelineNativeControlDrawing.secondaryTextColor(isEnabled: true)]
-        )
         lineBreakMode = .byTruncatingTail
     }
 
@@ -817,10 +813,6 @@ final class PipelineNavySearchField: NSSearchField {
         layer?.shadowOpacity = state == .keyboardFocus ? 0.45 : 0
         layer?.shadowRadius = state == .keyboardFocus ? 6 : 0
         textColor = PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
-        placeholderAttributedString = NSAttributedString(
-            string: "Search opportunities",
-            attributes: [.foregroundColor: PipelineNativeControlDrawing.secondaryTextColor(isEnabled: isEnabled)]
-        )
     }
 }
 
