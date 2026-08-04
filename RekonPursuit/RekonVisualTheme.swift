@@ -756,17 +756,6 @@ private class PipelineNativeControl: NSControl {
     }
 }
 
-private final class PipelineNavySearchFieldCell: NSSearchFieldCell {
-    override func drawingRect(forBounds rect: NSRect) -> NSRect {
-        var drawingRect = super.drawingRect(forBounds: rect)
-        let textHeight = ceil(font?.boundingRectForFont.height ?? drawingRect.height)
-        drawingRect.origin.y = rect.midY - (textHeight / 2)
-        drawingRect.size.height = textHeight
-        return drawingRect
-    }
-
-}
-
 final class PipelineNavySearchField: NSSearchField {
     var isPointerHovering = false { didSet { refreshChrome() } }
     private var trackingArea: NSTrackingArea?
@@ -775,7 +764,6 @@ final class PipelineNavySearchField: NSSearchField {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        cell = PipelineNavySearchFieldCell(textCell: "")
         isBezeled = false
         isBordered = false
         drawsBackground = false
