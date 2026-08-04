@@ -982,7 +982,17 @@ final class RekonPursuitUITests: XCTestCase {
                 forDuration: 0.7,
                 thenDragTo: target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
             )
-            XCTAssertTrue(movingApp.staticTexts[expectedOutcome].waitForExistence(timeout: 5))
+            let outcome = movingApp.descendants(matching: .any)["pipeline-stage-move-outcome"]
+            XCTAssertTrue(outcome.waitForExistence(timeout: 5))
+            expectation(
+                for: NSPredicate(
+                    format: "label == %@ OR value == %@",
+                    expectedOutcome,
+                    expectedOutcome
+                ),
+                evaluatedWith: outcome
+            )
+            waitForExpectations(timeout: 5)
             XCTAssertTrue(isContained(movingApp.buttons["pipeline-opportunity-\(opportunityID)"], in: target))
             movingApp.terminate()
             movingApp = launchApp(fixture: "pipeline", windowSize: "wide", session: session)
