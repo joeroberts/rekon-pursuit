@@ -756,6 +756,40 @@ private class PipelineNativeControl: NSControl {
     }
 }
 
+private final class PipelineNavySearchFieldCell: NSSearchFieldCell {
+    private func verticallyCenteredTextRect(_ textRect: NSRect, in bounds: NSRect) -> NSRect {
+        var centeredRect = textRect
+        centeredRect.origin.y = bounds.midY - (centeredRect.height / 2)
+        return centeredRect
+    }
+
+    override func titleRect(forBounds rect: NSRect) -> NSRect {
+        verticallyCenteredTextRect(super.titleRect(forBounds: rect), in: rect)
+    }
+
+    override func editingRect(forBounds rect: NSRect) -> NSRect {
+        verticallyCenteredTextRect(super.editingRect(forBounds: rect), in: rect)
+    }
+
+    override func select(
+        withFrame aRect: NSRect,
+        in controlView: NSView,
+        editor textObj: NSText,
+        delegate: Any?,
+        start selStart: Int,
+        length selLength: Int
+    ) {
+        super.select(
+            withFrame: editingRect(forBounds: aRect),
+            in: controlView,
+            editor: textObj,
+            delegate: delegate,
+            start: selStart,
+            length: selLength
+        )
+    }
+}
+
 final class PipelineNavySearchField: NSSearchField {
     var isPointerHovering = false { didSet { refreshChrome() } }
     private var trackingArea: NSTrackingArea?
@@ -764,6 +798,7 @@ final class PipelineNavySearchField: NSSearchField {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        cell = PipelineNavySearchFieldCell(textCell: "")
         isBezeled = false
         isBordered = false
         drawsBackground = false
