@@ -304,6 +304,7 @@ struct PipelineView: View {
                     .padding(.vertical, 12)
                     .accessibilityIdentifier("pipeline-table-result-count")
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(RekonTheme.backgroundRaised, in: RoundedRectangle(cornerRadius: RekonTheme.Radius.card))
             .overlay(
                 RoundedRectangle(cornerRadius: RekonTheme.Radius.card)
