@@ -16,6 +16,14 @@ final class RekonPursuitUITestHostTests: XCTestCase {
             .wide
         )
         XCTAssertEqual(
+            VisualFixtureWindowSize(arguments: ["RekonPursuit", "-rekon-visual-window-size", "breakpoint-1219"]),
+            .breakpoint1219
+        )
+        XCTAssertEqual(
+            VisualFixtureWindowSize(arguments: ["RekonPursuit", "-rekon-visual-window-size", "breakpoint-1220"]),
+            .breakpoint1220
+        )
+        XCTAssertEqual(
             VisualFixtureWindowSize(arguments: ["RekonPursuit"]),
             .wide
         )
@@ -30,6 +38,8 @@ final class RekonPursuitUITestHostTests: XCTestCase {
 
         XCTAssertEqual(VisualFixtureWindowSize.compact.size, CGSize(width: 860, height: 600))
         XCTAssertEqual(VisualFixtureWindowSize.wide.size, CGSize(width: 1600, height: 1000))
+        XCTAssertEqual(VisualFixtureWindowSize.breakpoint1219.size, CGSize(width: 1586, height: 1000))
+        XCTAssertEqual(VisualFixtureWindowSize.breakpoint1220.size, CGSize(width: 1587, height: 1000))
     }
 
     func testVD202FixtureHostPublishesAProofThatLiveStoresAreUnavailable() throws {

@@ -4,6 +4,8 @@ import SwiftUI
 enum VisualFixtureWindowSize: String {
     case compact
     case wide
+    case breakpoint1219 = "breakpoint-1219"
+    case breakpoint1220 = "breakpoint-1220"
 
     static let argument = "-rekon-visual-window-size"
 
@@ -31,6 +33,13 @@ enum VisualFixtureWindowSize: String {
             // where a real five-track Table and persistent inspector fit
             // together without clipping either surface.
             CGSize(width: 1600, height: 1000)
+        case .breakpoint1219:
+            // 310pt fixed rail + 1pt split divider + 56pt Pipeline padding
+            // leaves exactly 1,219pt for Pipeline's responsive container.
+            CGSize(width: 1586, height: 1000)
+        case .breakpoint1220:
+            // One additional point selects the desktop five-column Table.
+            CGSize(width: 1587, height: 1000)
         }
     }
 }

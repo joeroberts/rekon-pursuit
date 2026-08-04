@@ -704,6 +704,62 @@ final class RekonPursuitUITests: XCTestCase {
     }
 
     @MainActor
+    func testVD210PipelineTableSwitchesAtTheActualAvailableWidthBoundary() {
+        // The fixture host's breakpoint sizes reserve the fixed 310pt rail,
+        // the split divider, and Pipeline's 28pt leading/trailing padding so
+        // these assertions exercise the GeometryReader width itself: 1,219
+        // and 1,220 points respectively.
+        let compactApp = launchApp(fixture: "pipeline", windowSize: "breakpoint-1219")
+        assertWindow(compactApp.windows.firstMatch, hasSize: CGSize(width: 1586, height: 994))
+        compactApp.descendants(matching: .any)["sidebar-pipeline"].tap()
+
+        XCTAssertTrue(compactApp.descendants(matching: .any)["pipeline-table-header-role"].waitForExistence(timeout: 5))
+        XCTAssertTrue(compactApp.descendants(matching: .any)["pipeline-table-header-stage"].exists)
+        XCTAssertFalse(compactApp.descendants(matching: .any)["pipeline-table-header-employer"].exists)
+        XCTAssertFalse(compactApp.descendants(matching: .any)["pipeline-table-header-next-action"].exists)
+        XCTAssertFalse(compactApp.descendants(matching: .any)["pipeline-table-header-due-date"].exists)
+
+        let compactRow = compactApp.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-"))
+            .firstMatch
+        XCTAssertTrue(compactRow.waitForExistence(timeout: 5))
+        compactRow.tap()
+        XCTAssertTrue(
+            compactApp.descendants(matching: .any)["pipeline-inspector-drawer"].waitForExistence(timeout: 5),
+            "At 1,219pt Pipeline must keep the two-column Table and use its in-place drawer."
+        )
+        compactApp.terminate()
+
+        let desktopApp = launchApp(fixture: "pipeline", windowSize: "breakpoint-1220")
+        assertWindow(desktopApp.windows.firstMatch, hasSize: CGSize(width: 1587, height: 994))
+        desktopApp.descendants(matching: .any)["sidebar-pipeline"].tap()
+
+        let desktopHeaders = ["role", "employer", "stage", "next-action", "due-date"].map {
+            desktopApp.descendants(matching: .any)["pipeline-table-header-\($0)"]
+        }
+        for header in desktopHeaders {
+            XCTAssertTrue(header.waitForExistence(timeout: 5), "At 1,220pt every desktop Table column must be present.")
+            XCTAssertTrue(header.isHittable, "At 1,220pt the desktop Table must not clip a column heading.")
+        }
+        let desktopRow = desktopApp.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-"))
+            .firstMatch
+        XCTAssertTrue(desktopRow.waitForExistence(timeout: 5))
+        desktopRow.tap()
+        XCTAssertTrue(
+            desktopApp.descendants(matching: .any)["pipeline-inspector-drawer"].waitForNonExistence(timeout: 2),
+            "At 1,220pt selection must retain the persistent inspector instead of presenting a drawer."
+        )
+        XCTAssertTrue(
+            desktopApp.descendants(matching: .any)
+                .matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-inspector-"))
+                .firstMatch
+                .waitForExistence(timeout: 5),
+            "At 1,220pt selecting a row must populate the persistent inspector."
+        )
+    }
+
+    @MainActor
     func testVD204PipelineFidelityBoardContract() {
         let wideApp = launchApp(fixture: "pipeline", windowSize: "wide")
         wideApp.descendants(matching: .any)["sidebar-pipeline"].tap()
