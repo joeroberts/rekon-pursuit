@@ -243,6 +243,7 @@ struct PipelineView: View {
             if geometry.size.width < PipelineTableLayout.desktopInspectorMinimumWidth {
                 ZStack(alignment: .topTrailing) {
                     table(isCompact: true)
+                        .zIndex(0)
                     if let selectedOpportunity {
                         PipelineInspector(opportunity: selectedOpportunity, close: { selectedTableID = nil }) {
                             anchorID = selectedOpportunity.id
@@ -252,6 +253,7 @@ struct PipelineView: View {
                         .accessibilityIdentifier("pipeline-inspector-drawer")
                         .frame(width: min(380, max(300, geometry.size.width * 0.48)))
                         .transition(reduceMotion ? .identity : .move(edge: .trailing).combined(with: .opacity))
+                        .zIndex(1)
                         .transaction { transaction in
                             if reduceMotion {
                                 transaction.animation = nil
@@ -260,7 +262,7 @@ struct PipelineView: View {
                         }
                     }
                 }
-                .animation(reduceMotion ? nil : .default, value: selectedTableID)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: selectedTableID)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 HStack(alignment: .top, spacing: 16) {
