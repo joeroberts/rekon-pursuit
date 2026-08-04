@@ -896,34 +896,38 @@ final class RekonPursuitUITests: XCTestCase {
         assertionViewMode.radioButtons["Board"].click()
         XCTAssertTrue(assertionApp.descendants(matching: .any)["pipeline-board-region"].waitForExistence(timeout: 5))
 
-        for lane in ["saved", "applied", "interviewing", "offer"] {
+        for lane in ["saved", "applied", "screening", "interviewing", "offer"] {
             XCTAssertTrue(assertionApp.descendants(matching: .any)["pipeline-board-lane-\(lane)"].exists)
             XCTAssertTrue(assertionApp.descendants(matching: .any)["pipeline-board-lane-count-\(lane)"].exists)
             XCTAssertTrue(assertionApp.buttons["pipeline-board-lane-add-\(lane)"].exists)
         }
         XCTAssertFalse(assertionApp.descendants(matching: .any)["pipeline-board-lane-closed"].exists)
         let appliedLane = assertionApp.descendants(matching: .any)["pipeline-board-lane-applied"]
+        let screeningLane = assertionApp.descendants(matching: .any)["pipeline-board-lane-screening"]
         XCTAssertTrue(appliedLane.waitForExistence(timeout: 5))
+        XCTAssertTrue(screeningLane.waitForExistence(timeout: 5))
         // AppKit exposes a rendered Board card as one atomic Button, so its
         // rich child metadata is not independently queryable by XCTest. The
         // deterministic fixture and pure lane-mapping contract cover the
         // canonical Screening record; fresh signed-capture visual QA covers
         // the visible employer, chip, locality, next-action, and due-date
         // facts. Keep executable proof here of the globally named card and
-        // its visual containment within the live Applied lane.
+        // its visual containment within the live Screening lane, and its
+        // exclusion from the Applied lane.
         let screeningCard = assertionApp.buttons
             .matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "pipeline-opportunity-", "Product Designer"))
             .firstMatch
         XCTAssertTrue(screeningCard.waitForExistence(timeout: 5))
-        let appliedFrame = appliedLane.frame
+        let screeningFrame = screeningLane.frame
         let cardFrame = screeningCard.frame
         let accessibilityFrameTolerance: CGFloat = 8
         XCTAssertGreaterThan(cardFrame.width, 0)
         XCTAssertGreaterThan(cardFrame.height, 0)
-        XCTAssertGreaterThanOrEqual(cardFrame.minX, appliedFrame.minX - accessibilityFrameTolerance)
-        XCTAssertGreaterThanOrEqual(cardFrame.minY, appliedFrame.minY - accessibilityFrameTolerance)
-        XCTAssertLessThanOrEqual(cardFrame.maxX, appliedFrame.maxX + accessibilityFrameTolerance)
-        XCTAssertLessThanOrEqual(cardFrame.maxY, appliedFrame.maxY + accessibilityFrameTolerance)
+        XCTAssertGreaterThanOrEqual(cardFrame.minX, screeningFrame.minX - accessibilityFrameTolerance)
+        XCTAssertGreaterThanOrEqual(cardFrame.minY, screeningFrame.minY - accessibilityFrameTolerance)
+        XCTAssertLessThanOrEqual(cardFrame.maxX, screeningFrame.maxX + accessibilityFrameTolerance)
+        XCTAssertLessThanOrEqual(cardFrame.maxY, screeningFrame.maxY + accessibilityFrameTolerance)
+        XCTAssertFalse(isContained(screeningCard, in: appliedLane))
         let includeClosed = assertionApp.checkBoxes["pipeline-include-closed"]
         XCTAssertTrue(includeClosed.waitForExistence(timeout: 5))
         includeClosed.click()
