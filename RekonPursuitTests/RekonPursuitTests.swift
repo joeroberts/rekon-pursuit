@@ -10,6 +10,38 @@ final class RekonPursuitTests: XCTestCase {
         XCTAssertFalse(PipelineInspectorPresentationPolicy.usesCompactTable(forAvailableWidth: 1220))
     }
 
+    @MainActor
+    func testPipelineNativeTableSelectionOwnerRestoresOnlyTheTableItOwnsAcrossReplacement() {
+        let initialTable = NSTableView()
+        initialTable.selectionHighlightStyle = .regular
+        let initialScrollView = NSScrollView()
+        initialScrollView.documentView = initialTable
+        let initialHost = NSView()
+        initialTable.addSubview(initialHost)
+
+        let replacementTable = NSTableView()
+        replacementTable.selectionHighlightStyle = .regular
+        let replacementScrollView = NSScrollView()
+        replacementScrollView.documentView = replacementTable
+        let replacementHost = NSView()
+        replacementTable.addSubview(replacementHost)
+
+        let owner = PipelineNativeTableSelectionOwner()
+        owner.install(from: initialHost)
+        XCTAssertEqual(initialTable.selectionHighlightStyle, .none)
+        XCTAssertEqual(replacementTable.selectionHighlightStyle, .regular)
+
+        owner.install(from: replacementHost)
+        XCTAssertEqual(initialTable.selectionHighlightStyle, .regular)
+        XCTAssertEqual(replacementTable.selectionHighlightStyle, .none)
+
+        // A replacement table can be reconfigured by its new SwiftUI owner.
+        // This bridge must not restore a stale style over that owner’s change.
+        replacementTable.selectionHighlightStyle = .regular
+        owner.restore()
+        XCTAssertEqual(replacementTable.selectionHighlightStyle, .regular)
+    }
+
     func testStageMovePayloadContainsOnlyOpportunityID() throws {
         let opportunityID = "00000000-0000-4000-8000-000000000205"
 

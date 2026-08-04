@@ -461,50 +461,14 @@ private struct PipelineNativeTableSelectionBridge: NSViewRepresentable {
     }
 
     final class Coordinator {
-        private weak var tableView: NSTableView?
-        private var previousSelectionHighlightStyle: NSTableView.SelectionHighlightStyle?
+        private let selectionOwner = PipelineNativeTableSelectionOwner()
 
         func install(from view: NSView) {
-            guard let discoveredTableView = tableView(near: view) else { return }
-            guard tableView !== discoveredTableView else { return }
-
-            restore()
-            tableView = discoveredTableView
-            previousSelectionHighlightStyle = discoveredTableView.selectionHighlightStyle
-            discoveredTableView.selectionHighlightStyle = .none
+            selectionOwner.install(from: view)
         }
 
         func restore() {
-            guard let tableView, let previousSelectionHighlightStyle else { return }
-            tableView.selectionHighlightStyle = previousSelectionHighlightStyle
-            self.tableView = nil
-            self.previousSelectionHighlightStyle = nil
-        }
-
-        private func tableView(near view: NSView) -> NSTableView? {
-            var current: NSView? = view
-            while let node = current {
-                if let tableView = node as? NSTableView {
-                    return tableView
-                }
-                if let tableView = firstTableView(in: node) {
-                    return tableView
-                }
-                current = node.superview
-            }
-            return nil
-        }
-
-        private func firstTableView(in view: NSView) -> NSTableView? {
-            for subview in view.subviews {
-                if let tableView = subview as? NSTableView {
-                    return tableView
-                }
-                if let tableView = firstTableView(in: subview) {
-                    return tableView
-                }
-            }
-            return nil
+            selectionOwner.restore()
         }
     }
 
@@ -520,6 +484,46 @@ private struct PipelineNativeTableSelectionBridge: NSViewRepresentable {
             super.viewDidMoveToWindow()
             hierarchyDidChange?(self)
         }
+    }
+}
+
+/// Owns the selection-highlight override for the one native table that hosts
+/// the Pipeline List. Resolution deliberately follows only the nearest
+/// enclosing scroll view's document table so an unrelated descendant table
+/// cannot be modified. The previous style is restored only while this owner
+/// still owns the `.none` override.
+final class PipelineNativeTableSelectionOwner {
+    private weak var tableView: NSTableView?
+    private var previousSelectionHighlightStyle: NSTableView.SelectionHighlightStyle?
+
+    func install(from view: NSView) {
+        guard let discoveredTableView = listTable(owning: view) else { return }
+        guard tableView !== discoveredTableView else { return }
+
+        restore()
+        tableView = discoveredTableView
+        previousSelectionHighlightStyle = discoveredTableView.selectionHighlightStyle
+        discoveredTableView.selectionHighlightStyle = .none
+    }
+
+    func restore() {
+        guard let tableView, let previousSelectionHighlightStyle else { return }
+        if tableView.selectionHighlightStyle == .none {
+            tableView.selectionHighlightStyle = previousSelectionHighlightStyle
+        }
+        self.tableView = nil
+        self.previousSelectionHighlightStyle = nil
+    }
+
+    private func listTable(owning view: NSView) -> NSTableView? {
+        var current: NSView? = view
+        while let node = current {
+            if let scrollView = node as? NSScrollView {
+                return scrollView.documentView as? NSTableView
+            }
+            current = node.superview
+        }
+        return nil
     }
 }
 
