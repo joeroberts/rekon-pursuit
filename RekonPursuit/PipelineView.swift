@@ -604,14 +604,22 @@ private struct PipelineNativeTableSelectionBridge: NSViewRepresentable {
             super.viewDidMoveToWindow()
             hierarchyDidChange?(self)
         }
+
+        override func layout() {
+            super.layout()
+            // SwiftUI installs a background before its sibling List finishes
+            // building the native table. Layout is the first lifecycle point
+            // at which that table is reliably discoverable.
+            hierarchyDidChange?(self)
+        }
     }
 }
 
 /// Owns the selection-highlight override for the one native table that hosts
-/// the Pipeline List. Resolution deliberately follows only the nearest
-/// enclosing scroll view's document table so an unrelated descendant table
-/// cannot be modified. The previous style is restored only while this owner
-/// still owns the `.none` override.
+/// the Pipeline List. Resolution first uses an enclosing scroll view, then
+/// falls back only to the nearest ancestor with exactly one table descendant;
+/// ambiguous or unrelated tables are left untouched. The previous style is
+/// restored only while this owner still owns the `.none` override.
 final class PipelineNativeTableSelectionOwner {
     private weak var tableView: NSTableView?
     private var previousSelectionHighlightStyle: NSTableView.SelectionHighlightStyle?
@@ -643,7 +651,28 @@ final class PipelineNativeTableSelectionOwner {
             }
             current = node.superview
         }
+        return siblingListTable(near: view)
+    }
+
+    /// SwiftUI can mount a background representable beside, rather than inside,
+    /// the List's native scroll view. Search outward only until a container has
+    /// exactly one table descendant; ambiguity deliberately leaves other Lists
+    /// untouched.
+    private func siblingListTable(near view: NSView) -> NSTableView? {
+        var current = view.superview
+        while let node = current {
+            let tables = tableViews(in: node)
+            if tables.count == 1 {
+                return tables[0]
+            }
+            current = node.superview
+        }
         return nil
+    }
+
+    private func tableViews(in view: NSView) -> [NSTableView] {
+        let directTables = view.subviews.compactMap { $0 as? NSTableView }
+        return directTables + view.subviews.flatMap(tableViews(in:))
     }
 }
 

@@ -63,6 +63,27 @@ final class RekonPursuitTests: XCTestCase {
     }
 
     @MainActor
+    func testPipelineNativeTableSelectionOwnerFindsItsSiblingListTableWhenSwiftUIMountsTheBridgeAsABackground() {
+        let hostingContainer = NSView()
+        let bridgeHost = NSView()
+        let listScrollView = NSScrollView()
+        let listTable = NSTableView()
+        listTable.selectionHighlightStyle = .regular
+        listScrollView.documentView = listTable
+        hostingContainer.addSubview(bridgeHost)
+        hostingContainer.addSubview(listScrollView)
+
+        let owner = PipelineNativeTableSelectionOwner()
+        owner.install(from: bridgeHost)
+
+        XCTAssertEqual(
+            listTable.selectionHighlightStyle,
+            .none,
+            "A Pipeline bridge mounted beside its List must suppress the native selection fill so the row's subdued SwiftUI highlight is the only selection treatment."
+        )
+    }
+
+    @MainActor
     func testPipelineViewModeUsesOneNativeSegmentedControlAsTheSoleModeInputOwner() throws {
         // This fails if Table and Board become separate SwiftUI buttons: the
         // AppKit-hosted control must own the contiguous two-segment hit target,
