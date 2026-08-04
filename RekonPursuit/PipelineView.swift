@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// A reversible presentation projection for the Board. It does not alter the
@@ -285,6 +286,7 @@ struct PipelineView: View {
                             isCompact: isCompact
                         )
                         .tag(opportunity.id)
+                        .background(PipelineNativeTableSelectionSuppressor())
                         .accessibilityElement(children: .combine)
                         .accessibilityIdentifier("pipeline-table-row-\(opportunity.id)")
                         .accessibilityLabel("\(opportunity.title), \(opportunity.company), \(opportunity.stage.rawValue)")
@@ -407,7 +409,7 @@ private struct PipelineTableRow: View {
         .padding(.vertical, isCompact ? 11 : 18)
         .padding(.horizontal, isCompact ? 14 : PipelineTableLayout.horizontalPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(isSelected ? RekonTheme.accent.opacity(0.12) : Color.clear)
+        .background(isSelected ? RekonTheme.accent.opacity(0.075) : Color.clear)
         .listRowInsets(EdgeInsets())
     }
 
@@ -420,6 +422,27 @@ private struct PipelineTableRow: View {
         case .saved, .screening, .interviewing: RekonTheme.violet
         case .applied, .offer: RekonTheme.success
         case .closed: RekonTheme.secondaryText
+        }
+    }
+}
+
+/// Keep AppKit's selection ownership for keyboard navigation and accessibility,
+/// while letting the row's SwiftUI background provide the quieter visual state.
+private struct PipelineNativeTableSelectionSuppressor: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        NSView()
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async {
+            var ancestor: NSView? = view
+            while let current = ancestor {
+                if let tableView = current as? NSTableView {
+                    tableView.selectionHighlightStyle = .none
+                    return
+                }
+                ancestor = current.superview
+            }
         }
     }
 }
