@@ -854,56 +854,15 @@ final class PipelineNavySearchField: NSSearchField {
 }
 
 final class PipelineNavyPopupButton: NSPopUpButton {
-    var isPointerHovering = false { didSet { needsDisplay = true } }
-    var isPressed = false { didSet { needsDisplay = true } }
-    private var trackingArea: NSTrackingArea?
-
     override init(frame buttonFrame: NSRect, pullsDown flag: Bool) {
         super.init(frame: buttonFrame, pullsDown: flag)
-        isBordered = false
-        focusRingType = .none
+        isBordered = true
+        bezelStyle = .rounded
+        controlSize = .regular
         font = .systemFont(ofSize: 15, weight: .medium)
     }
 
     required init?(coder: NSCoder) { nil }
-
-    private var interactionState: PipelineNavySurfaceInteractionState {
-        PipelineNavySurfacePresentation.interactionState(isEnabled: isEnabled, isPointerHovering: isPointerHovering, isKeyboardFocused: window?.firstResponder === self, isPressed: isPressed)
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingArea { removeTrackingArea(trackingArea) }
-        let trackingArea = NSTrackingArea(rect: bounds, options: [.activeInKeyWindow, .mouseEnteredAndExited, .inVisibleRect], owner: self, userInfo: nil)
-        addTrackingArea(trackingArea)
-        self.trackingArea = trackingArea
-    }
-
-    override func mouseEntered(with event: NSEvent) { isPointerHovering = true }
-    override func mouseExited(with event: NSEvent) { isPointerHovering = false }
-    override func becomeFirstResponder() -> Bool { let accepted = super.becomeFirstResponder(); if accepted { needsDisplay = true }; return accepted }
-    override func resignFirstResponder() -> Bool { let accepted = super.resignFirstResponder(); if accepted { needsDisplay = true }; return accepted }
-    override func mouseDown(with event: NSEvent) { isPressed = true; super.mouseDown(with: event); isPressed = false }
-
-    override func draw(_ dirtyRect: NSRect) {
-        PipelineNativeControlDrawing.paint(in: bounds, state: interactionState)
-        let textRect = bounds.insetBy(dx: 12, dy: 0).insetBy(dx: 0, dy: 1)
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 15, weight: .medium),
-            .foregroundColor: PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
-        ]
-        let titleSize = title.size(withAttributes: attributes)
-        title.draw(at: NSPoint(x: textRect.minX, y: textRect.midY - titleSize.height / 2), withAttributes: attributes)
-        let arrow = NSBezierPath()
-        let arrowCenterX = bounds.maxX - 18
-        let arrowCenterY = bounds.midY
-        arrow.move(to: NSPoint(x: arrowCenterX - 5, y: arrowCenterY + 2))
-        arrow.line(to: NSPoint(x: arrowCenterX, y: arrowCenterY - 3))
-        arrow.line(to: NSPoint(x: arrowCenterX + 5, y: arrowCenterY + 2))
-        arrow.lineWidth = 1.8
-        PipelineNativeControlDrawing.secondaryTextColor(isEnabled: isEnabled).setStroke()
-        arrow.stroke()
-    }
 }
 
 final class PipelineNavyCheckbox: NSButton {
