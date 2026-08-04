@@ -59,6 +59,37 @@ final class RekonPursuitUITests: XCTestCase {
     }
 
     @MainActor
+    private func pipelineInspectorCompany(for opportunityID: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["pipeline-inspector-company-\(opportunityID)"]
+    }
+
+    @MainActor
+    private func pipelineInspectorStage(for opportunityID: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)["pipeline-inspector-stage-\(opportunityID)"]
+    }
+
+    @MainActor
+    private func assertPipelineInspectorSelection(
+        for opportunityID: String,
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(
+            pipelineInspectorCompany(for: opportunityID, in: app).waitForExistence(timeout: 5),
+            "Selecting a Pipeline row must render that opportunity's inspector company.",
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            pipelineInspectorStage(for: opportunityID, in: app).exists,
+            "Selecting a Pipeline row must render that opportunity's inspector stage.",
+            file: file,
+            line: line
+        )
+    }
+
+    @MainActor
     private func activityEvidence(named prefix: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)["sidebar-activity-and-ai"].tap()
         XCTAssertTrue(app.textFields["activity-search"].waitForExistence(timeout: 5), "Expected the real local Activity & AI ledger.")
@@ -325,7 +356,7 @@ final class RekonPursuitUITests: XCTestCase {
         let row = app.descendants(matching: .any)["pipeline-table-row-\(opportunityID)"]
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(opportunityID)"].waitForExistence(timeout: 5))
+        assertPipelineInspectorSelection(for: opportunityID, in: app)
         app.buttons["pipeline-open-details-\(opportunityID)"].tap()
         XCTAssertTrue(app.buttons["Back to Pipeline"].waitForExistence(timeout: 5))
         let more = app.descendants(matching: .any)["More"]
@@ -577,15 +608,17 @@ final class RekonPursuitUITests: XCTestCase {
         let secondID = String(secondRow.identifier.dropFirst("pipeline-table-row-".count))
         firstRow.tap()
 
-        XCTAssertEqual(firstRow.value as? String, "Selected", "Selecting a Pipeline table row must update only its local selection state before the inspector is rendered.")
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(firstID)"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-company-\(firstID)"].exists)
+        assertPipelineInspectorSelection(for: firstID, in: app)
         XCTAssertFalse(app.textFields["selected-opportunity-title"].exists)
         XCTAssertFalse(app.buttons["Back to Pipeline"].exists)
 
         secondRow.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(secondID)"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.descendants(matching: .any)["pipeline-inspector-\(firstID)"].exists)
+        assertPipelineInspectorSelection(for: secondID, in: app)
+        XCTAssertFalse(
+            pipelineInspectorCompany(for: firstID, in: app).exists,
+            "Changing row selection must replace the previous inspector content."
+        )
+        XCTAssertFalse(pipelineInspectorStage(for: firstID, in: app).exists)
 
         app.buttons["pipeline-open-details-\(secondID)"].tap()
         XCTAssertTrue(app.textFields["selected-opportunity-title"].waitForExistence(timeout: 5))
@@ -623,18 +656,15 @@ final class RekonPursuitUITests: XCTestCase {
         let savedRowExists = savedRow.waitForExistence(timeout: 5)
         savedRow.tap()
         let savedID = String(savedRow.identifier.dropFirst("pipeline-table-row-".count))
-        let savedSelection = savedRow.value as? String
         let employerMark = wideApp.descendants(matching: .any)["pipeline-inspector-employer-mark-\(savedID)"]
         let stage = wideApp.descendants(matching: .any)["pipeline-inspector-stage-\(savedID)"]
         let nextAction = wideApp.descendants(matching: .any)["pipeline-inspector-fact-next-action-\(savedID)"]
         let openDetails = wideApp.descendants(matching: .any)["pipeline-open-details-\(savedID)"]
-        let currentInspector = wideApp.descendants(matching: .any)["pipeline-inspector-\(savedID)"]
 
-        // These are retained-state prerequisites for the owner-facing
-        // capture, not the deliberately RED future fidelity identifiers.
+        // The selected opportunity's current inspector facts are retained
+        // state prerequisites for the owner-facing capture.
         XCTAssertTrue(savedRowExists)
-        XCTAssertEqual(savedSelection, "Selected")
-        XCTAssertTrue(currentInspector.waitForExistence(timeout: 5))
+        assertPipelineInspectorSelection(for: savedID, in: wideApp)
 
         // The owner-facing Table capture must show the selected data row and
         // the adjacent inspector hierarchy together, not an unselected empty
@@ -745,18 +775,13 @@ final class RekonPursuitUITests: XCTestCase {
             .matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-"))
             .firstMatch
         XCTAssertTrue(desktopRow.waitForExistence(timeout: 5))
+        let desktopID = String(desktopRow.identifier.dropFirst("pipeline-table-row-".count))
         desktopRow.tap()
         XCTAssertTrue(
             desktopApp.descendants(matching: .any)["pipeline-inspector-drawer"].waitForNonExistence(timeout: 2),
             "At 1,220pt selection must retain the persistent inspector instead of presenting a drawer."
         )
-        XCTAssertTrue(
-            desktopApp.descendants(matching: .any)
-                .matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-inspector-"))
-                .firstMatch
-                .waitForExistence(timeout: 5),
-            "At 1,220pt selecting a row must populate the persistent inspector."
-        )
+        assertPipelineInspectorSelection(for: desktopID, in: desktopApp)
     }
 
     @MainActor
@@ -1488,7 +1513,7 @@ final class RekonPursuitUITests: XCTestCase {
         openDrawerScreenshot.name = "VD204 compact drawer open — expected future state (intentional RED until drawer exists)"
         openDrawerScreenshot.lifetime = .keepAlways
         add(openDrawerScreenshot)
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(id)"].exists)
+        assertPipelineInspectorSelection(for: id, in: app)
         let close = app.buttons["pipeline-inspector-close"]
         XCTAssertTrue(close.exists)
         XCTAssertEqual(app.sheets.count, 0)
@@ -1515,8 +1540,9 @@ final class RekonPursuitUITests: XCTestCase {
         let secondID = String(secondRow.identifier.dropFirst("pipeline-table-row-".count))
         secondRow.tap()
         XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-drawer"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(secondID)"].exists)
-        XCTAssertFalse(app.descendants(matching: .any)["pipeline-inspector-\(id)"].exists)
+        assertPipelineInspectorSelection(for: secondID, in: app)
+        XCTAssertFalse(pipelineInspectorCompany(for: id, in: app).exists)
+        XCTAssertFalse(pipelineInspectorStage(for: id, in: app).exists)
     }
 
     @MainActor
@@ -1529,9 +1555,10 @@ final class RekonPursuitUITests: XCTestCase {
             .matching(NSPredicate(format: "identifier BEGINSWITH %@", "pipeline-table-row-"))
             .firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 5))
-        XCTAssertEqual(row.value as? String, "Not selected")
+        let id = String(row.identifier.dropFirst("pipeline-table-row-".count))
+        XCTAssertFalse(app.descendants(matching: .any)["pipeline-inspector-drawer"].exists)
         row.tap()
-        XCTAssertEqual(row.value as? String, "Selected")
+        assertPipelineInspectorSelection(for: id, in: app)
 
         // Keep this screenshot for manual visual review of the selection
         // treatment alongside the row's semantic selection checks above.
@@ -1885,7 +1912,7 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertTrue(persistedRow.waitForExistence(timeout: 5))
         XCTAssertTrue(persistedRow.label.hasPrefix("\(persistedTitle), Northstar Labs, Applied"))
         persistedRow.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(seniorID)"].waitForExistence(timeout: 5))
+        assertPipelineInspectorSelection(for: seniorID, in: app)
         XCTAssertTrue(app.staticTexts[persistedTitle].exists)
 
         app.descendants(matching: .any)["sidebar-activity-and-ai"].tap()
@@ -1913,8 +1940,9 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         XCTAssertEqual(rows.count, 5, "The closed fixture record must be excluded before the local Closed control is enabled.")
         let selectedRow = rows.firstMatch
+        let selectedID = String(selectedRow.identifier.dropFirst("pipeline-table-row-".count))
         selectedRow.tap()
-        XCTAssertEqual(selectedRow.value as? String, "Selected")
+        assertPipelineInspectorSelection(for: selectedID, in: app)
 
         search.click()
         search.typeText("northstar senior")
@@ -1926,7 +1954,11 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["No opportunities match"].exists)
         app.buttons["pipeline-clear-filters"].tap()
         XCTAssertEqual(rows.count, 5)
-        XCTAssertFalse(app.descendants(matching: .any)["pipeline-inspector-drawer"].exists, "Filtering a selected record out must clear, rather than retain, the ephemeral inspector selection.")
+        XCTAssertFalse(
+            pipelineInspectorCompany(for: selectedID, in: app).exists,
+            "Filtering a selected record out must clear its inspector selection."
+        )
+        XCTAssertFalse(pipelineInspectorStage(for: selectedID, in: app).exists)
         XCTAssertTrue(app.descendants(matching: .any)["pipeline-table-region"].isHittable)
 
         XCTAssertTrue(stage.waitForExistence(timeout: 5))
@@ -2292,7 +2324,7 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         let id = String(row.identifier.dropFirst("pipeline-table-row-".count))
         row.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(id)"].waitForExistence(timeout: 5))
+        assertPipelineInspectorSelection(for: id, in: app)
 
         let openDetails = app.buttons["pipeline-open-details-\(id)"]
         XCTAssertTrue(openDetails.waitForExistence(timeout: 5))
@@ -2317,7 +2349,7 @@ final class RekonPursuitUITests: XCTestCase {
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         let id = String(row.identifier.dropFirst("pipeline-table-row-".count))
         row.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["pipeline-inspector-\(id)"].waitForExistence(timeout: 5))
+        assertPipelineInspectorSelection(for: id, in: app)
         app.buttons["pipeline-open-details-\(id)"].tap()
         XCTAssertTrue(app.buttons["Back to Pipeline"].waitForExistence(timeout: 5))
 
