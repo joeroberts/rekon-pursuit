@@ -3,13 +3,18 @@
 ## Decision
 
 Rekon Pursuit retains active workspace data indefinitely until the user deletes
-it. **Workspace-managed** portable recovery archives expire automatically at
-the next app-run service opportunity on or after `created_at + 30 × 24 hours`.
-An external, user-selected portable archive is an unmanaged export: the app
-never automatically renames or deletes it and instead records that manual
-removal is required after expiry. A user may explicitly purge logically deleted
-material from retained archives. Purge requires one recovery-key re-entry per
-purge job; the key exists only in operation memory and is never persisted.
+it. Automatic expiry may remove a portable recovery archive at the next app-run
+service opportunity on or after `created_at + 30 × 24 hours` only when both
+catalogue predicates hold: `storage_class == "managed"` and
+`managed_relative_path` is the generated canonical `<lowercase archive
+UUID>.rekonarchive` leaf beneath the workspace-private `portable-archives`
+root. Pre-v28 migrated rows are `external`, not a third storage class. Every
+other row—including external/user-selected, missing-locator, and
+noncanonical-locator rows—is retained: expiry never resolves its external
+bookmark, opens, renames, or deletes it, and records a durable manual-removal
+or blocked outcome. A user may explicitly purge logically deleted material from
+retained archives. Purge requires one recovery-key re-entry per purge job; the
+key exists only in operation memory and is never persisted.
 
 This work is two serial slices. `R7b-1` must be accepted before `R7b-2` can be
 released.
@@ -18,11 +23,17 @@ released.
 
 At workspace open and on each transition from inactive to active while a
 workspace is open, the expiry service finds catalogued archives at or past
-their fixed expiry time. External archives transition to
-`expired_manual_removal_required` and are left untouched. For a
-workspace-managed archive, the service first durably claims the archive, then
-uses the private workspace archive store and a durable
-`expired_prepared` → `expired_quarantined` → removal sequence before it:
+their fixed expiry time. It may claim only a row whose `storage_class` is
+`managed` and whose `managed_relative_path` is exactly the generated canonical
+`<lowercase archive UUID>.rekonarchive` leaf beneath the workspace-private
+`portable-archives` root. External/user-selected and pre-v28 migrated
+`external` rows transition to `expired_manual_removal_required` and are left
+untouched; missing or noncanonical managed locators receive a durable blocked
+outcome and are also left untouched. The service never resolves an external
+bookmark, opens, renames, or deletes any such non-target. For the eligible
+managed archive, it first durably claims the archive, then uses the private
+workspace archive store and a durable `expired_prepared` →
+`expired_quarantined` → removal sequence before it:
 
 1. resolves the managed relative locator beneath the private workspace archive
    store (it does not resolve an external bookmark);
