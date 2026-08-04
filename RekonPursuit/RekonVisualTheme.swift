@@ -772,6 +772,7 @@ final class PipelineNavySearchField: NSSearchField {
         font = .systemFont(ofSize: 15)
         textColor = PipelineNativeControlDrawing.textColor(isEnabled: true)
         lineBreakMode = .byTruncatingTail
+        (cell as? NSSearchFieldCell)?.searchButtonCell = nil
     }
 
     required init?(coder: NSCoder) { nil }
