@@ -625,6 +625,7 @@ private struct PipelineInspector: View {
                 .buttonStyle(PipelineSecondaryButtonStyle())
                 .accessibilityIdentifier("pipeline-open-details-\(opportunity.id)")
                 .frame(maxWidth: .infinity)
+            Spacer(minLength: 0)
         }
         .padding(24)
         .background(RekonTheme.backgroundRaised, in: RoundedRectangle(cornerRadius: RekonTheme.Radius.card))
