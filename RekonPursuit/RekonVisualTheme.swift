@@ -757,18 +757,12 @@ private class PipelineNativeControl: NSControl {
 }
 
 private final class PipelineNavySearchFieldCell: NSSearchFieldCell {
-    private func verticallyCenteredTextRect(_ textRect: NSRect, in bounds: NSRect) -> NSRect {
-        var centeredRect = textRect
-        centeredRect.origin.y = bounds.midY - (centeredRect.height / 2)
-        return centeredRect
-    }
-
-    override func searchTextRect(forBounds rect: NSRect) -> NSRect {
-        verticallyCenteredTextRect(super.searchTextRect(forBounds: rect), in: rect)
-    }
-
-    override func titleRect(forBounds rect: NSRect) -> NSRect {
-        searchTextRect(forBounds: rect)
+    override func drawingRect(forBounds rect: NSRect) -> NSRect {
+        var drawingRect = super.drawingRect(forBounds: rect)
+        let textHeight = ceil(font?.boundingRectForFont.height ?? drawingRect.height)
+        drawingRect.origin.y = rect.midY - (textHeight / 2)
+        drawingRect.size.height = textHeight
+        return drawingRect
     }
 
     override func select(
@@ -780,7 +774,7 @@ private final class PipelineNavySearchFieldCell: NSSearchFieldCell {
         length selLength: Int
     ) {
         super.select(
-            withFrame: searchTextRect(forBounds: aRect),
+            withFrame: drawingRect(forBounds: aRect),
             in: controlView,
             editor: textObj,
             delegate: delegate,
