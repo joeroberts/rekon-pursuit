@@ -758,6 +758,7 @@ private class PipelineNativeControl: NSControl {
 
 final class PipelineNavySearchField: NSSearchField {
     var chromeStateDidChange: (() -> Void)?
+    var textDidClear: (() -> Void)?
     private var nativeSearchButtonCell: NSButtonCell?
 
     override var isEnabled: Bool { didSet { chromeStateDidChange?() } }
@@ -787,6 +788,17 @@ final class PipelineNavySearchField: NSSearchField {
         let accepted = super.resignFirstResponder()
         if accepted { chromeStateDidChange?() }
         return accepted
+    }
+
+    /// The native cancel button clears AppKit's field value without sending the
+    /// normal text-change delegate callback. Mirror that native clear into the
+    /// SwiftUI binding so a subsequent representable refresh cannot restore the
+    /// previous query.
+    override func cancelOperation(_ sender: Any?) {
+        super.cancelOperation(sender)
+        if !stringValue.isEmpty { stringValue = "" }
+        textDidClear?()
+        updateSearchButtonVisibility()
     }
 
     func refreshChrome() {
@@ -1091,6 +1103,9 @@ struct PipelineNavySearchControl: NSViewRepresentable {
         let container = PipelineNavySearchContainer(frame: .zero)
         let field = container.field
         field.delegate = context.coordinator
+        field.textDidClear = { [weak coordinator = context.coordinator] in
+            coordinator?.clearText()
+        }
         field.stringValue = text
         field.setAccessibilityIdentifier(accessibilityIdentifier)
         field.setAccessibilityLabel(accessibilityLabel)
@@ -1106,11 +1121,15 @@ struct PipelineNavySearchControl: NSViewRepresentable {
         container.refreshChrome()
     }
 
-    static func dismantleNSView(_ container: PipelineNavySearchContainer, coordinator: Coordinator) { container.field.delegate = nil }
+    static func dismantleNSView(_ container: PipelineNavySearchContainer, coordinator: Coordinator) {
+        container.field.delegate = nil
+        container.field.textDidClear = nil
+    }
 
     final class Coordinator: NSObject, NSSearchFieldDelegate {
         @Binding var text: String
         init(text: Binding<String>) { _text = text }
+        func clearText() { text = "" }
         func controlTextDidChange(_ notification: Notification) {
             guard let field = notification.object as? NSTextField else { return }
             text = field.stringValue
