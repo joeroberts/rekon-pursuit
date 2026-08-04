@@ -252,14 +252,15 @@ class DashboardContractTests(unittest.TestCase):
             ],
         )
         task_by_id = {task["id"]: task for task in status["tasks"]}
+        self.assertIsNone(status["activeTaskId"])
+        self.assertIsNone(status["activeTaskId"])
         self.assertEqual(task_by_id["RP-R10"]["phaseId"], "remediation_r1")
         for task_id in ("UX-D10", "UX-D11"):
             self.assertEqual(task_by_id[task_id]["status"], "accepted")
             self.assertFalse(task_by_id[task_id]["needsUserAction"])
-        self.assertEqual(task_by_id["VD2-09"]["status"], "accepted")
-        self.assertFalse(task_by_id["VD2-09"]["needsUserAction"])
-        self.assertEqual(task_by_id["VD2-10"]["status"], "next_up")
-        self.assertFalse(task_by_id["VD2-10"]["needsUserAction"])
+        for task_id in ("VD2-09", "VD2-10"):
+            self.assertEqual(task_by_id[task_id]["status"], "accepted")
+            self.assertFalse(task_by_id[task_id]["needsUserAction"])
         for task_id in ("DESIGN-V2", "VD2-11", "VD2-12",
                         "VD2-13", "VD2-08a", "OPS-CI-01", "P2A-1", "P2B-1",
                         "P2C-1", "P3-1"):

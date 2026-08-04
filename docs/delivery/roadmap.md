@@ -187,6 +187,8 @@ pixel-copy mandate.
 | `VD2-07c` | Activity & AI submenu and bounded ledger | Backlog — preserve one sidebar destination; add the approved Activity ledger and local/private AI assistant placeholder work areas. |
 | `VD2-07d` | Precise local activity search and date filtering | Backlog — follows `VD2-07c` and adds the approved local search and date refinements before `VD2-08`. |
 | `VD2-08` | Visual QA and accessibility acceptance | Backlog — follows `VD2-07b`, `VD2-07c`, and `VD2-07d`; it closes documented accessibility debts and runs the whole-app visual/accessibility acceptance pass. |
+| `VD2-09` | Home visual parity | **Accepted.** Product owner accepted the Home parity pass after independent Architecture, Code Review, QA, and the targeted regression/build evidence. |
+| `VD2-10` | Pipeline visual parity — controls, Table, and Board | **Accepted.** Product owner accepted the signed Debug Pipeline candidate on 2026-08-04 after independent Architecture, TPM/Delivery, Security/Privacy, Code Review, and QA approval. Targeted verification passed 12/12, independent QA evidence passed 17/17 plus 4/4, and the final Debug build passed. [Owner acceptance record](evidence/visual-design-v2/VD2-10-owner-handoff-2026-08-04.md). GitHub issues #24 and #25 remain non-blocking test-harness debt. |
 
 Every child follows `Backlog → Next up → In progress → independent code
 review / QA / security-privacy verification → product-owner hands-on
