@@ -108,8 +108,6 @@ struct PipelineView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Opportunities")
-                .font(.largeTitle.bold())
             pipelineToolbar
             if visibleOpportunities.isEmpty {
                 FlexibleCenteredContent {
@@ -323,7 +321,7 @@ struct PipelineView: View {
 
     @ViewBuilder private var inspector: some View {
         if let selectedOpportunity {
-            PipelineInspector(opportunity: selectedOpportunity, close: nil) {
+            PipelineInspector(opportunity: selectedOpportunity, close: { selectedTableID = nil }) {
                 anchorID = selectedOpportunity.id
                 open(selectedOpportunity)
             }
@@ -408,19 +406,9 @@ private struct PipelineTableRow: View {
         }
         .padding(.vertical, isCompact ? 11 : 18)
         .padding(.horizontal, isCompact ? 14 : PipelineTableLayout.horizontalPadding)
-        .background(
-            isSelected ? RekonTheme.surface.opacity(0.92) : Color.clear,
-            in: RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
-                .stroke(isSelected ? RekonTheme.violet : Color.clear, lineWidth: isSelected ? 1 : 0)
-        )
-        .overlay(alignment: .leading) {
-            if isSelected {
-                Capsule().fill(RekonTheme.accent).frame(width: 3).padding(.vertical, 7)
-            }
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(isSelected ? RekonTheme.accent.opacity(0.12) : Color.clear)
+        .listRowInsets(EdgeInsets())
     }
 
     private var dueDateText: String {
@@ -535,34 +523,33 @@ private struct PipelineInspector: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            if let close {
-                HStack {
-                    Spacer()
+            HStack(alignment: .top) {
+                PipelineEmployerMark(company: opportunity.company, size: 50)
+                    .accessibilityIdentifier("pipeline-inspector-employer-mark-\(opportunity.id)")
+                Spacer()
+                if let close {
                     Button(action: close) {
                         Image(systemName: "xmark")
+                            .font(.body.weight(.medium))
+                            .frame(width: 28, height: 28)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("pipeline-inspector-close")
                     .accessibilityLabel("Close selection details")
                 }
             }
-
-            HStack(alignment: .top, spacing: 14) {
-                PipelineEmployerMark(company: opportunity.company, size: 54)
-                    .accessibilityIdentifier("pipeline-inspector-employer-mark-\(opportunity.id)")
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(opportunity.title)
-                        .font(.title2.weight(.semibold))
-                        .textSelection(.enabled)
-                    Text(opportunity.company)
-                        .font(.title3.weight(.medium))
+            VStack(alignment: .leading, spacing: 6) {
+                Text(opportunity.title)
+                    .font(.title2.weight(.semibold))
+                    .textSelection(.enabled)
+                Text(opportunity.company)
+                    .font(.title3.weight(.medium))
+                    .foregroundStyle(RekonTheme.secondaryText)
+                    .accessibilityIdentifier("pipeline-inspector-company-\(opportunity.id)")
+                if let locationSummary {
+                    Text(locationSummary)
+                        .font(.subheadline)
                         .foregroundStyle(RekonTheme.secondaryText)
-                        .accessibilityIdentifier("pipeline-inspector-company-\(opportunity.id)")
-                    if let locationSummary {
-                        Text(locationSummary)
-                            .font(.subheadline)
-                            .foregroundStyle(RekonTheme.secondaryText)
-                    }
                 }
             }
             Divider().overlay(RekonTheme.borderSubtle)
