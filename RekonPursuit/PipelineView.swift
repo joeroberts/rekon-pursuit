@@ -591,7 +591,6 @@ private struct PipelineInspector: View {
                     value: stageChangedAt.formatted(date: .abbreviated, time: .omitted)
                 )
             }
-            Spacer(minLength: 0)
             Button(action: openDetails) {
                 HStack {
                     Spacer(minLength: 0)
