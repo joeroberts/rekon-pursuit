@@ -756,143 +756,6 @@ private class PipelineNativeControl: NSControl {
     }
 }
 
-final class PipelineNavySearchField: NSSearchField {
-    var chromeStateDidChange: (() -> Void)?
-    var textDidClear: (() -> Void)?
-    private var nativeSearchButtonCell: NSButtonCell?
-
-    override var isEnabled: Bool { didSet { chromeStateDidChange?() } }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        isBezeled = false
-        isBordered = false
-        drawsBackground = false
-        focusRingType = .none
-        font = .systemFont(ofSize: 15)
-        textColor = PipelineNativeControlDrawing.textColor(isEnabled: true)
-        lineBreakMode = .byTruncatingTail
-        nativeSearchButtonCell = (cell as? NSSearchFieldCell)?.searchButtonCell
-        applyBlankPlaceholder()
-        updateSearchButtonVisibility()
-    }
-
-    required init?(coder: NSCoder) { nil }
-
-    override func becomeFirstResponder() -> Bool {
-        let accepted = super.becomeFirstResponder()
-        if accepted { chromeStateDidChange?() }
-        return accepted
-    }
-    override func resignFirstResponder() -> Bool {
-        let accepted = super.resignFirstResponder()
-        if accepted { chromeStateDidChange?() }
-        return accepted
-    }
-
-    /// The native cancel button clears AppKit's field value without sending the
-    /// normal text-change delegate callback. Mirror that native clear into the
-    /// SwiftUI binding so a subsequent representable refresh cannot restore the
-    /// previous query.
-    override func cancelOperation(_ sender: Any?) {
-        super.cancelOperation(sender)
-        if !stringValue.isEmpty { stringValue = "" }
-        textDidClear?()
-        updateSearchButtonVisibility()
-    }
-
-    func refreshChrome() {
-        applyBlankPlaceholder()
-        updateSearchButtonVisibility()
-        textColor = PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
-    }
-
-    /// Reuses AppKit's own search-button cell so the magnifier is present only
-    /// while the field is empty, without altering the native editor geometry.
-    func updateSearchButtonVisibility() {
-        guard let searchFieldCell = cell as? NSSearchFieldCell else { return }
-
-        if stringValue.isEmpty {
-            if searchFieldCell.searchButtonCell == nil, let nativeSearchButtonCell {
-                searchFieldCell.searchButtonCell = nativeSearchButtonCell
-            }
-        } else if let searchButtonCell = searchFieldCell.searchButtonCell {
-            nativeSearchButtonCell = searchButtonCell
-            searchFieldCell.searchButtonCell = nil
-        }
-
-        needsDisplay = true
-    }
-
-    private func applyBlankPlaceholder() {
-        // NSSearchField supplies a visible default "Search" placeholder when nil.
-        // Keep a transparent space instead so the native magnifier and text editing
-        // behavior remain intact while the field appears intentionally blank.
-        placeholderAttributedString = NSAttributedString(
-            string: " ",
-            attributes: [.foregroundColor: NSColor.clear]
-        )
-    }
-}
-
-/// Keeps the native search editor at its normal AppKit height.  The 44 point
-/// toolbar affordance is drawn by this outer view, avoiding custom cell/editor
-/// geometry that can break text entry and selection.
-final class PipelineNavySearchContainer: NSView {
-    let field = PipelineNavySearchField(frame: .zero)
-    private var isPointerHovering = false { didSet { refreshChrome() } }
-    private var trackingArea: NSTrackingArea?
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        wantsLayer = true
-        addSubview(field)
-        field.chromeStateDidChange = { [weak self] in self?.refreshChrome() }
-    }
-
-    required init?(coder: NSCoder) { nil }
-
-    override func layout() {
-        super.layout()
-        let nativeHeight: CGFloat = 28
-        field.frame = NSRect(x: 10, y: (bounds.height - nativeHeight) / 2, width: max(0, bounds.width - 20), height: nativeHeight)
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingArea { removeTrackingArea(trackingArea) }
-        let trackingArea = NSTrackingArea(rect: bounds, options: [.activeInKeyWindow, .mouseEnteredAndExited, .inVisibleRect], owner: self, userInfo: nil)
-        addTrackingArea(trackingArea)
-        self.trackingArea = trackingArea
-    }
-
-    override func mouseEntered(with event: NSEvent) { isPointerHovering = true }
-    override func mouseExited(with event: NSEvent) { isPointerHovering = false }
-    override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(field)
-        refreshChrome()
-        super.mouseDown(with: event)
-    }
-
-    func refreshChrome() {
-        field.refreshChrome()
-        let state = PipelineNavySurfacePresentation.interactionState(
-            isEnabled: field.isEnabled,
-            isPointerHovering: isPointerHovering,
-            isKeyboardFocused: window?.firstResponder === field || field.currentEditor() != nil,
-            isPressed: false
-        )
-        let presentation = PipelineNavySurfacePresentation.presentation(for: state)
-        layer?.backgroundColor = NSColor(PipelineNavySurfaceColor.resolve(presentation.fill).opacity(presentation.opacity)).cgColor
-        layer?.borderColor = NSColor(PipelineNavySurfaceColor.resolve(presentation.outline)).cgColor
-        layer?.borderWidth = presentation.borderWidth
-        layer?.cornerRadius = PipelineNativeControlDrawing.cornerRadius
-        layer?.shadowColor = state == .keyboardFocus ? NSColor(RekonTheme.violet).cgColor : nil
-        layer?.shadowOpacity = state == .keyboardFocus ? 0.45 : 0
-        layer?.shadowRadius = state == .keyboardFocus ? 6 : 0
-    }
-}
-
 final class PipelineNavyPopupButton: NSPopUpButton {
     var isPointerHovering = false { didSet { needsDisplay = true } }
     var isPressed = false { didSet { needsDisplay = true } }
@@ -1085,56 +948,61 @@ final class PipelineNavySegmentedControl: NSSegmentedControl {
     }
 }
 
-struct PipelineNavySearchControl: NSViewRepresentable {
+/// Pipeline's search control is intentionally a direct SwiftUI binding. This
+/// avoids AppKit's `NSSearchField` cancel-button behavior getting out of sync
+/// with the query that drives the table.
+struct PipelineNavySearchControl: View {
     @Binding var text: String
     let accessibilityIdentifier: String
     let accessibilityLabel: String
+    @State private var isPointerHovering = false
+    @FocusState private var isFocused: Bool
 
-    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
-
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: PipelineNavySearchContainer, context: Context) -> CGSize? {
-        CGSize(
-            width: proposal.width ?? nsView.fittingSize.width,
-            height: proposal.height ?? nsView.fittingSize.height
+    private var interactionState: PipelineNavySurfaceInteractionState {
+        PipelineNavySurfacePresentation.interactionState(
+            isEnabled: true,
+            isPointerHovering: isPointerHovering,
+            isKeyboardFocused: isFocused,
+            isPressed: false
         )
     }
 
-    func makeNSView(context: Context) -> PipelineNavySearchContainer {
-        let container = PipelineNavySearchContainer(frame: .zero)
-        let field = container.field
-        field.delegate = context.coordinator
-        field.textDidClear = { [weak coordinator = context.coordinator] in
-            coordinator?.clearText()
+    var body: some View {
+        HStack(spacing: 8) {
+            if text.isEmpty {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(RekonTheme.secondaryText)
+                    .accessibilityHidden(true)
+            }
+
+            TextField("", text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 15))
+                .foregroundStyle(RekonTheme.primaryText)
+                .focused($isFocused)
+                .accessibilityIdentifier(accessibilityIdentifier)
+                .accessibilityLabel(accessibilityLabel)
+
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                    isFocused = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(RekonTheme.secondaryText)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
         }
-        field.stringValue = text
-        field.setAccessibilityIdentifier(accessibilityIdentifier)
-        field.setAccessibilityLabel(accessibilityLabel)
-        container.refreshChrome()
-        return container
-    }
-
-    func updateNSView(_ container: PipelineNavySearchContainer, context: Context) {
-        let field = container.field
-        if field.stringValue != text { field.stringValue = text }
-        field.setAccessibilityIdentifier(accessibilityIdentifier)
-        field.setAccessibilityLabel(accessibilityLabel)
-        container.refreshChrome()
-    }
-
-    static func dismantleNSView(_ container: PipelineNavySearchContainer, coordinator: Coordinator) {
-        container.field.delegate = nil
-        container.field.textDidClear = nil
-    }
-
-    final class Coordinator: NSObject, NSSearchFieldDelegate {
-        @Binding var text: String
-        init(text: Binding<String>) { _text = text }
-        func clearText() { text = "" }
-        func controlTextDidChange(_ notification: Notification) {
-            guard let field = notification.object as? NSTextField else { return }
-            text = field.stringValue
-            (field as? PipelineNavySearchField)?.updateSearchButtonVisibility()
-        }
+        .padding(.horizontal, 11)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .pipelineNavySurface(interactionState)
+        .contentShape(RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
+        .onHover { isPointerHovering = $0 }
+        .accessibilityElement(children: .contain)
     }
 }
 
