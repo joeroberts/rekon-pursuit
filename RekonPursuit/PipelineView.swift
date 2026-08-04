@@ -394,8 +394,10 @@ private struct PipelineTableRow: View {
                 }
                     .frame(minWidth: PipelineTableLayout.nextActionWidth, maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 7) {
-                    Image(systemName: "calendar")
-                        .font(.subheadline.weight(.medium))
+                    if opportunity.dueAt != nil {
+                        Image(systemName: "calendar")
+                            .font(.subheadline.weight(.medium))
+                    }
                     Text(dueDateText)
                         .lineLimit(1)
                 }
