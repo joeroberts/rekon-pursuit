@@ -301,7 +301,11 @@ struct PipelineView: View {
     }
 
     private var viewModeControl: some View {
-        PipelineViewModeSelector(showsBoard: $showsBoard)
+        PipelineNavyViewModeControl(
+            showsBoard: $showsBoard,
+            accessibilityIdentifier: "pipeline-view-mode",
+            accessibilityLabel: "View"
+        )
         .frame(width: 216, height: 44)
     }
 

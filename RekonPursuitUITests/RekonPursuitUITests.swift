@@ -1635,6 +1635,42 @@ final class RekonPursuitUITests: XCTestCase {
     }
 
     @MainActor
+    func testVD210PipelineViewModeSegmentsRemainContiguousAndOperableAcrossWideAndCompactLayouts() {
+        for (layoutName, windowSize) in [("wide", "wide"), ("compact", "compact")] {
+            let app = launchApp(fixture: "pipeline", windowSize: windowSize)
+            app.descendants(matching: .any)["sidebar-pipeline"].tap()
+
+            let viewMode = app.descendants(matching: .any)["pipeline-view-mode"]
+            XCTAssertTrue(viewMode.waitForExistence(timeout: 5), "\(layoutName) Pipeline must expose its mode control.")
+            XCTAssertEqual(viewMode.elementType, .radioGroup)
+            let table = viewMode.radioButtons["Table"]
+            let board = viewMode.radioButtons["Board"]
+            XCTAssertEqual(viewMode.radioButtons.count, 2, "\(layoutName) Pipeline must expose exactly Table and Board segments.")
+            XCTAssertTrue(table.isHittable)
+            XCTAssertTrue(board.isHittable)
+
+            // AppKit exposes a semantic frame around each radio label; the
+            // actual pointer target is the enclosing NSSegmentedControl. The
+            // sibling frames must remain adjacent, while outer-edge clicks on
+            // the group prove that control owns the complete 44-point target.
+            XCTAssertEqual(table.frame.height, board.frame.height, accuracy: 0.5)
+            XCTAssertGreaterThanOrEqual(viewMode.frame.height, 44)
+            XCTAssertEqual(table.frame.maxX + 1, board.frame.minX, accuracy: 0.5, "\(layoutName) Table and Board must remain contiguous.")
+
+            viewMode.coordinate(withNormalizedOffset: CGVector(dx: 0.99, dy: 0.5)).click()
+            XCTAssertTrue(app.descendants(matching: .any)["pipeline-board-region"].waitForExistence(timeout: 5))
+            XCTAssertEqual(String(describing: board.value ?? ""), "1")
+            XCTAssertEqual(String(describing: table.value ?? ""), "0")
+
+            viewMode.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5)).click()
+            XCTAssertTrue(app.descendants(matching: .any)["pipeline-table-region"].waitForExistence(timeout: 5))
+            XCTAssertEqual(String(describing: table.value ?? ""), "1")
+            XCTAssertEqual(String(describing: board.value ?? ""), "0")
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testVD204PipelineControlsRemainKeyboardDiscoverableAndStyled() {
         let app = launchApp(fixture: "pipeline", windowSize: "wide")
         app.descendants(matching: .any)["sidebar-pipeline"].tap()

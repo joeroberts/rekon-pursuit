@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import XCTest
 
 @testable import RekonPursuit
@@ -40,6 +41,51 @@ final class RekonPursuitTests: XCTestCase {
         replacementTable.selectionHighlightStyle = .regular
         owner.restore()
         XCTAssertEqual(replacementTable.selectionHighlightStyle, .regular)
+    }
+
+    @MainActor
+    func testPipelineViewModeUsesOneNativeSegmentedControlAsTheSoleModeInputOwner() throws {
+        // This fails if Table and Board become separate SwiftUI buttons: the
+        // AppKit-hosted control must own the contiguous two-segment hit target,
+        // its selection state, keyboard behavior, and accessibility contract.
+        var showsBoard = false
+        let host = NSHostingView(
+            rootView: PipelineNavyViewModeControl(
+                showsBoard: Binding(
+                    get: { showsBoard },
+                    set: { showsBoard = $0 }
+                ),
+                accessibilityIdentifier: "pipeline-view-mode",
+                accessibilityLabel: "View"
+            )
+        )
+        host.frame = NSRect(x: 0, y: 0, width: 216, height: 44)
+        host.layoutSubtreeIfNeeded()
+
+        func descendants<T: NSView>(of view: NSView, as _: T.Type) -> [T] {
+            let directMatches = view.subviews.compactMap { $0 as? T }
+            return directMatches + view.subviews.flatMap { descendants(of: $0, as: T.self) }
+        }
+
+        let segmented = try XCTUnwrap(
+            descendants(of: host, as: NSSegmentedControl.self).first,
+            "Pipeline view mode must have one AppKit segmented-control input owner."
+        )
+        XCTAssertEqual(descendants(of: host, as: NSSegmentedControl.self).count, 1)
+        XCTAssertEqual(segmented.trackingMode, NSSegmentedControl.SwitchTracking.selectOne)
+        XCTAssertEqual(segmented.segmentCount, 2)
+        XCTAssertEqual(segmented.label(forSegment: 0), "Table")
+        XCTAssertEqual(segmented.label(forSegment: 1), "Board")
+        XCTAssertEqual(segmented.selectedSegment, 0)
+        XCTAssertEqual(segmented.frame.width, 216, accuracy: 0.5)
+        XCTAssertEqual(segmented.frame.height, 44, accuracy: 0.5)
+        XCTAssertEqual(segmented.accessibilityIdentifier(), "pipeline-view-mode")
+        XCTAssertEqual(segmented.accessibilityLabel(), "View, View")
+        XCTAssertEqual(descendants(of: host, as: NSButton.self).count, 0)
+
+        segmented.selectedSegment = 1
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(segmented.action), to: segmented.target, from: segmented))
+        XCTAssertTrue(showsBoard, "Selecting Board through AppKit must update the SwiftUI binding.")
     }
 
     func testStageMovePayloadContainsOnlyOpportunityID() throws {
