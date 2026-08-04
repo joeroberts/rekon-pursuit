@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "activePhaseId": "post_mvp_refinement",
-  "activeTaskId": "VD2-10",
+  "activeTaskId": null,
   "nextEligibleTaskId": null,
   "phases": [
     {
@@ -618,9 +618,13 @@
       "phaseId": "post_mvp_refinement",
       "title": "Pipeline visual parity — controls, Table, and Board",
       "workType": "Visual remediation",
-      "status": "in_progress",
+      "status": "accepted",
       "releaseCondition": "Requires a reference-faithful Pipeline implementation that retains Include closed, corrects controls and Table/Board presentation, and preserves pipeline behavior.",
-      "latestTransition": "Moved Next up → In progress on 2026-08-03 after the recorded independent pre-implementation gates released the bounded visual-parity work. GitHub issue #16 remains the active delivery ticket.",
+      "latestTransition": "Product owner accepted the signed Debug Pipeline candidate on 2026-08-04 after independent Architecture, TPM/Delivery, Security/Privacy, Code Review, and QA gates approved the bounded work. Targeted verification passed 12/12, independent QA evidence passed 17/17 plus 4/4, and the final Debug build passed. GitHub issue #16 is closed; test-harness debts #24 and #25 remain non-blocking.",
+      "evidence": {
+        "label": "VD2-10 owner acceptance record",
+        "href": "../evidence/visual-design-v2/VD2-10-owner-handoff-2026-08-04.md"
+      },
       "dependsOnTaskIds": [
         "VD2-04",
         "VD2-05"
