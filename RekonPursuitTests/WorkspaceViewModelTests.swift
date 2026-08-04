@@ -2147,6 +2147,68 @@ final class WorkspaceViewModelTests: XCTestCase {
         XCTAssertEqual(model.needsAttentionCount, model.needsAttention.count)
     }
 
+    func testFilteredPipelineStageMovesAnnounceAtTableLevelWhenTheSelectedOpportunityLeavesTheProjection() throws {
+        let store = try makeStore()
+        let movesToScreening = try store.create(CreateOpportunity(title: "Screening move", company: "Rekon Labs"))
+        let movesToClosed = try store.create(CreateOpportunity(title: "Closing move", company: "Rekon Labs"))
+        let model = WorkspaceViewModel(openWorkspace: { .ready(store) }, createWorkspace: { store }, separateLocalWorkspace: .disabledForTesting)
+        model.start()
+
+        model.select(movesToScreening)
+        let savedBeforeScreeningMove = model.filteredOpportunities(
+            query: "",
+            stage: PipelineStage.saved.rawValue,
+            includesClosed: false
+        )
+        XCTAssertTrue(savedBeforeScreeningMove.contains { $0.id == movesToScreening.id })
+        XCTAssertEqual(model.selectedOpportunityID, movesToScreening.id)
+
+        let screeningResult = model.changeStage(movesToScreening, to: .screening)
+        let savedAfterScreeningMove = model.filteredOpportunities(
+            query: "",
+            stage: PipelineStage.saved.rawValue,
+            includesClosed: false
+        )
+        let screeningPresentation = PipelineTableInspectorStageMovePresentation.make(
+            for: screeningResult,
+            selectedOpportunityID: movesToScreening.id,
+            sourceStage: .saved,
+            visibleOpportunityIDs: Set(savedAfterScreeningMove.map(\.id))
+        )
+
+        XCTAssertEqual(screeningResult, .persisted(opportunityID: movesToScreening.id, from: .saved, to: .screening))
+        XCTAssertFalse(savedAfterScreeningMove.contains { $0.id == movesToScreening.id })
+        XCTAssertNil(screeningPresentation.inspectorFeedback)
+        XCTAssertEqual(screeningPresentation.tableNotice, "Moved to Screening.")
+
+        model.select(movesToClosed)
+        let openBeforeClosingMove = model.filteredOpportunities(
+            query: "",
+            stage: "All stages",
+            includesClosed: false
+        )
+        XCTAssertTrue(openBeforeClosingMove.contains { $0.id == movesToClosed.id })
+        XCTAssertEqual(model.selectedOpportunityID, movesToClosed.id)
+
+        let closedResult = model.changeStage(movesToClosed, to: .closed)
+        let openAfterClosingMove = model.filteredOpportunities(
+            query: "",
+            stage: "All stages",
+            includesClosed: false
+        )
+        let closedPresentation = PipelineTableInspectorStageMovePresentation.make(
+            for: closedResult,
+            selectedOpportunityID: movesToClosed.id,
+            sourceStage: .saved,
+            visibleOpportunityIDs: Set(openAfterClosingMove.map(\.id))
+        )
+
+        XCTAssertEqual(closedResult, .persisted(opportunityID: movesToClosed.id, from: .saved, to: .closed))
+        XCTAssertFalse(openAfterClosingMove.contains { $0.id == movesToClosed.id })
+        XCTAssertNil(closedPresentation.inspectorFeedback)
+        XCTAssertEqual(closedPresentation.tableNotice, "Moved to Closed.")
+    }
+
     func testContactsCanBeFilteredAndShownAsLinkedOrSameEmployerDiscovery() throws {
         let store = try makeStore()
         let first = try store.create(CreateOpportunity(title: "Product Manager", company: "Rekon Labs"))
