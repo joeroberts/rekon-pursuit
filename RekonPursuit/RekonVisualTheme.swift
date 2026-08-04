@@ -765,23 +765,6 @@ private final class PipelineNavySearchFieldCell: NSSearchFieldCell {
         return drawingRect
     }
 
-    override func select(
-        withFrame aRect: NSRect,
-        in controlView: NSView,
-        editor textObj: NSText,
-        delegate: Any?,
-        start selStart: Int,
-        length selLength: Int
-    ) {
-        super.select(
-            withFrame: drawingRect(forBounds: aRect),
-            in: controlView,
-            editor: textObj,
-            delegate: delegate,
-            start: selStart,
-            length: selLength
-        )
-    }
 }
 
 final class PipelineNavySearchField: NSSearchField {
