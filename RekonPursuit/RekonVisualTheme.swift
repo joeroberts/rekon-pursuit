@@ -757,10 +757,9 @@ private class PipelineNativeControl: NSControl {
 }
 
 final class PipelineNavySearchField: NSSearchField {
-    var isPointerHovering = false { didSet { refreshChrome() } }
-    private var trackingArea: NSTrackingArea?
+    var chromeStateDidChange: (() -> Void)?
 
-    override var isEnabled: Bool { didSet { refreshChrome() } }
+    override var isEnabled: Bool { didSet { chromeStateDidChange?() } }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -768,7 +767,6 @@ final class PipelineNavySearchField: NSSearchField {
         isBordered = false
         drawsBackground = false
         focusRingType = .none
-        wantsLayer = true
         font = .systemFont(ofSize: 15)
         textColor = PipelineNativeControlDrawing.textColor(isEnabled: true)
         lineBreakMode = .byTruncatingTail
@@ -777,43 +775,19 @@ final class PipelineNavySearchField: NSSearchField {
 
     required init?(coder: NSCoder) { nil }
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingArea { removeTrackingArea(trackingArea) }
-        let trackingArea = NSTrackingArea(rect: bounds, options: [.activeInKeyWindow, .mouseEnteredAndExited, .inVisibleRect], owner: self, userInfo: nil)
-        addTrackingArea(trackingArea)
-        self.trackingArea = trackingArea
-    }
-
-    override func mouseEntered(with event: NSEvent) { isPointerHovering = true }
-    override func mouseExited(with event: NSEvent) { isPointerHovering = false }
     override func becomeFirstResponder() -> Bool {
         let accepted = super.becomeFirstResponder()
-        if accepted { refreshChrome() }
+        if accepted { chromeStateDidChange?() }
         return accepted
     }
     override func resignFirstResponder() -> Bool {
         let accepted = super.resignFirstResponder()
-        if accepted { refreshChrome() }
+        if accepted { chromeStateDidChange?() }
         return accepted
     }
 
     func refreshChrome() {
         applyBlankPlaceholder()
-        let state = PipelineNavySurfacePresentation.interactionState(
-            isEnabled: isEnabled,
-            isPointerHovering: isPointerHovering,
-            isKeyboardFocused: window?.firstResponder === self,
-            isPressed: false
-        )
-        let presentation = PipelineNavySurfacePresentation.presentation(for: state)
-        layer?.backgroundColor = NSColor(PipelineNavySurfaceColor.resolve(presentation.fill).opacity(presentation.opacity)).cgColor
-        layer?.borderColor = NSColor(PipelineNavySurfaceColor.resolve(presentation.outline)).cgColor
-        layer?.borderWidth = presentation.borderWidth
-        layer?.cornerRadius = PipelineNativeControlDrawing.cornerRadius
-        layer?.shadowColor = state == .keyboardFocus ? NSColor(RekonTheme.violet).cgColor : nil
-        layer?.shadowOpacity = state == .keyboardFocus ? 0.45 : 0
-        layer?.shadowRadius = state == .keyboardFocus ? 6 : 0
         textColor = PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
     }
 
@@ -825,6 +799,64 @@ final class PipelineNavySearchField: NSSearchField {
             string: " ",
             attributes: [.foregroundColor: NSColor.clear]
         )
+    }
+}
+
+/// Keeps the native search editor at its normal AppKit height.  The 44 point
+/// toolbar affordance is drawn by this outer view, avoiding custom cell/editor
+/// geometry that can break text entry and selection.
+final class PipelineNavySearchContainer: NSView {
+    let field = PipelineNavySearchField(frame: .zero)
+    private var isPointerHovering = false { didSet { refreshChrome() } }
+    private var trackingArea: NSTrackingArea?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        addSubview(field)
+        field.chromeStateDidChange = { [weak self] in self?.refreshChrome() }
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func layout() {
+        super.layout()
+        let nativeHeight: CGFloat = 28
+        field.frame = NSRect(x: 10, y: (bounds.height - nativeHeight) / 2, width: max(0, bounds.width - 20), height: nativeHeight)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        let trackingArea = NSTrackingArea(rect: bounds, options: [.activeInKeyWindow, .mouseEnteredAndExited, .inVisibleRect], owner: self, userInfo: nil)
+        addTrackingArea(trackingArea)
+        self.trackingArea = trackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) { isPointerHovering = true }
+    override func mouseExited(with event: NSEvent) { isPointerHovering = false }
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(field)
+        refreshChrome()
+        super.mouseDown(with: event)
+    }
+
+    func refreshChrome() {
+        field.refreshChrome()
+        let state = PipelineNavySurfacePresentation.interactionState(
+            isEnabled: field.isEnabled,
+            isPointerHovering: isPointerHovering,
+            isKeyboardFocused: window?.firstResponder === field || field.currentEditor() != nil,
+            isPressed: false
+        )
+        let presentation = PipelineNavySurfacePresentation.presentation(for: state)
+        layer?.backgroundColor = NSColor(PipelineNavySurfaceColor.resolve(presentation.fill).opacity(presentation.opacity)).cgColor
+        layer?.borderColor = NSColor(PipelineNavySurfaceColor.resolve(presentation.outline)).cgColor
+        layer?.borderWidth = presentation.borderWidth
+        layer?.cornerRadius = PipelineNativeControlDrawing.cornerRadius
+        layer?.shadowColor = state == .keyboardFocus ? NSColor(RekonTheme.violet).cgColor : nil
+        layer?.shadowOpacity = state == .keyboardFocus ? 0.45 : 0
+        layer?.shadowRadius = state == .keyboardFocus ? 6 : 0
     }
 }
 
@@ -1027,31 +1059,33 @@ struct PipelineNavySearchControl: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: PipelineNavySearchField, context: Context) -> CGSize? {
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: PipelineNavySearchContainer, context: Context) -> CGSize? {
         CGSize(
             width: proposal.width ?? nsView.fittingSize.width,
             height: proposal.height ?? nsView.fittingSize.height
         )
     }
 
-    func makeNSView(context: Context) -> PipelineNavySearchField {
-        let field = PipelineNavySearchField(frame: .zero)
+    func makeNSView(context: Context) -> PipelineNavySearchContainer {
+        let container = PipelineNavySearchContainer(frame: .zero)
+        let field = container.field
         field.delegate = context.coordinator
         field.stringValue = text
         field.setAccessibilityIdentifier(accessibilityIdentifier)
         field.setAccessibilityLabel(accessibilityLabel)
-        field.refreshChrome()
-        return field
+        container.refreshChrome()
+        return container
     }
 
-    func updateNSView(_ field: PipelineNavySearchField, context: Context) {
+    func updateNSView(_ container: PipelineNavySearchContainer, context: Context) {
+        let field = container.field
         if field.stringValue != text { field.stringValue = text }
         field.setAccessibilityIdentifier(accessibilityIdentifier)
         field.setAccessibilityLabel(accessibilityLabel)
-        field.refreshChrome()
+        container.refreshChrome()
     }
 
-    static func dismantleNSView(_ field: PipelineNavySearchField, coordinator: Coordinator) { field.delegate = nil }
+    static func dismantleNSView(_ container: PipelineNavySearchContainer, coordinator: Coordinator) { container.field.delegate = nil }
 
     final class Coordinator: NSObject, NSSearchFieldDelegate {
         @Binding var text: String
