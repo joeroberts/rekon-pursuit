@@ -1511,7 +1511,7 @@ final class RekonPursuitUITests: XCTestCase {
         let wideApp = launchApp(fixture: "pipeline", windowSize: "wide")
         wideApp.descendants(matching: .any)["sidebar-pipeline"].tap()
         XCTAssertTrue(wideApp.descendants(matching: .any)["pipeline-view-mode"].waitForExistence(timeout: 5))
-        XCTAssertTrue(wideApp.staticTexts["pipeline-view-label"].exists)
+        XCTAssertFalse(wideApp.staticTexts["pipeline-view-label"].exists)
         let wideScreenshot = XCTAttachment(screenshot: wideApp.screenshot())
         wideScreenshot.name = "VD204 wide Pipeline toolbar"
         wideScreenshot.lifetime = .keepAlways

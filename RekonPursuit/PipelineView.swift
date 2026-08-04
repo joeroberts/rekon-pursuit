@@ -111,7 +111,9 @@ struct PipelineView: View {
             HStack {
                 Text("Opportunities").font(.largeTitle.bold())
                 Spacer()
-                Button("Import CSV", action: importCSV)
+                Button(action: importCSV) {
+                    Label("Import CSV", systemImage: "arrow.down.to.line")
+                }
                     .buttonStyle(PipelineSecondaryButtonStyle())
                     .accessibilityIdentifier("pipeline-import-csv")
                 Button("Add opportunity", action: addOpportunity)
@@ -160,13 +162,14 @@ struct PipelineView: View {
             HStack(spacing: RekonTheme.Spacing.standard) {
                 searchControl
                 filterControls
-                viewModeControl(showsLabel: true)
+                Spacer(minLength: RekonTheme.Spacing.standard)
+                viewModeControl
             }
 
             VStack(alignment: .leading, spacing: RekonTheme.Spacing.tight) {
                 HStack(spacing: RekonTheme.Spacing.standard) {
                     searchControl
-                    viewModeControl(showsLabel: false)
+                    viewModeControl
                 }
                 filterControls
             }
@@ -179,8 +182,8 @@ struct PipelineView: View {
             accessibilityIdentifier: "opportunity-search",
             accessibilityLabel: "Search opportunities"
         )
-        .frame(minWidth: 120, maxWidth: 380)
-        .frame(height: 42)
+        .frame(minWidth: 220, maxWidth: 320)
+        .frame(height: 48)
     }
 
     private var filterControls: some View {
@@ -191,7 +194,7 @@ struct PipelineView: View {
                 accessibilityIdentifier: "pipeline-stage-filter",
                 accessibilityLabel: "Stage"
             )
-            .frame(width: 130, height: 42)
+            .frame(width: 164, height: 48)
 
             PipelineNavyCheckboxControl(
                 isOn: $includesClosed,
@@ -200,23 +203,19 @@ struct PipelineView: View {
                 accessibilityLabel: "Include closed",
                 accessibilityValue: includesClosed ? "Included" : "Excluded"
             )
-            .frame(width: 130, height: 42)
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(minWidth: 164, minHeight: 48, maxHeight: 48)
         }
     }
 
-    @ViewBuilder private func viewModeControl(showsLabel: Bool) -> some View {
+    private var viewModeControl: some View {
         HStack(spacing: RekonTheme.Spacing.tight) {
-            if showsLabel {
-                Text("View")
-                    .lineLimit(1)
-                    .accessibilityIdentifier("pipeline-view-label")
-            }
             PipelineNavyViewModeControl(
                 showsBoard: $showsBoard,
                 accessibilityIdentifier: "pipeline-view-mode",
                 accessibilityLabel: "View"
             )
-            .frame(width: 130, height: 42)
+            .frame(width: 188, height: 48)
         }
     }
 
@@ -360,7 +359,7 @@ private struct PipelineTableRow: View {
                     .frame(width: PipelineTableLayout.dueDateWidth, alignment: .leading)
             }
         }
-        .padding(.vertical, isCompact ? 8 : 12)
+        .padding(.vertical, isCompact ? 10 : 14)
         .padding(.horizontal, isCompact ? 14 : PipelineTableLayout.horizontalPadding)
         .background(
             isSelected ? RekonTheme.elevatedSurface : Color.clear,
@@ -403,10 +402,10 @@ private struct PipelineTableHeader: View {
                     .accessibilityIdentifier("pipeline-table-header-due-date")
             }
         }
-        .font(.caption.weight(.medium))
+                .font(.subheadline.weight(.medium))
         .foregroundStyle(RekonTheme.secondaryText)
         .padding(.horizontal, isCompact ? 14 : PipelineTableLayout.horizontalPadding)
-        .padding(.vertical, 12)
+        .padding(.vertical, 14)
     }
 }
 

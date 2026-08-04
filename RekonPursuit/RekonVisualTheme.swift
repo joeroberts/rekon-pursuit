@@ -723,6 +723,38 @@ private class PipelineNativeControl: NSControl {
     }
 }
 
+private final class PipelineNavySearchFieldCell: NSTextFieldCell {
+    private let iconInset: CGFloat = 32
+
+    override func titleRect(forBounds rect: NSRect) -> NSRect {
+        super.titleRect(forBounds: rect)
+            .insetBy(dx: 12, dy: 0)
+            .offsetBy(dx: iconInset, dy: 0)
+            .insetBy(dx: 0, dy: 1)
+    }
+
+    override func edit(withFrame rect: NSRect, in controlView: NSView, editor: NSText, delegate: Any?, event: NSEvent?) {
+        super.edit(
+            withFrame: titleRect(forBounds: rect),
+            in: controlView,
+            editor: editor,
+            delegate: delegate,
+            event: event
+        )
+    }
+
+    override func select(withFrame rect: NSRect, in controlView: NSView, editor: NSText, delegate: Any?, start selStart: Int, length selLength: Int) {
+        super.select(
+            withFrame: titleRect(forBounds: rect),
+            in: controlView,
+            editor: editor,
+            delegate: delegate,
+            start: selStart,
+            length: selLength
+        )
+    }
+}
+
 final class PipelineNavySearchField: NSTextField {
     var isPointerHovering = false { didSet { refreshChrome() } }
     private var trackingArea: NSTrackingArea?
@@ -731,6 +763,7 @@ final class PipelineNavySearchField: NSTextField {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        cell = PipelineNavySearchFieldCell()
         isBezeled = false
         isBordered = false
         drawsBackground = false
@@ -766,6 +799,28 @@ final class PipelineNavySearchField: NSTextField {
         let accepted = super.resignFirstResponder()
         if accepted { refreshChrome() }
         return accepted
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let symbol = NSImage(
+            systemSymbolName: "magnifyingglass",
+            accessibilityDescription: nil
+        )?.withSymbolConfiguration(.init(pointSize: 15, weight: .medium)) else {
+            return
+        }
+        let size = symbol.size
+        symbol.draw(
+            in: NSRect(
+                x: 13,
+                y: bounds.midY - size.height / 2,
+                width: size.width,
+                height: size.height
+            ),
+            from: .zero,
+            operation: .sourceOver,
+            fraction: isEnabled ? 1 : 0.64
+        )
     }
 
     func refreshChrome() {
@@ -946,12 +1001,35 @@ final class PipelineNavySegmentedControl: NSSegmentedControl {
                 PipelineNativeControlDrawing.paint(in: rect, state: window?.firstResponder === self ? .keyboardFocus : .selected, cornerRadius: 7)
             }
             let title = label(forSegment: index) ?? ""
+            let symbolName = index == 0 ? "tablecells" : "rectangle.split.3x1"
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: 15, weight: selected ? .semibold : .medium),
                 .foregroundColor: PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
             ]
             let titleSize = title.size(withAttributes: attributes)
-            title.draw(at: NSPoint(x: rect.midX - titleSize.width / 2, y: rect.midY - titleSize.height / 2), withAttributes: attributes)
+            let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+            let symbolSize = symbol?.size ?? .zero
+            let contentWidth = symbolSize.width + 6 + titleSize.width
+            let contentX = rect.midX - contentWidth / 2
+            symbol?.draw(
+                in: NSRect(
+                    x: contentX,
+                    y: rect.midY - symbolSize.height / 2,
+                    width: symbolSize.width,
+                    height: symbolSize.height
+                ),
+                from: .zero,
+                operation: .sourceOver,
+                fraction: isEnabled ? 1 : 0.64
+            )
+            title.draw(
+                at: NSPoint(
+                    x: contentX + symbolSize.width + 6,
+                    y: rect.midY - titleSize.height / 2
+                ),
+                withAttributes: attributes
+            )
         }
     }
 }
