@@ -108,18 +108,8 @@ struct PipelineView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Opportunities").font(.largeTitle.bold())
-                Spacer()
-                Button(action: importCSV) {
-                    Label("Import CSV", systemImage: "arrow.down.to.line")
-                }
-                    .buttonStyle(PipelineSecondaryButtonStyle())
-                    .accessibilityIdentifier("pipeline-import-csv")
-                Button("Add opportunity", action: addOpportunity)
-                    .buttonStyle(RekonPrimaryButtonStyle())
-                    .accessibilityIdentifier("pipeline-add-opportunity")
-            }
+            Text("Opportunities")
+                .font(.largeTitle.bold())
             pipelineToolbar
             if visibleOpportunities.isEmpty {
                 FlexibleCenteredContent {
@@ -159,19 +149,29 @@ struct PipelineView: View {
 
     private var pipelineToolbar: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: RekonTheme.Spacing.standard) {
-                searchControl
-                filterControls
-                Spacer(minLength: RekonTheme.Spacing.standard)
+            HStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    searchControl
+                    stageControl
+                    includeClosedControl
+                }
+
+                Spacer(minLength: 12)
+
                 viewModeControl
+                toolbarActions
             }
 
             VStack(alignment: .leading, spacing: RekonTheme.Spacing.tight) {
-                HStack(spacing: RekonTheme.Spacing.standard) {
+                HStack(spacing: 12) {
                     searchControl
-                    viewModeControl
+                    stageControl
+                    includeClosedControl
                 }
-                filterControls
+                HStack(spacing: 12) {
+                    viewModeControl
+                    toolbarActions
+                }
             }
         }
     }
@@ -182,41 +182,58 @@ struct PipelineView: View {
             accessibilityIdentifier: "opportunity-search",
             accessibilityLabel: "Search opportunities"
         )
-        .frame(minWidth: 220, maxWidth: 320)
-        .frame(height: 48)
+        .frame(width: 270)
+        .frame(height: 50)
     }
 
-    private var filterControls: some View {
-        HStack(spacing: RekonTheme.Spacing.standard) {
-            PipelineNavyStageControl(
-                selection: $stage,
-                options: ["All stages"] + PipelineStage.allCases.map(\.rawValue),
-                accessibilityIdentifier: "pipeline-stage-filter",
-                accessibilityLabel: "Stage"
-            )
-            .frame(width: 164, height: 48)
+    private var stageControl: some View {
+        PipelineNavyStageControl(
+            selection: $stage,
+            options: ["All stages"] + PipelineStage.allCases.map(\.rawValue),
+            accessibilityIdentifier: "pipeline-stage-filter",
+            accessibilityLabel: "Stage"
+        )
+        .frame(width: 160, height: 50)
+    }
 
-            PipelineNavyCheckboxControl(
-                isOn: $includesClosed,
-                title: "Include closed",
-                accessibilityIdentifier: "pipeline-include-closed",
-                accessibilityLabel: "Include closed",
-                accessibilityValue: includesClosed ? "Included" : "Excluded"
-            )
-            .fixedSize(horizontal: true, vertical: false)
-            .frame(minWidth: 164, minHeight: 48, maxHeight: 48)
-        }
+    private var includeClosedControl: some View {
+        PipelineNavyCheckboxControl(
+            isOn: $includesClosed,
+            title: "Include closed",
+            accessibilityIdentifier: "pipeline-include-closed",
+            accessibilityLabel: "Include closed",
+            accessibilityValue: includesClosed ? "Included" : "Excluded"
+        )
+        .fixedSize(horizontal: true, vertical: false)
+        .frame(minWidth: 154, minHeight: 50, maxHeight: 50)
     }
 
     private var viewModeControl: some View {
-        HStack(spacing: RekonTheme.Spacing.tight) {
-            PipelineNavyViewModeControl(
-                showsBoard: $showsBoard,
-                accessibilityIdentifier: "pipeline-view-mode",
-                accessibilityLabel: "View"
-            )
-            .frame(width: 188, height: 48)
+        PipelineViewModeSelector(showsBoard: $showsBoard)
+        .frame(width: 232, height: 50)
+    }
+
+    private var toolbarActions: some View {
+        HStack(spacing: 0) {
+            importControl
+            addControl
         }
+    }
+
+    private var importControl: some View {
+        Button(action: importCSV) {
+            Label("Import CSV", systemImage: "arrow.down.to.line")
+        }
+        .buttonStyle(PipelineSecondaryButtonStyle())
+        .frame(minWidth: 145)
+        .accessibilityIdentifier("pipeline-import-csv")
+    }
+
+    private var addControl: some View {
+        Button("Add opportunity", action: addOpportunity)
+            .buttonStyle(PipelinePrimaryButtonStyle())
+            .frame(minWidth: 180)
+            .accessibilityIdentifier("pipeline-add-opportunity")
     }
 
     private var responsiveTable: some View {

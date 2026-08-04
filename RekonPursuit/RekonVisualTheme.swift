@@ -368,7 +368,7 @@ struct RekonPrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.body.weight(.semibold))
+            .font(.system(size: 17, weight: .semibold))
             .foregroundStyle(.white)
             .padding(.horizontal, RekonTheme.Spacing.standard)
             .padding(.vertical, RekonTheme.Spacing.tight)
@@ -642,6 +642,25 @@ struct PipelineSecondaryButtonStyle: ButtonStyle {
     }
 }
 
+/// Pipeline's top-level creation action has the same visual scale as its
+/// adjacent controls without changing primary actions elsewhere in the app.
+struct PipelinePrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .frame(minHeight: 46)
+            .background(
+                RekonTheme.actionGradient.opacity(isEnabled ? (configuration.isPressed ? 0.84 : 1) : 0.45),
+                in: RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
+    }
+}
+
 // MARK: - Pipeline-local AppKit controls
 
 /// These controls intentionally own both their AppKit interaction semantics and
@@ -723,39 +742,7 @@ private class PipelineNativeControl: NSControl {
     }
 }
 
-private final class PipelineNavySearchFieldCell: NSTextFieldCell {
-    private let iconInset: CGFloat = 32
-
-    override func titleRect(forBounds rect: NSRect) -> NSRect {
-        super.titleRect(forBounds: rect)
-            .insetBy(dx: 12, dy: 0)
-            .offsetBy(dx: iconInset, dy: 0)
-            .insetBy(dx: 0, dy: 1)
-    }
-
-    override func edit(withFrame rect: NSRect, in controlView: NSView, editor: NSText, delegate: Any?, event: NSEvent?) {
-        super.edit(
-            withFrame: titleRect(forBounds: rect),
-            in: controlView,
-            editor: editor,
-            delegate: delegate,
-            event: event
-        )
-    }
-
-    override func select(withFrame rect: NSRect, in controlView: NSView, editor: NSText, delegate: Any?, start selStart: Int, length selLength: Int) {
-        super.select(
-            withFrame: titleRect(forBounds: rect),
-            in: controlView,
-            editor: editor,
-            delegate: delegate,
-            start: selStart,
-            length: selLength
-        )
-    }
-}
-
-final class PipelineNavySearchField: NSTextField {
+final class PipelineNavySearchField: NSSearchField {
     var isPointerHovering = false { didSet { refreshChrome() } }
     private var trackingArea: NSTrackingArea?
 
@@ -763,13 +750,12 @@ final class PipelineNavySearchField: NSTextField {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        cell = PipelineNavySearchFieldCell()
         isBezeled = false
         isBordered = false
         drawsBackground = false
         focusRingType = .none
         wantsLayer = true
-        font = .systemFont(ofSize: 15)
+        font = .systemFont(ofSize: 17)
         textColor = PipelineNativeControlDrawing.textColor(isEnabled: true)
         placeholderAttributedString = NSAttributedString(
             string: "Search opportunities",
@@ -799,28 +785,6 @@ final class PipelineNavySearchField: NSTextField {
         let accepted = super.resignFirstResponder()
         if accepted { refreshChrome() }
         return accepted
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        guard let symbol = NSImage(
-            systemSymbolName: "magnifyingglass",
-            accessibilityDescription: nil
-        )?.withSymbolConfiguration(.init(pointSize: 15, weight: .medium)) else {
-            return
-        }
-        let size = symbol.size
-        symbol.draw(
-            in: NSRect(
-                x: 13,
-                y: bounds.midY - size.height / 2,
-                width: size.width,
-                height: size.height
-            ),
-            from: .zero,
-            operation: .sourceOver,
-            fraction: isEnabled ? 1 : 0.64
-        )
     }
 
     func refreshChrome() {
@@ -855,7 +819,7 @@ final class PipelineNavyPopupButton: NSPopUpButton {
         super.init(frame: buttonFrame, pullsDown: flag)
         isBordered = false
         focusRingType = .none
-        font = .systemFont(ofSize: 15, weight: .medium)
+        font = .systemFont(ofSize: 13, weight: .medium)
     }
 
     required init?(coder: NSCoder) { nil }
@@ -882,7 +846,7 @@ final class PipelineNavyPopupButton: NSPopUpButton {
         PipelineNativeControlDrawing.paint(in: bounds, state: interactionState)
         let textRect = bounds.insetBy(dx: 12, dy: 0).insetBy(dx: 0, dy: 1)
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 15, weight: .medium),
+            .font: NSFont.systemFont(ofSize: 13, weight: .medium),
             .foregroundColor: PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
         ]
         let titleSize = title.size(withAttributes: attributes)
@@ -893,7 +857,7 @@ final class PipelineNavyPopupButton: NSPopUpButton {
         arrow.move(to: NSPoint(x: arrowCenterX - 5, y: arrowCenterY + 2))
         arrow.line(to: NSPoint(x: arrowCenterX, y: arrowCenterY - 3))
         arrow.line(to: NSPoint(x: arrowCenterX + 5, y: arrowCenterY + 2))
-        arrow.lineWidth = 1.6
+        arrow.lineWidth = 1.8
         PipelineNativeControlDrawing.secondaryTextColor(isEnabled: isEnabled).setStroke()
         arrow.stroke()
     }
@@ -909,7 +873,7 @@ final class PipelineNavyCheckbox: NSButton {
         setButtonType(.switch)
         isBordered = false
         focusRingType = .none
-        font = .systemFont(ofSize: 15, weight: .medium)
+        font = .systemFont(ofSize: 17, weight: .medium)
     }
 
     required init?(coder: NSCoder) { nil }
@@ -934,7 +898,7 @@ final class PipelineNavyCheckbox: NSButton {
 
     override func draw(_ dirtyRect: NSRect) {
         PipelineNativeControlDrawing.paint(in: bounds, state: interactionState)
-        let box = NSRect(x: 10, y: bounds.midY - 9, width: 18, height: 18)
+        let box = NSRect(x: 12, y: bounds.midY - 9, width: 18, height: 18)
         let boxPath = NSBezierPath(roundedRect: box, xRadius: 5, yRadius: 5)
         NSColor(RekonTheme.background).setFill()
         boxPath.fill()
@@ -951,7 +915,7 @@ final class PipelineNavyCheckbox: NSButton {
             check.stroke()
         }
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 15, weight: .medium),
+            .font: NSFont.systemFont(ofSize: 17, weight: .medium),
             .foregroundColor: PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
         ]
         let titleSize = title.size(withAttributes: attributes)
@@ -1001,16 +965,16 @@ final class PipelineNavySegmentedControl: NSSegmentedControl {
                 PipelineNativeControlDrawing.paint(in: rect, state: window?.firstResponder === self ? .keyboardFocus : .selected, cornerRadius: 7)
             }
             let title = label(forSegment: index) ?? ""
-            let symbolName = index == 0 ? "tablecells" : "rectangle.split.3x1"
+            let symbolName = index == 0 ? "list.bullet" : "square.grid.2x2"
             let attributes: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 15, weight: selected ? .semibold : .medium),
+                .font: NSFont.systemFont(ofSize: 17, weight: selected ? .semibold : .medium),
                 .foregroundColor: PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
             ]
             let titleSize = title.size(withAttributes: attributes)
             let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
-                .withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+                .withSymbolConfiguration(.init(pointSize: 18, weight: .medium))
             let symbolSize = symbol?.size ?? .zero
-            let contentWidth = symbolSize.width + 6 + titleSize.width
+            let contentWidth = symbolSize.width + 8 + titleSize.width
             let contentX = rect.midX - contentWidth / 2
             symbol?.draw(
                 in: NSRect(
@@ -1025,7 +989,7 @@ final class PipelineNavySegmentedControl: NSSegmentedControl {
             )
             title.draw(
                 at: NSPoint(
-                    x: contentX + symbolSize.width + 6,
+                    x: contentX + symbolSize.width + 8,
                     y: rect.midY - titleSize.height / 2
                 ),
                 withAttributes: attributes
@@ -1040,6 +1004,13 @@ struct PipelineNavySearchControl: NSViewRepresentable {
     let accessibilityLabel: String
 
     func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: PipelineNavySearchField, context: Context) -> CGSize? {
+        CGSize(
+            width: proposal.width ?? nsView.fittingSize.width,
+            height: proposal.height ?? nsView.fittingSize.height
+        )
+    }
 
     func makeNSView(context: Context) -> PipelineNavySearchField {
         let field = PipelineNavySearchField(frame: .zero)
@@ -1060,7 +1031,7 @@ struct PipelineNavySearchControl: NSViewRepresentable {
 
     static func dismantleNSView(_ field: PipelineNavySearchField, coordinator: Coordinator) { field.delegate = nil }
 
-    final class Coordinator: NSObject, NSTextFieldDelegate {
+    final class Coordinator: NSObject, NSSearchFieldDelegate {
         @Binding var text: String
         init(text: Binding<String>) { _text = text }
         func controlTextDidChange(_ notification: Notification) {
@@ -1077,6 +1048,13 @@ struct PipelineNavyStageControl: NSViewRepresentable {
     let accessibilityLabel: String
 
     func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: PipelineNavyPopupButton, context: Context) -> CGSize? {
+        CGSize(
+            width: proposal.width ?? nsView.fittingSize.width,
+            height: proposal.height ?? nsView.fittingSize.height
+        )
+    }
 
     func makeNSView(context: Context) -> PipelineNavyPopupButton {
         let popup = PipelineNavyPopupButton(frame: .zero, pullsDown: false)
@@ -1116,6 +1094,13 @@ struct PipelineNavyCheckboxControl: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(isOn: $isOn) }
 
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: PipelineNavyCheckbox, context: Context) -> CGSize? {
+        CGSize(
+            width: proposal.width ?? nsView.fittingSize.width,
+            height: proposal.height ?? nsView.fittingSize.height
+        )
+    }
+
     func makeNSView(context: Context) -> PipelineNavyCheckbox {
         let checkbox = PipelineNavyCheckbox(frame: .zero)
         checkbox.title = title
@@ -1142,42 +1127,66 @@ struct PipelineNavyCheckboxControl: NSViewRepresentable {
     }
 }
 
-struct PipelineNavyViewModeControl: NSViewRepresentable {
+struct PipelineViewModeSelector: View {
     @Binding var showsBoard: Bool
-    let accessibilityIdentifier: String
-    let accessibilityLabel: String
 
-    func makeCoordinator() -> Coordinator { Coordinator(showsBoard: $showsBoard) }
+    var body: some View {
+        HStack(spacing: 10) {
+            PipelineViewModeButton(
+                title: "Table",
+                icon: "list.bullet",
+                isSelected: !showsBoard
+            ) {
+                showsBoard = false
+            }
+            .accessibilityIdentifier("pipeline-table-view")
 
-    func makeNSView(context: Context) -> PipelineNavySegmentedControl {
-        let segmented = PipelineNavySegmentedControl(frame: .zero)
-        segmented.segmentCount = 2
-        segmented.setLabel("Table", forSegment: 0)
-        segmented.setLabel("Board", forSegment: 1)
-        segmented.selectedSegment = showsBoard ? 1 : 0
-        segmented.target = context.coordinator
-        segmented.action = #selector(Coordinator.selectMode(_:))
-        segmented.setAccessibilityIdentifier(accessibilityIdentifier)
-        // Match the pre-existing SwiftUI segmented Picker projection while
-        // preserving the native radio descendants' individual Table/Board
-        // labels. Existing assistive-tech automation uses this composite
-        // group label as its stable contract.
-        segmented.setAccessibilityLabel("\(accessibilityLabel), \(accessibilityLabel)")
-        return segmented
+            PipelineViewModeButton(
+                title: "Board",
+                icon: "square.grid.2x2",
+                isSelected: showsBoard
+            ) {
+                showsBoard = true
+            }
+            .accessibilityIdentifier("pipeline-board-view")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("pipeline-view-mode")
+        .accessibilityLabel("View")
+    }
+}
+
+private struct PipelineViewModeButton: View {
+    let title: String
+    let icon: String
+    let isSelected: Bool
+    let action: () -> Void
+    @State private var isPointerHovering = false
+    @FocusState private var isFocused: Bool
+
+    private var interactionState: PipelineNavySurfaceInteractionState {
+        if isSelected { return isFocused ? .keyboardFocus : .selected }
+        return PipelineNavySurfacePresentation.interactionState(
+            isEnabled: true,
+            isPointerHovering: isPointerHovering,
+            isKeyboardFocused: isFocused,
+            isPressed: false
+        )
     }
 
-    func updateNSView(_ segmented: PipelineNavySegmentedControl, context: Context) {
-        let selection = showsBoard ? 1 : 0
-        if segmented.selectedSegment != selection { segmented.selectedSegment = selection }
-        segmented.setAccessibilityIdentifier(accessibilityIdentifier)
-        segmented.setAccessibilityLabel("\(accessibilityLabel), \(accessibilityLabel)")
-        segmented.needsDisplay = true
-    }
-
-    final class Coordinator: NSObject {
-        @Binding var showsBoard: Bool
-        init(showsBoard: Binding<Bool>) { _showsBoard = showsBoard }
-        @objc func selectMode(_ sender: NSSegmentedControl) { showsBoard = sender.selectedSegment == 1 }
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(.system(size: 17, weight: isSelected ? .semibold : .medium))
+                .frame(maxWidth: .infinity, minHeight: 50)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isSelected ? RekonTheme.accent : RekonTheme.primaryText)
+        .pipelineNavySurface(interactionState)
+        .contentShape(RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
+        .focused($isFocused)
+        .onHover { isPointerHovering = $0 }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -1199,10 +1208,10 @@ private struct PipelineSecondaryButtonBody<Label: View>: View {
 
     var body: some View {
         label
-            .font(.body.weight(.medium))
+            .font(.system(size: 17, weight: .semibold))
             .foregroundStyle(RekonTheme.primaryText)
-            .padding(.horizontal, RekonTheme.Spacing.standard)
-            .padding(.vertical, RekonTheme.Spacing.tight)
+            .padding(.horizontal, 18)
+            .frame(minHeight: 50)
             .pipelineNavySurface(interactionState)
             .contentShape(RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
             .focused($isFocused)
