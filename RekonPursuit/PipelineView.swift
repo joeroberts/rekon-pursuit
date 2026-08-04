@@ -214,7 +214,7 @@ struct PipelineView: View {
     }
 
     private var toolbarActions: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 2.5) {
             importControl
             addControl
         }
