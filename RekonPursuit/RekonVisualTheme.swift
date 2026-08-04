@@ -642,6 +642,20 @@ struct PipelineSecondaryButtonStyle: ButtonStyle {
     }
 }
 
+/// The toolbar's import action is intentionally quieter and more compact than
+/// detail-pane actions that share the Pipeline secondary treatment.
+struct PipelineToolbarSecondaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        PipelineToolbarSecondaryButtonBody(
+            label: configuration.label,
+            isEnabled: isEnabled,
+            isPressed: configuration.isPressed
+        )
+    }
+}
+
 /// Pipeline's top-level creation action has the same visual scale as its
 /// adjacent controls without changing primary actions elsewhere in the app.
 struct PipelinePrimaryButtonStyle: ButtonStyle {
@@ -649,10 +663,10 @@ struct PipelinePrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.body.weight(.semibold))
+            .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(.white)
-            .padding(.horizontal, 18)
-            .frame(minHeight: 46)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 44)
             .background(
                 RekonTheme.actionGradient.opacity(isEnabled ? (configuration.isPressed ? 0.84 : 1) : 0.45),
                 in: RoundedRectangle(cornerRadius: RekonTheme.Radius.control)
@@ -755,7 +769,7 @@ final class PipelineNavySearchField: NSSearchField {
         drawsBackground = false
         focusRingType = .none
         wantsLayer = true
-        font = .systemFont(ofSize: 17)
+        font = .systemFont(ofSize: 15)
         textColor = PipelineNativeControlDrawing.textColor(isEnabled: true)
         placeholderAttributedString = NSAttributedString(
             string: "Search opportunities",
@@ -819,7 +833,7 @@ final class PipelineNavyPopupButton: NSPopUpButton {
         super.init(frame: buttonFrame, pullsDown: flag)
         isBordered = false
         focusRingType = .none
-        font = .systemFont(ofSize: 13, weight: .medium)
+        font = .systemFont(ofSize: 15, weight: .medium)
     }
 
     required init?(coder: NSCoder) { nil }
@@ -846,7 +860,7 @@ final class PipelineNavyPopupButton: NSPopUpButton {
         PipelineNativeControlDrawing.paint(in: bounds, state: interactionState)
         let textRect = bounds.insetBy(dx: 12, dy: 0).insetBy(dx: 0, dy: 1)
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 13, weight: .medium),
+            .font: NSFont.systemFont(ofSize: 15, weight: .medium),
             .foregroundColor: PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
         ]
         let titleSize = title.size(withAttributes: attributes)
@@ -873,10 +887,15 @@ final class PipelineNavyCheckbox: NSButton {
         setButtonType(.switch)
         isBordered = false
         focusRingType = .none
-        font = .systemFont(ofSize: 17, weight: .medium)
+        font = .systemFont(ofSize: 15, weight: .medium)
     }
 
     required init?(coder: NSCoder) { nil }
+
+    override var intrinsicContentSize: NSSize {
+        let titleSize = title.size(withAttributes: [.font: NSFont.systemFont(ofSize: 15, weight: .medium)])
+        return NSSize(width: ceil(titleSize.width) + 23, height: 44)
+    }
 
     private var interactionState: PipelineNavySurfaceInteractionState {
         PipelineNavySurfacePresentation.interactionState(isEnabled: isEnabled, isPointerHovering: isPointerHovering, isKeyboardFocused: window?.firstResponder === self, isPressed: isPressed)
@@ -897,8 +916,7 @@ final class PipelineNavyCheckbox: NSButton {
     override func mouseDown(with event: NSEvent) { isPressed = true; super.mouseDown(with: event); isPressed = false }
 
     override func draw(_ dirtyRect: NSRect) {
-        PipelineNativeControlDrawing.paint(in: bounds, state: interactionState)
-        let box = NSRect(x: 12, y: bounds.midY - 9, width: 18, height: 18)
+        let box = NSRect(x: 0, y: bounds.midY - 8, width: 16, height: 16)
         let boxPath = NSBezierPath(roundedRect: box, xRadius: 5, yRadius: 5)
         NSColor(RekonTheme.background).setFill()
         boxPath.fill()
@@ -915,11 +933,11 @@ final class PipelineNavyCheckbox: NSButton {
             check.stroke()
         }
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 17, weight: .medium),
+            .font: NSFont.systemFont(ofSize: 15, weight: .medium),
             .foregroundColor: PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
         ]
         let titleSize = title.size(withAttributes: attributes)
-        title.draw(at: NSPoint(x: box.maxX + 8, y: bounds.midY - titleSize.height / 2), withAttributes: attributes)
+        title.draw(at: NSPoint(x: box.maxX + 7, y: bounds.midY - titleSize.height / 2), withAttributes: attributes)
     }
 }
 
@@ -1131,7 +1149,7 @@ struct PipelineViewModeSelector: View {
     @Binding var showsBoard: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             PipelineViewModeButton(
                 title: "Table",
                 icon: "list.bullet",
@@ -1177,8 +1195,8 @@ private struct PipelineViewModeButton: View {
     var body: some View {
         Button(action: action) {
             Label(title, systemImage: icon)
-                .font(.system(size: 17, weight: isSelected ? .semibold : .medium))
-                .frame(maxWidth: .infinity, minHeight: 50)
+                .font(.system(size: 15, weight: isSelected ? .semibold : .medium))
+                .frame(maxWidth: .infinity, minHeight: 44)
         }
         .buttonStyle(.plain)
         .foregroundStyle(isSelected ? RekonTheme.accent : RekonTheme.primaryText)
@@ -1212,6 +1230,35 @@ private struct PipelineSecondaryButtonBody<Label: View>: View {
             .foregroundStyle(RekonTheme.primaryText)
             .padding(.horizontal, 18)
             .frame(minHeight: 50)
+            .pipelineNavySurface(interactionState)
+            .contentShape(RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
+            .focused($isFocused)
+            .onHover { isPointerHovering = $0 }
+    }
+}
+
+private struct PipelineToolbarSecondaryButtonBody<Label: View>: View {
+    let label: Label
+    let isEnabled: Bool
+    let isPressed: Bool
+    @State private var isPointerHovering = false
+    @FocusState private var isFocused: Bool
+
+    private var interactionState: PipelineNavySurfaceInteractionState {
+        PipelineNavySurfacePresentation.interactionState(
+            isEnabled: isEnabled,
+            isPointerHovering: isPointerHovering,
+            isKeyboardFocused: isFocused,
+            isPressed: isPressed
+        )
+    }
+
+    var body: some View {
+        label
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(RekonTheme.primaryText)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 44)
             .pipelineNavySurface(interactionState)
             .contentShape(RoundedRectangle(cornerRadius: RekonTheme.Radius.control))
             .focused($isFocused)

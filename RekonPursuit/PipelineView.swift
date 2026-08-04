@@ -107,7 +107,7 @@ struct PipelineView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("Opportunities")
                 .font(.largeTitle.bold())
             pipelineToolbar
@@ -149,26 +149,26 @@ struct PipelineView: View {
 
     private var pipelineToolbar: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) {
-                HStack(spacing: 12) {
+            HStack(spacing: 10) {
+                HStack(spacing: 10) {
                     searchControl
                     stageControl
                     includeClosedControl
                 }
 
-                Spacer(minLength: 12)
+                Spacer(minLength: 10)
 
                 viewModeControl
                 toolbarActions
             }
 
-            VStack(alignment: .leading, spacing: RekonTheme.Spacing.tight) {
-                HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
                     searchControl
                     stageControl
                     includeClosedControl
                 }
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     viewModeControl
                     toolbarActions
                 }
@@ -182,8 +182,7 @@ struct PipelineView: View {
             accessibilityIdentifier: "opportunity-search",
             accessibilityLabel: "Search opportunities"
         )
-        .frame(width: 270)
-        .frame(height: 50)
+        .frame(width: 238, height: 44)
     }
 
     private var stageControl: some View {
@@ -193,7 +192,7 @@ struct PipelineView: View {
             accessibilityIdentifier: "pipeline-stage-filter",
             accessibilityLabel: "Stage"
         )
-        .frame(width: 160, height: 50)
+        .frame(width: 148, height: 44)
     }
 
     private var includeClosedControl: some View {
@@ -205,16 +204,16 @@ struct PipelineView: View {
             accessibilityValue: includesClosed ? "Included" : "Excluded"
         )
         .fixedSize(horizontal: true, vertical: false)
-        .frame(minWidth: 154, minHeight: 50, maxHeight: 50)
+        .frame(minHeight: 44)
     }
 
     private var viewModeControl: some View {
         PipelineViewModeSelector(showsBoard: $showsBoard)
-        .frame(width: 232, height: 50)
+        .frame(width: 216, height: 44)
     }
 
     private var toolbarActions: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 10) {
             importControl
             addControl
         }
@@ -224,15 +223,15 @@ struct PipelineView: View {
         Button(action: importCSV) {
             Label("Import CSV", systemImage: "arrow.down.to.line")
         }
-        .buttonStyle(PipelineSecondaryButtonStyle())
-        .frame(minWidth: 145)
+        .buttonStyle(PipelineToolbarSecondaryButtonStyle())
+        .frame(minWidth: 136)
         .accessibilityIdentifier("pipeline-import-csv")
     }
 
     private var addControl: some View {
         Button("Add opportunity", action: addOpportunity)
             .buttonStyle(PipelinePrimaryButtonStyle())
-            .frame(minWidth: 180)
+            .frame(minWidth: 166)
             .accessibilityIdentifier("pipeline-add-opportunity")
     }
 
