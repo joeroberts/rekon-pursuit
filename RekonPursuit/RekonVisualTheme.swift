@@ -772,6 +772,7 @@ final class PipelineNavySearchField: NSSearchField {
         font = .systemFont(ofSize: 15)
         textColor = PipelineNativeControlDrawing.textColor(isEnabled: true)
         lineBreakMode = .byTruncatingTail
+        applyBlankPlaceholder()
     }
 
     required init?(coder: NSCoder) { nil }
@@ -798,6 +799,7 @@ final class PipelineNavySearchField: NSSearchField {
     }
 
     func refreshChrome() {
+        applyBlankPlaceholder()
         let state = PipelineNavySurfacePresentation.interactionState(
             isEnabled: isEnabled,
             isPointerHovering: isPointerHovering,
@@ -813,6 +815,16 @@ final class PipelineNavySearchField: NSSearchField {
         layer?.shadowOpacity = state == .keyboardFocus ? 0.45 : 0
         layer?.shadowRadius = state == .keyboardFocus ? 6 : 0
         textColor = PipelineNativeControlDrawing.textColor(isEnabled: isEnabled)
+    }
+
+    private func applyBlankPlaceholder() {
+        // NSSearchField supplies a visible default "Search" placeholder when nil.
+        // Keep a transparent space instead so the native magnifier and text editing
+        // behavior remain intact while the field appears intentionally blank.
+        attributedPlaceholderString = NSAttributedString(
+            string: " ",
+            attributes: [.foregroundColor: NSColor.clear]
+        )
     }
 }
 
