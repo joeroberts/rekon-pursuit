@@ -821,7 +821,7 @@ final class PipelineNavySearchField: NSSearchField {
         // NSSearchField supplies a visible default "Search" placeholder when nil.
         // Keep a transparent space instead so the native magnifier and text editing
         // behavior remain intact while the field appears intentionally blank.
-        attributedPlaceholderString = NSAttributedString(
+        placeholderAttributedString = NSAttributedString(
             string: " ",
             attributes: [.foregroundColor: NSColor.clear]
         )
