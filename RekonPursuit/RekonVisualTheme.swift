@@ -763,12 +763,12 @@ private final class PipelineNavySearchFieldCell: NSSearchFieldCell {
         return centeredRect
     }
 
-    override func titleRect(forBounds rect: NSRect) -> NSRect {
-        verticallyCenteredTextRect(super.titleRect(forBounds: rect), in: rect)
+    override func searchTextRect(forBounds rect: NSRect) -> NSRect {
+        verticallyCenteredTextRect(super.searchTextRect(forBounds: rect), in: rect)
     }
 
-    override func editingRect(forBounds rect: NSRect) -> NSRect {
-        verticallyCenteredTextRect(super.editingRect(forBounds: rect), in: rect)
+    override func titleRect(forBounds rect: NSRect) -> NSRect {
+        searchTextRect(forBounds: rect)
     }
 
     override func select(
@@ -780,7 +780,7 @@ private final class PipelineNavySearchFieldCell: NSSearchFieldCell {
         length selLength: Int
     ) {
         super.select(
-            withFrame: editingRect(forBounds: aRect),
+            withFrame: searchTextRect(forBounds: aRect),
             in: controlView,
             editor: textObj,
             delegate: delegate,
