@@ -174,6 +174,7 @@ struct PipelineView: View {
                 }
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var searchControl: some View {
