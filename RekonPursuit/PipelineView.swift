@@ -241,7 +241,7 @@ struct PipelineView: View {
 
     private var responsiveTable: some View {
         GeometryReader { geometry in
-            if geometry.size.width < PipelineTableLayout.desktopInspectorMinimumWidth {
+            if PipelineInspectorPresentationPolicy.usesCompactTable(forAvailableWidth: geometry.size.width) {
                 ZStack(alignment: .topTrailing) {
                     table(isCompact: true)
                         .zIndex(0)
@@ -499,12 +499,22 @@ struct PipelineEmployerMark: View {
     }
 }
 
+/// Owns the responsive guard band between the five-column desktop Table and
+/// the compact Table with its in-place inspector drawer. Keeping this policy
+/// independent of the view makes the approved breakpoint directly testable.
+nonisolated enum PipelineInspectorPresentationPolicy {
+    static let desktopMinimumWidth: CGFloat = 1220
+
+    static func usesCompactTable(forAvailableWidth width: CGFloat) -> Bool {
+        width < desktopMinimumWidth
+    }
+}
+
 /// The desktop tracks deliberately match the information density of the
 /// approved mock. We never squeeze this five-column layout beside an
-/// inspector: below the measured 1,108pt minimum, Pipeline switches to its
-/// compact dense Table and existing in-place drawer instead.
+/// inspector: below the approved 1,220pt guard band, Pipeline switches to
+/// its compact dense Table and existing in-place drawer instead.
 private enum PipelineTableLayout {
-    static let desktopInspectorMinimumWidth: CGFloat = 1110
     static let inspectorWidth: CGFloat = 330
     static let roleWidth: CGFloat = 180
     static let employerWidth: CGFloat = 140

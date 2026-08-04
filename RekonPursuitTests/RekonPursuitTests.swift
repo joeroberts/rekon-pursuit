@@ -5,6 +5,11 @@ import XCTest
 
 final class RekonPursuitTests: XCTestCase {
 
+    func testPipelineInspectorPresentationUsesDesktopAtTheApproved1220PointGuardBand() {
+        XCTAssertTrue(PipelineInspectorPresentationPolicy.usesCompactTable(forAvailableWidth: 1219))
+        XCTAssertFalse(PipelineInspectorPresentationPolicy.usesCompactTable(forAvailableWidth: 1220))
+    }
+
     func testStageMovePayloadContainsOnlyOpportunityID() throws {
         let opportunityID = "00000000-0000-4000-8000-000000000205"
 
